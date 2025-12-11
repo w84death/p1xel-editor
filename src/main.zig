@@ -18,9 +18,9 @@ const PIVOT_BL_Y = SCREEN_H - 8;
 const PIVOT_BR_X = SCREEN_W - 8;
 const PIVOT_BR_Y = SCREEN_H - 8;
 
-const GRID_SIZE = 24;
-const CANVAS_SIZE = GRID_SIZE * GRID_SIZE;
-const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
+const SPRITE_SIZE = 16; // The actual sprite dimensions (16x16 pixels)
+const GRID_SIZE = 32; // How large each pixel appears on screen (24x24 pixels)
+const CANVAS_SIZE = SPRITE_SIZE * GRID_SIZE; // Total canvas size on screen (384x384)
 
 const PREVIEW_SIZE = 128;
 const PREVIEW_BIG = 256;
@@ -61,22 +61,27 @@ pub fn main() !void {
 
     rl.setTargetFPS(60);
 
-    var canvas = [_][GRID_SIZE]u8{[_]u8{0} ** GRID_SIZE} ** GRID_SIZE;
+    // Canvas should be 16x16 for the actual sprite data
+    var canvas = [_][SPRITE_SIZE]u8{[_]u8{0} ** SPRITE_SIZE} ** SPRITE_SIZE;
 
     while (!rl.windowShouldClose()) {
         // ——————————————————————— INPUT ———————————————————————
         const mouse = rl.getMousePosition();
-        const mouse_cell_x: i32 = @intFromFloat((mouse.x - PIVOT_TL_X) / @as(f32, @floatFromInt(CELL_SIZE)));
-        const mouse_cell_y: i32 = @intFromFloat((mouse.y - PIVOT_TL_Y) / @as(f32, @floatFromInt(CELL_SIZE)));
+        // Calculate which sprite pixel the mouse is over
+        const mouse_cell_x: i32 = @intFromFloat((mouse.x - PIVOT_TL_X) / @as(f32, @floatFromInt(GRID_SIZE)));
+        const mouse_cell_y: i32 = @intFromFloat((mouse.y - PIVOT_TL_Y) / @as(f32, @floatFromInt(GRID_SIZE)));
 
         const in_canvas = mouse.x >= PIVOT_TL_X and mouse.x < PIVOT_TL_X + CANVAS_SIZE and
             mouse.y >= PIVOT_TL_Y and mouse.y < PIVOT_TL_Y + CANVAS_SIZE;
 
-        if (in_canvas and rl.isMouseButtonDown(rl.MouseButton.left)) {
-            if (mouse_cell_x >= 0 and mouse_cell_x < GRID_SIZE and
-                mouse_cell_y >= 0 and mouse_cell_y < GRID_SIZE)
+        if (in_canvas and ((rl.isMouseButtonDown(rl.MouseButton.left) or rl.isMouseButtonDown(rl.MouseButton.right)))) {
+            var color: u8 = active_color;
+            // Check bounds against SPRITE_SIZE, not GRID_SIZE
+            if (mouse_cell_x >= 0 and mouse_cell_x < SPRITE_SIZE and
+                mouse_cell_y >= 0 and mouse_cell_y < SPRITE_SIZE)
             {
-                canvas[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = active_color;
+                if (rl.isMouseButtonDown(rl.MouseButton.right)) color = 0;
+                canvas[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = color;
             }
         }
 
@@ -97,28 +102,30 @@ pub fn main() !void {
 
         rl.drawText(THE_NAME, PIVOT_BL_X, PIVOT_BL_Y - 20, 20, DB16.LIGHT_BLUE);
 
-        // ——— Canvas background (checkerboard) ———
-        for (0..GRID_SIZE) |y| {
-            for (0..GRID_SIZE) |x| {
+        // ——— Canvas background (checkerboard) and sprite pixels ———
+        for (0..SPRITE_SIZE) |y| {
+            for (0..SPRITE_SIZE) |x| {
+                // Draw checkerboard background
                 const checker = (x + y) % 2 == 0;
                 const col = if (checker) rl.getColor(0x333333FF) else rl.getColor(0x2D2D2DFF);
 
                 rl.drawRectangle(
-                    PIVOT_TL_X + @as(i32, @intCast(x * CELL_SIZE)),
-                    PIVOT_TL_Y + @as(i32, @intCast(y * CELL_SIZE)),
-                    CELL_SIZE,
-                    CELL_SIZE,
+                    PIVOT_TL_X + @as(i32, @intCast(x * GRID_SIZE)),
+                    PIVOT_TL_Y + @as(i32, @intCast(y * GRID_SIZE)),
+                    GRID_SIZE,
+                    GRID_SIZE,
                     col,
                 );
 
+                // Draw sprite pixel if not transparent
                 const idx = canvas[y][x];
                 if (idx != 0) { // 0 = transparent
                     const color = getColorFromIndex(idx);
                     rl.drawRectangle(
-                        PIVOT_TL_X + @as(i32, @intCast(x * CELL_SIZE)),
-                        PIVOT_TL_Y + @as(i32, @intCast(y * CELL_SIZE)),
-                        CELL_SIZE,
-                        CELL_SIZE,
+                        PIVOT_TL_X + @as(i32, @intCast(x * GRID_SIZE)),
+                        PIVOT_TL_Y + @as(i32, @intCast(y * GRID_SIZE)),
+                        GRID_SIZE,
+                        GRID_SIZE,
                         color,
                     );
                 }
@@ -126,8 +133,9 @@ pub fn main() !void {
         }
 
         // ——— Canvas grid overlay ———
-        for (0..GRID_SIZE) |i| {
-            const pos = @as(i32, @intCast(i * CELL_SIZE));
+        // Draw grid lines for each sprite pixel (16 lines, not 24)
+        for (0..SPRITE_SIZE + 1) |i| {
+            const pos = @as(i32, @intCast(i * GRID_SIZE));
             rl.drawLine(PIVOT_TL_X + pos, PIVOT_TL_Y, PIVOT_TL_X + pos, PIVOT_TL_Y + CANVAS_SIZE, rl.getColor(0x44444488));
             rl.drawLine(PIVOT_TL_X, PIVOT_TL_Y + pos, PIVOT_TL_X + CANVAS_SIZE, PIVOT_TL_Y + pos, rl.getColor(0x44444488));
         }
@@ -199,10 +207,10 @@ pub fn main() !void {
     }
 }
 
-fn drawPreview(canvas: *const [GRID_SIZE][GRID_SIZE]u8, x: i32, y: i32, size: i32) void {
-    const scale = @divFloor(size, GRID_SIZE);
-    for (0..GRID_SIZE) |py| {
-        for (0..GRID_SIZE) |px| {
+fn drawPreview(canvas: *const [SPRITE_SIZE][SPRITE_SIZE]u8, x: i32, y: i32, size: i32) void {
+    const scale = @divFloor(size, SPRITE_SIZE); // Scale based on SPRITE_SIZE, not GRID_SIZE
+    for (0..SPRITE_SIZE) |py| {
+        for (0..SPRITE_SIZE) |px| {
             const idx = canvas[py][px];
             if (idx != 0) {
                 rl.drawRectangle(

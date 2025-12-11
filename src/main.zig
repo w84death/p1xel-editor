@@ -40,7 +40,7 @@ const Button = struct {
 
     fn draw(self: Button) void {
         // Draw shadow
-        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(self.x + 3), .y = @floatFromInt(self.y + 3), .width = @floatFromInt(self.width), .height = @floatFromInt(self.height) }, 0.3, 8, rl.getColor(0x00000044));
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(self.x + 3), .y = @floatFromInt(self.y + 3), .width = @floatFromInt(self.width), .height = @floatFromInt(self.height) }, 0.3, 8, DB16.BLACK);
 
         // Draw button background with rounded corners
         rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(self.x), .y = @floatFromInt(self.y), .width = @floatFromInt(self.width), .height = @floatFromInt(self.height) }, 0.3, 8, self.color);
@@ -72,6 +72,7 @@ var active_color: u8 = 1; // currently selected color index (0–3) in current p
 var current_palette_index: usize = 0; // which palette is active from palettes
 var current_palette = [4]u8{ 0, 3, 7, 15 }; // Mutable copy of current palette colors
 var active_tool: u8 = 0; // TODO: Implement tool selection
+var palette_modified: bool = false; // Track if current palette has been modified
 
 fn loadPalettesFromFile() void {
     const file = std.fs.cwd().openFile(PALETTES_FILE, .{}) catch {
@@ -118,12 +119,21 @@ fn savePalettesToFile() void {
     _ = file.write(buf[0 .. palettes_count * 4]) catch return;
 }
 
-fn savePalette() void {
-    // Check if palette already exists
+fn isPaletteAlreadySaved() bool {
+    // Check if current palette matches any saved palette
     for (0..palettes_count) |i| {
         if (std.mem.eql(u8, &palettes[i], &current_palette)) {
-            return; // Palette already exists
+            return true;
         }
+    }
+    return false;
+}
+
+fn savePalette() void {
+    // Check if palette already exists
+    if (isPaletteAlreadySaved()) {
+        palette_modified = false; // Already saved, just update flag
+        return;
     }
 
     // Add new palette if not at max
@@ -132,6 +142,7 @@ fn savePalette() void {
         palettes_count += 1;
         current_palette_index = palettes_count - 1; // Select the new palette
         savePalettesToFile();
+        palette_modified = false; // Mark as saved
     }
 }
 
@@ -157,6 +168,7 @@ fn deletePalette() void {
 
         // Update current palette
         current_palette = palettes[current_palette_index];
+        palette_modified = false; // Reset modification flag after delete
         savePalettesToFile();
     }
 }
@@ -255,6 +267,8 @@ pub fn main() !void {
                 {
                     // Swap the clicked color into the current palette at active_color position
                     current_palette[active_color] = @intCast(i);
+                    // Check if this change makes it different from saved palettes
+                    palette_modified = !isPaletteAlreadySaved();
                     break;
                 }
             }
@@ -266,7 +280,7 @@ pub fn main() !void {
         const tool_size = 48;
         const tool_spacing = 8;
         if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
-            inline for (0..5) |i| {
+            inline for (0..4) |i| {
                 const tx = tool_x + @as(i32, @intCast(i * (tool_size + tool_spacing)));
                 if (mouse.x >= @as(f32, @floatFromInt(tx)) and
                     mouse.x < @as(f32, @floatFromInt(tx + tool_size)) and
@@ -274,11 +288,10 @@ pub fn main() !void {
                     mouse.y < @as(f32, @floatFromInt(tool_y + tool_size)))
                 {
                     switch (i) {
-                        0 => savePalette(), // SAVE button
+                        0 => savePalette(), // SAVE button (sets palette_modified internally)
                         1 => if (palettes_count > 1) deletePalette(), // DEL button
                         2 => active_tool = 0, // PEN tool
                         3 => active_tool = 1, // FILL tool (TODO: implement)
-                        4 => active_tool = 2, // ERASE tool (TODO: implement)
                         else => {},
                     }
                     break;
@@ -301,6 +314,7 @@ pub fn main() !void {
                 if (palettes_count > 0) {
                     current_palette_index = (current_palette_index + 1) % palettes_count;
                     current_palette = palettes[current_palette_index];
+                    palette_modified = false; // Reset modification flag when switching palette
                     if (active_color > 0) active_color = 1; // Reset to second color if not on transparent
                 }
             },
@@ -313,6 +327,7 @@ pub fn main() !void {
                         current_palette_index -= 1;
                     }
                     current_palette = palettes[current_palette_index];
+                    palette_modified = false; // Reset modification flag when switching palette
                     if (active_color > 0) active_color = 1;
                 }
             },
@@ -379,61 +394,69 @@ pub fn main() !void {
         var sx: i32 = PIVOT_TR_X - SIDEBAR_X;
         var sy: i32 = PIVOT_TR_Y;
 
-        // Draw "PREVIEW" label
-        rl.drawText("PREVIEW", sx, sy - 24, 16, rl.Color.ray_white);
-
         // Large preview with shadow and rounded corners
-        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx + 4), .y = @floatFromInt(sy + 4), .width = PREVIEW_SIZE, .height = PREVIEW_SIZE }, 0.08, 8, rl.getColor(0x00000044));
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx + 4), .y = @floatFromInt(sy + 4), .width = PREVIEW_SIZE, .height = PREVIEW_SIZE }, 0.08, 8, DB16.BLACK);
         rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx), .y = @floatFromInt(sy), .width = PREVIEW_SIZE, .height = PREVIEW_SIZE }, 0.08, 8, rl.getColor(0x718096FF));
         drawPreview(&canvas, sx + 8, sy + 8, PREVIEW_SIZE - 16);
 
         // Star indicator in top right
         const star_x = PIVOT_BR_X - 40;
         const star_y = PIVOT_TR_Y;
-        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(star_x + 4), .y = @floatFromInt(star_y + 4), .width = 36, .height = 36 }, 0.2, 8, rl.getColor(0x00000044));
-        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(star_x), .y = @floatFromInt(star_y), .width = 36, .height = 36 }, 0.2, 8, rl.getColor(0x5A8A9AFF));
-        rl.drawText("★", star_x + 9, star_y + 4, 24, rl.Color.white);
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(star_x + 4), .y = @floatFromInt(star_y + 4), .width = 36, .height = 36 }, 0.2, 8, DB16.BLACK);
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(star_x), .y = @floatFromInt(star_y), .width = 36, .height = 36 }, 0.2, 8, DB16.WHITE);
+        rl.drawText("★", star_x + 9, star_y + 4, 20, rl.Color.white);
 
         // Tool buttons section
         sx = PIVOT_BR_X - TOOLS_X;
         sy = sy + PREVIEW_SIZE + 30;
 
         // Draw tool icons
-        const tool_labels = [_][:0]const u8{ "SAVE", "DEL", "PEN", "FILL", "ERASE" };
+        const tool_labels = [_][:0]const u8{ "SAVE", "DEL", "PEN", "FILL" };
 
-        inline for (0..5) |i| {
+        inline for (0..tool_labels.len) |i| {
             const tx = sx + @as(i32, @intCast(i * (48 + 8)));
             // Shadow
-            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx + 4), .y = @floatFromInt(sy + 4), .width = 48, .height = 48 }, 0.2, 8, rl.getColor(0x00000044));
-            // Button (highlight active tool or dim delete if only one palette)
-            const btn_color = if (i == 2 and active_tool == 0) rl.getColor(0x5A8A9AFF) else if (i == 3 and active_tool == 1) rl.getColor(0x5A8A9AFF) else if (i == 4 and active_tool == 2) rl.getColor(0x5A8A9AFF) else if (i == 1 and palettes_count <= 1) rl.getColor(0x2A2E38FF) else rl.getColor(0x4A5568FF);
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx + 2), .y = @floatFromInt(sy + 2), .width = 48, .height = 48 }, 0.2, 8, DB16.BLACK);
+            // Button (highlight active tool, dim delete if only one palette, highlight save if modified)
+            const btn_color = if (i == 0 and palette_modified) rl.getColor(0xF6AD55FF) else if (i == 2 and active_tool == 0) DB16.WHITE else if (i == 3 and active_tool == 1) DB16.WHITE else if (i == 4 and active_tool == 2) DB16.WHITE else if (i == 1 and palettes_count <= 1) rl.getColor(0x2A2E38FF) else rl.getColor(0x4A5568FF);
             rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx), .y = @floatFromInt(sy), .width = 48, .height = 48 }, 0.2, 8, btn_color);
+
+            // Add indicator dot for unsaved changes
+            if (i == 0 and palette_modified) {
+                rl.drawCircle(tx + 40, sy + 8, 4, rl.getColor(0xFFFFFFFF));
+            }
 
             // Draw tool label
             const label_width = rl.measureText(tool_labels[i], 10);
-            rl.drawText(tool_labels[i], tx + @divFloor(48 - label_width, 2), sy + 48 / 2 - 5, 10, rl.Color.ray_white);
+            const text_color = if (i == 0 and palette_modified) rl.Color.black else rl.Color.ray_white;
+            rl.drawText(tool_labels[i], tx + @divFloor(48 - label_width, 2), sy + 48 / 2 - 5, 10, text_color);
         }
 
         sx = PIVOT_BR_X - TOOLS_X;
         sy = sy + 48 + 30;
 
-        // Active swatches section
-        rl.drawText("ACTIVE SWATCHES", sx, sy - 24, 16, rl.Color.ray_white);
+        // Active swatches section with palette index
+        rl.drawText("ACTIVE SWATCHES", sx, sy - 24, 20, rl.Color.ray_white);
+
+        // Display palette index
+        var idx_buf: [32:0]u8 = undefined;
+        _ = std.fmt.bufPrintZ(&idx_buf, "Palette {d}/{d}", .{ current_palette_index + 1, palettes_count }) catch {};
+        rl.drawText(&idx_buf, sx + 240, sy - 24, 20, DB16.BLUE);
 
         // Save and Delete buttons removed from this position
 
         // 4-color active swatches with modern styling
-        inline for (0..4) |i| {
+        inline for (0..tool_labels.len) |i| {
             const xoff: i32 = @intCast(i * 50);
             const index: u8 = @intCast(i);
             const db16_idx = current_palette[i];
             const pos: math.IVec2 = math.IVec2.init(sx + xoff, sy);
 
             // Draw shadow for depth
-            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x + 4), .y = @floatFromInt(pos.y + 4), .width = 44, .height = 44 }, 0.15, 8, rl.getColor(0x00000044));
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x + 4), .y = @floatFromInt(pos.y + 4), .width = 44, .height = 44 }, 0.15, 8, DB16.BLACK);
 
             // Draw background for swatch
-            const bg_color = if (active_color == index) rl.getColor(0x5A8A9AFF) else rl.getColor(0x4A5568FF);
+            const bg_color = if (active_color == index) DB16.WHITE else rl.getColor(0x4A5568FF);
             rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x - 2), .y = @floatFromInt(pos.y - 2), .width = 44, .height = 44 }, 0.15, 8, bg_color);
 
             // Draw the color swatch
@@ -442,7 +465,7 @@ pub fn main() !void {
         sy += 60;
 
         // Master 16-color palette with label
-        rl.drawText("COLOR PALETTE (DB16)", sx, sy, 16, rl.Color.ray_white);
+        rl.drawText("COLOR PALETTE (DB16)", sx, sy, 20, rl.Color.ray_white);
         sy += 24;
 
         for (0..16) |i| {
@@ -452,7 +475,7 @@ pub fn main() !void {
             const py = sy + y * 48;
 
             // Draw shadow
-            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px + 2), .y = @floatFromInt(py + 2), .width = 40, .height = 40 }, 0.15, 8, rl.getColor(0x00000033));
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px + 4), .y = @floatFromInt(py + 4), .width = 40, .height = 40 }, 0.15, 8, DB16.BLACK);
 
             // Check if this DB16 color is in current palette
             var is_in_palette = false;
@@ -465,7 +488,7 @@ pub fn main() !void {
 
             // Draw background if selected
             if (is_in_palette) {
-                rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px - 2), .y = @floatFromInt(py - 2), .width = 44, .height = 44 }, 0.15, 8, rl.getColor(0x5A8A9AFF));
+                rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px - 2), .y = @floatFromInt(py - 2), .width = 44, .height = 44 }, 0.15, 8, DB16.WHITE);
             }
 
             // Draw the color
@@ -477,18 +500,17 @@ pub fn main() !void {
         const tool_name = switch (active_tool) {
             0 => "Pencil",
             1 => "Fill",
-            2 => "Eraser",
             else => "Unknown",
         };
         const pos_x = if (mouse_cell_x >= 0 and mouse_cell_x < SPRITE_SIZE) mouse_cell_x else -1;
         const pos_y = if (mouse_cell_y >= 0 and mouse_cell_y < SPRITE_SIZE) mouse_cell_y else -1;
 
         if (pos_x >= 0 and pos_y >= 0) {
-            _ = std.fmt.bufPrintZ(&status_buf, "Pos: {d}, {d}  |  Tool: {s}  |  Tip: [TAB] cycle palette, [1-4] select swatch", .{ pos_x, pos_y, tool_name }) catch {};
-        } else {
-            _ = std.fmt.bufPrintZ(&status_buf, "Tool: {s}  |  Tip: [TAB] cycle palette, [1-4] select swatch", .{tool_name}) catch {};
+            _ = std.fmt.bufPrintZ(&status_buf, "Pos: {d}, {d}", .{ pos_x, pos_y }) catch {};
+            rl.drawText(&status_buf, PIVOT_BL_X, PIVOT_BL_Y - 64, 20, DB16.WHITE);
         }
-        rl.drawText(&status_buf, PIVOT_BL_X + 160, PIVOT_BL_Y - 20, 16, rl.getColor(0xA0A0A0FF));
+        _ = std.fmt.bufPrintZ(&status_buf, "Tool: {s}  |  Tip: [TAB] cycle palette, [1-4] select swatch", .{tool_name}) catch {};
+        rl.drawText(&status_buf, PIVOT_BL_X + 160, PIVOT_BL_Y - 20, 20, DB16.BLUE);
     }
 }
 

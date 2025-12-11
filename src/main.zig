@@ -23,8 +23,8 @@ const SPRITE_SIZE = 16; // The actual sprite dimensions (16x16 pixels)
 const GRID_SIZE = 32; // How large each pixel appears on screen (24x24 pixels)
 const CANVAS_SIZE = SPRITE_SIZE * GRID_SIZE; // Total canvas size on screen (384x384)
 
-const PREVIEW_SIZE = 64;
-const PREVIEW_BIG = 256;
+const PREVIEW_SIZE = 240;
+const PREVIEW_BIG = 96;
 const SIDEBAR_X = 402;
 const TOOLS_X = 402;
 const TOOLS_Y = 300;
@@ -39,9 +39,14 @@ const Button = struct {
     color: rl.Color,
 
     fn draw(self: Button) void {
-        // Draw button background
-        rl.drawRectangle(self.x, self.y, self.width, self.height, self.color);
-        rl.drawRectangleLines(self.x, self.y, self.width, self.height, DB16.WHITE);
+        // Draw shadow
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(self.x + 3), .y = @floatFromInt(self.y + 3), .width = @floatFromInt(self.width), .height = @floatFromInt(self.height) }, 0.3, 8, rl.getColor(0x00000044));
+
+        // Draw button background with rounded corners
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(self.x), .y = @floatFromInt(self.y), .width = @floatFromInt(self.width), .height = @floatFromInt(self.height) }, 0.3, 8, self.color);
+
+        // Draw rounded border
+        rl.drawRectangleRoundedLinesEx(rl.Rectangle{ .x = @floatFromInt(self.x), .y = @floatFromInt(self.y), .width = @floatFromInt(self.width), .height = @floatFromInt(self.height) }, 0.3, 8, 2, rl.getColor(0x4A5568FF));
 
         // Draw centered text
         const text_width = rl.measureText(self.label, 20);
@@ -215,9 +220,9 @@ pub fn main() !void {
             }
         }
 
-        // Check for clicks on the 4-color palette
+        // Check for clicks on the 4-color palette (active swatches)
         const palette_x = PIVOT_BR_X - TOOLS_X;
-        const palette_y = PIVOT_BR_Y - TOOLS_Y + 30; // Account for header text
+        const palette_y = PIVOT_TR_Y + PREVIEW_SIZE + 30 + 48 + 30; // Match actual drawing position
         if (!in_canvas and rl.isMouseButtonPressed(rl.MouseButton.left)) {
             inline for (0..4) |i| {
                 const xoff: i32 = @intCast(i * 50);
@@ -236,20 +241,46 @@ pub fn main() !void {
 
         // Check for clicks on the global 16-color palette
         const global_palette_x = PIVOT_BR_X - TOOLS_X;
-        const global_palette_y = PIVOT_BR_Y - TOOLS_Y + 118; // 24 (ACTIVE PALETTE) + 70 (after 4-color palette) + 24 (DB16 COLOR PALETTE)
+        const global_palette_y = PIVOT_TR_Y + PREVIEW_SIZE + 30 + 48 + 30 + 60 + 24; // Match actual drawing position
         if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
             for (0..16) |i| {
                 const x = @as(i32, @intCast(i % 8));
                 const y = @as(i32, @intCast(i / 8));
-                const rect_x = global_palette_x + x * 40;
-                const rect_y = global_palette_y + y * 40;
+                const rect_x = global_palette_x + x * 48;
+                const rect_y = global_palette_y + y * 48;
                 if (mouse.x >= @as(f32, @floatFromInt(rect_x)) and
-                    mouse.x < @as(f32, @floatFromInt(rect_x + 36)) and
+                    mouse.x < @as(f32, @floatFromInt(rect_x + 40)) and
                     mouse.y >= @as(f32, @floatFromInt(rect_y)) and
-                    mouse.y < @as(f32, @floatFromInt(rect_y + 36)))
+                    mouse.y < @as(f32, @floatFromInt(rect_y + 40)))
                 {
                     // Swap the clicked color into the current palette at active_color position
                     current_palette[active_color] = @intCast(i);
+                    break;
+                }
+            }
+        }
+
+        // Check for clicks on tool buttons
+        const tool_x = PIVOT_BR_X - TOOLS_X;
+        const tool_y = PIVOT_TR_Y + PREVIEW_SIZE + 30; // Match actual drawing position
+        const tool_size = 48;
+        const tool_spacing = 8;
+        if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
+            inline for (0..5) |i| {
+                const tx = tool_x + @as(i32, @intCast(i * (tool_size + tool_spacing)));
+                if (mouse.x >= @as(f32, @floatFromInt(tx)) and
+                    mouse.x < @as(f32, @floatFromInt(tx + tool_size)) and
+                    mouse.y >= @as(f32, @floatFromInt(tool_y)) and
+                    mouse.y < @as(f32, @floatFromInt(tool_y + tool_size)))
+                {
+                    switch (i) {
+                        0 => savePalette(), // SAVE button
+                        1 => if (palettes_count > 1) deletePalette(), // DEL button
+                        2 => active_tool = 0, // PEN tool
+                        3 => active_tool = 1, // FILL tool (TODO: implement)
+                        4 => active_tool = 2, // ERASE tool (TODO: implement)
+                        else => {},
+                    }
                     break;
                 }
             }
@@ -292,9 +323,9 @@ pub fn main() !void {
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        rl.clearBackground(rl.getColor(0x1E1E1EFF));
+        rl.clearBackground(rl.getColor(0x2D3748FF));
 
-        rl.drawText(THE_NAME, PIVOT_BL_X, PIVOT_BL_Y - 20, 20, DB16.CYAN);
+        rl.drawText(THE_NAME, PIVOT_BL_X, PIVOT_BL_Y - 20, 20, rl.Color.ray_white);
 
         // ——— Canvas background (checkerboard) and sprite pixels ———
         for (0..SPRITE_SIZE) |y| {
@@ -341,62 +372,57 @@ pub fn main() !void {
             rl.drawLine(PIVOT_TL_X, PIVOT_TL_Y + pos, PIVOT_TL_X + CANVAS_SIZE, PIVOT_TL_Y + pos, grid_color);
         }
 
-        // ——— Canvas border ———
-        rl.drawRectangleLines(PIVOT_TL_X - 1, PIVOT_TL_Y - 1, CANVAS_SIZE + 2, CANVAS_SIZE + 2, rl.Color.white);
+        // ——— Canvas border with rounded corners ———
+        rl.drawRectangleRoundedLinesEx(rl.Rectangle{ .x = PIVOT_TL_X - 4, .y = PIVOT_TL_Y - 4, .width = CANVAS_SIZE + 8, .height = CANVAS_SIZE + 8 }, 0.02, 8, 3, rl.getColor(0x4A5568FF));
 
         // ——— Right sidebar ———
         var sx: i32 = PIVOT_TR_X - SIDEBAR_X;
         var sy: i32 = PIVOT_TR_Y;
 
-        rl.drawRectangleLines(sx, sy, PREVIEW_SIZE, PREVIEW_SIZE, rl.Color.ray_white);
-        drawPreview(&canvas, sx + 4, sy + 4, PREVIEW_SIZE - 8);
+        // Draw "PREVIEW" label
+        rl.drawText("PREVIEW", sx, sy - 24, 16, rl.Color.ray_white);
 
-        const next_prev: i32 = @intCast(PREVIEW_SIZE);
-        rl.drawRectangleLines(sx + next_prev + 16, sy, PREVIEW_BIG, PREVIEW_BIG, rl.Color.ray_white);
-        drawPreview(&canvas, sx + next_prev + 20, sy + 4, PREVIEW_BIG - 8);
+        // Large preview with shadow and rounded corners
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx + 4), .y = @floatFromInt(sy + 4), .width = PREVIEW_SIZE, .height = PREVIEW_SIZE }, 0.08, 8, rl.getColor(0x00000044));
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx), .y = @floatFromInt(sy), .width = PREVIEW_SIZE, .height = PREVIEW_SIZE }, 0.08, 8, rl.getColor(0x718096FF));
+        drawPreview(&canvas, sx + 8, sy + 8, PREVIEW_SIZE - 16);
 
+        // Star indicator in top right
+        const star_x = PIVOT_BR_X - 40;
+        const star_y = PIVOT_TR_Y;
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(star_x + 4), .y = @floatFromInt(star_y + 4), .width = 36, .height = 36 }, 0.2, 8, rl.getColor(0x00000044));
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(star_x), .y = @floatFromInt(star_y), .width = 36, .height = 36 }, 0.2, 8, rl.getColor(0x5A8A9AFF));
+        rl.drawText("★", star_x + 9, star_y + 4, 24, rl.Color.white);
+
+        // Tool buttons section
         sx = PIVOT_BR_X - TOOLS_X;
-        sy = PIVOT_BR_Y - TOOLS_Y;
+        sy = sy + PREVIEW_SIZE + 30;
 
-        // Show palette index
-        var idx_buf: [32:0]u8 = undefined;
-        _ = std.fmt.bufPrintZ(&idx_buf, "Palette {d}/{d}", .{ current_palette_index + 1, palettes_count }) catch {};
-        rl.drawText(&idx_buf, sx, sy, 20, DB16.BLUE);
+        // Draw tool icons
+        const tool_labels = [_][:0]const u8{ "SAVE", "DEL", "PEN", "FILL", "ERASE" };
 
-        // Add Save and Delete buttons
-        const save_btn = Button{
-            .x = sx + 240,
-            .y = sy,
-            .width = 96,
-            .height = 28,
-            .label = "Save",
-            .color = DB16.DARK_GREEN,
-        };
+        inline for (0..5) |i| {
+            const tx = sx + @as(i32, @intCast(i * (48 + 8)));
+            // Shadow
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx + 4), .y = @floatFromInt(sy + 4), .width = 48, .height = 48 }, 0.2, 8, rl.getColor(0x00000044));
+            // Button (highlight active tool or dim delete if only one palette)
+            const btn_color = if (i == 2 and active_tool == 0) rl.getColor(0x5A8A9AFF) else if (i == 3 and active_tool == 1) rl.getColor(0x5A8A9AFF) else if (i == 4 and active_tool == 2) rl.getColor(0x5A8A9AFF) else if (i == 1 and palettes_count <= 1) rl.getColor(0x2A2E38FF) else rl.getColor(0x4A5568FF);
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx), .y = @floatFromInt(sy), .width = 48, .height = 48 }, 0.2, 8, btn_color);
 
-        const delete_btn = Button{
-            .x = sx + 240,
-            .y = sy + 34,
-            .width = 96,
-            .height = 28,
-            .label = "Delete",
-            .color = if (palettes_count > 1) DB16.RED else DB16.DARK_GRAY,
-        };
-
-        save_btn.draw();
-        delete_btn.draw();
-
-        // Handle button clicks
-        if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
-            if (save_btn.isClicked(mouse)) {
-                savePalette();
-            } else if (delete_btn.isClicked(mouse) and palettes_count > 1) {
-                deletePalette();
-            }
+            // Draw tool label
+            const label_width = rl.measureText(tool_labels[i], 10);
+            rl.drawText(tool_labels[i], tx + @divFloor(48 - label_width, 2), sy + 48 / 2 - 5, 10, rl.Color.ray_white);
         }
 
-        sy += 24;
+        sx = PIVOT_BR_X - TOOLS_X;
+        sy = sy + 48 + 30;
 
-        // 4-color sub-palette (the ones this sprite can use)
+        // Active swatches section
+        rl.drawText("ACTIVE SWATCHES", sx, sy - 24, 16, rl.Color.ray_white);
+
+        // Save and Delete buttons removed from this position
+
+        // 4-color active swatches with modern styling
         inline for (0..4) |i| {
             const xoff: i32 = @intCast(i * 50);
             const index: u8 = @intCast(i);
@@ -404,47 +430,30 @@ pub fn main() !void {
             const pos: math.IVec2 = math.IVec2.init(sx + xoff, sy);
 
             // Draw shadow for depth
-            rl.drawRectangle(pos.x + 2, pos.y + 2, 40, 40, rl.getColor(0x00000044));
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x + 4), .y = @floatFromInt(pos.y + 4), .width = 44, .height = 44 }, 0.15, 8, rl.getColor(0x00000044));
 
-            // Draw the color
-            rl.drawRectangle(pos.x, pos.y, 40, 40, getColorFromIndex(db16_idx));
+            // Draw background for swatch
+            const bg_color = if (active_color == index) rl.getColor(0x5A8A9AFF) else rl.getColor(0x4A5568FF);
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x - 2), .y = @floatFromInt(pos.y - 2), .width = 44, .height = 44 }, 0.15, 8, bg_color);
 
-            // Draw border - thicker for selected
-            if (active_color == index) {
-                rl.drawRectangleLines(pos.x - 2, pos.y - 2, 44, 44, DB16.WHITE);
-                rl.drawRectangleLines(pos.x - 1, pos.y - 1, 42, 42, DB16.WHITE);
-            } else {
-                rl.drawRectangleLines(pos.x, pos.y, 40, 40, rl.getColor(0x44444488));
-            }
-
-            // Draw key hint
-            var buf: [2:0]u8 = undefined;
-            buf[0] = '1' + index;
-            buf[1] = 0;
-            if (i == 0 and current_palette[0] == 0) {
-                // Special label for transparent (only if first color is black)
-                rl.drawText("TRANS", pos.x + 2, pos.y + 42, 8, if (active_color == index) DB16.WHITE else DB16.LIGHT_GRAY);
-            } else {
-                rl.drawText(&buf, pos.x + 2, pos.y + 42, 20, if (active_color == index) DB16.WHITE else DB16.LIGHT_GRAY);
-            }
+            // Draw the color swatch
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x), .y = @floatFromInt(pos.y), .width = 40, .height = 40 }, 0.12, 8, getColorFromIndex(db16_idx));
         }
-        sy += 70;
+        sy += 60;
 
-        // Master 16-color palette
-        rl.drawText("DB16 COLOR PALETTE", sx, sy, 20, DB16.BLUE);
+        // Master 16-color palette with label
+        rl.drawText("COLOR PALETTE (DB16)", sx, sy, 16, rl.Color.ray_white);
         sy += 24;
 
         for (0..16) |i| {
             const x = @as(i32, @intCast(i % 8));
             const y = @as(i32, @intCast(i / 8));
-            const rec = rl.Rectangle{
-                .x = @floatFromInt(sx + x * 40),
-                .y = @floatFromInt(sy + y * 40),
-                .width = 36,
-                .height = 36,
-            };
+            const px = sx + x * 48;
+            const py = sy + y * 48;
 
-            rl.drawRectangleRec(rec, getColorFromIndex(@intCast(i)));
+            // Draw shadow
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px + 2), .y = @floatFromInt(py + 2), .width = 40, .height = 40 }, 0.15, 8, rl.getColor(0x00000033));
+
             // Check if this DB16 color is in current palette
             var is_in_palette = false;
             for (current_palette) |palette_color| {
@@ -453,12 +462,33 @@ pub fn main() !void {
                     break;
                 }
             }
+
+            // Draw background if selected
             if (is_in_palette) {
-                rl.drawRectangleLinesEx(rec, 3, rl.Color.sky_blue);
+                rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px - 2), .y = @floatFromInt(py - 2), .width = 44, .height = 44 }, 0.15, 8, rl.getColor(0x5A8A9AFF));
             }
+
+            // Draw the color
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(px), .y = @floatFromInt(py), .width = 40, .height = 40 }, 0.12, 8, getColorFromIndex(@intCast(i)));
         }
 
-        rl.drawText("[TAB] = cycle palette, [N] = clear, [1-4] = color", PIVOT_BL_X + 160, PIVOT_BL_Y - 20, 20, DB16.LIGHT_GRAY);
+        // Status bar with dynamic info
+        var status_buf: [256:0]u8 = undefined;
+        const tool_name = switch (active_tool) {
+            0 => "Pencil",
+            1 => "Fill",
+            2 => "Eraser",
+            else => "Unknown",
+        };
+        const pos_x = if (mouse_cell_x >= 0 and mouse_cell_x < SPRITE_SIZE) mouse_cell_x else -1;
+        const pos_y = if (mouse_cell_y >= 0 and mouse_cell_y < SPRITE_SIZE) mouse_cell_y else -1;
+
+        if (pos_x >= 0 and pos_y >= 0) {
+            _ = std.fmt.bufPrintZ(&status_buf, "Pos: {d}, {d}  |  Tool: {s}  |  Tip: [TAB] cycle palette, [1-4] select swatch", .{ pos_x, pos_y, tool_name }) catch {};
+        } else {
+            _ = std.fmt.bufPrintZ(&status_buf, "Tool: {s}  |  Tip: [TAB] cycle palette, [1-4] select swatch", .{tool_name}) catch {};
+        }
+        rl.drawText(&status_buf, PIVOT_BL_X + 160, PIVOT_BL_Y - 20, 16, rl.getColor(0xA0A0A0FF));
     }
 }
 

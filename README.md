@@ -7,6 +7,9 @@ ___/    |     \    __/  |      |      (   |  |  |    (   |   |
 _|     _|  _/\_\ \___| _|     _____| \__,_| _| \__|  \___/  _|    
 ```
 
+## About
+Sprite editor for my MS-DOS game. Made in Zig and Raylib.
+
 pre-alpha
 
 ![prealpha](media/screenshot5.png)

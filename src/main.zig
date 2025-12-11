@@ -5,7 +5,6 @@ const rl = @import("raylib");
 const math = @import("math.zig");
 const palette_mod = @import("palette.zig");
 const DB16 = palette_mod.DB16;
-const PALETTES = palette_mod.PALETTES;
 
 const THE_NAME = "P1Xel Editor";
 const SCREEN_W = 1024;
@@ -59,72 +58,102 @@ const Button = struct {
     }
 };
 
-const MAX_CUSTOM_PALETTES = 20;
-var custom_palettes: [MAX_CUSTOM_PALETTES][4]u8 = undefined;
-var custom_palettes_count: usize = 0;
+const MAX_PALETTES = 100;
+const PALETTES_FILE = "palettes.dat";
+var palettes: [MAX_PALETTES][4]u8 = undefined;
+var palettes_count: usize = 0;
 
 var active_color: u8 = 1; // currently selected color index (0–3) in current palette
-var current_palette_index: usize = 0; // which palette is active from all_palettes
+var current_palette_index: usize = 0; // which palette is active from palettes
 var current_palette = [4]u8{ 0, 3, 7, 15 }; // Mutable copy of current palette colors
 var active_tool: u8 = 0; // TODO: Implement tool selection
 
+fn loadPalettesFromFile() void {
+    const file = std.fs.cwd().openFile(PALETTES_FILE, .{}) catch {
+        // File doesn't exist, initialize with default palette
+        palettes[0] = .{ 0, 3, 7, 15 };
+        palettes_count = 1;
+        return;
+    };
+    defer file.close();
+
+    const data = file.readToEndAlloc(std.heap.page_allocator, 1024 * 1024) catch {
+        palettes[0] = .{ 0, 3, 7, 15 };
+        palettes_count = 1;
+        return;
+    };
+    defer std.heap.page_allocator.free(data);
+
+    // Parse the file (4 bytes per palette)
+    palettes_count = @min(data.len / 4, MAX_PALETTES);
+    for (0..palettes_count) |i| {
+        palettes[i][0] = data[i * 4];
+        palettes[i][1] = data[i * 4 + 1];
+        palettes[i][2] = data[i * 4 + 2];
+        palettes[i][3] = data[i * 4 + 3];
+    }
+
+    if (palettes_count == 0) {
+        palettes[0] = .{ 0, 3, 7, 15 };
+        palettes_count = 1;
+    }
+}
+
+fn savePalettesToFile() void {
+    var buf: [MAX_PALETTES * 4]u8 = undefined;
+    for (0..palettes_count) |i| {
+        buf[i * 4] = palettes[i][0];
+        buf[i * 4 + 1] = palettes[i][1];
+        buf[i * 4 + 2] = palettes[i][2];
+        buf[i * 4 + 3] = palettes[i][3];
+    }
+
+    const file = std.fs.cwd().createFile(PALETTES_FILE, .{}) catch return;
+    defer file.close();
+    _ = file.write(buf[0 .. palettes_count * 4]) catch return;
+}
+
 fn savePalette() void {
-    // Check if palette already exists in presets
-    for (PALETTES) |pal| {
-        if (std.mem.eql(u8, &pal, &current_palette)) {
+    // Check if palette already exists
+    for (0..palettes_count) |i| {
+        if (std.mem.eql(u8, &palettes[i], &current_palette)) {
             return; // Palette already exists
         }
     }
 
-    // Check if palette already exists in custom
-    for (0..custom_palettes_count) |i| {
-        if (std.mem.eql(u8, &custom_palettes[i], &current_palette)) {
-            return; // Palette already exists
-        }
-    }
-
-    // Add to custom palettes if not at max
-    if (custom_palettes_count < MAX_CUSTOM_PALETTES) {
-        custom_palettes[custom_palettes_count] = current_palette;
-        custom_palettes_count += 1;
-        current_palette_index = PALETTES.len + custom_palettes_count - 1; // Select the new palette
+    // Add new palette if not at max
+    if (palettes_count < MAX_PALETTES) {
+        palettes[palettes_count] = current_palette;
+        palettes_count += 1;
+        current_palette_index = palettes_count - 1; // Select the new palette
+        savePalettesToFile();
     }
 }
 
 fn deletePalette() void {
-    // Can't delete preset palettes
-    if (current_palette_index < PALETTES.len) {
+    // Don't delete if only one palette left
+    if (palettes_count <= 1) {
         return;
     }
 
-    // Find and remove from custom palettes
-    const custom_idx = current_palette_index - PALETTES.len;
-    if (custom_idx < custom_palettes_count) {
+    // Remove current palette
+    if (current_palette_index < palettes_count) {
         // Shift remaining palettes
-        var i = custom_idx;
-        while (i < custom_palettes_count - 1) : (i += 1) {
-            custom_palettes[i] = custom_palettes[i + 1];
+        var i = current_palette_index;
+        while (i < palettes_count - 1) : (i += 1) {
+            palettes[i] = palettes[i + 1];
         }
-        custom_palettes_count -= 1;
+        palettes_count -= 1;
 
         // Adjust current palette index
-        const total = PALETTES.len + custom_palettes_count;
-        if (current_palette_index >= total) {
-            current_palette_index = if (total > 0) total - 1 else 0;
+        if (current_palette_index >= palettes_count) {
+            current_palette_index = palettes_count - 1;
         }
 
         // Update current palette
-        current_palette = getPaletteAt(current_palette_index);
+        current_palette = palettes[current_palette_index];
+        savePalettesToFile();
     }
-}
-
-fn getPaletteAt(index: usize) [4]u8 {
-    if (index < PALETTES.len) {
-        return PALETTES[index];
-    } else if (index - PALETTES.len < custom_palettes_count) {
-        return custom_palettes[index - PALETTES.len];
-    }
-    return [4]u8{ 0, 3, 7, 15 }; // Default palette
 }
 
 fn getColorFromIndex(index: u8) rl.Color {
@@ -155,11 +184,14 @@ pub fn main() !void {
 
     rl.setTargetFPS(60);
 
+    // Load palettes from file or initialize with default
+    loadPalettesFromFile();
+
     // Canvas should be 16x16 for the actual sprite data
     var canvas = [_][SPRITE_SIZE]u8{[_]u8{0} ** SPRITE_SIZE} ** SPRITE_SIZE;
 
     // Initialize current_palette from the first palette
-    current_palette = PALETTES[current_palette_index];
+    current_palette = palettes[0];
 
     while (!rl.windowShouldClose()) {
         // ——————————————————————— INPUT ———————————————————————
@@ -235,23 +267,21 @@ pub fn main() !void {
             },
             rl.KeyboardKey.tab => {
                 // Cycle through palettes forward
-                const total = PALETTES.len + custom_palettes_count;
-                if (total > 0) {
-                    current_palette_index = (current_palette_index + 1) % total;
-                    current_palette = getPaletteAt(current_palette_index);
+                if (palettes_count > 0) {
+                    current_palette_index = (current_palette_index + 1) % palettes_count;
+                    current_palette = palettes[current_palette_index];
                     if (active_color > 0) active_color = 1; // Reset to second color if not on transparent
                 }
             },
             rl.KeyboardKey.left_shift, rl.KeyboardKey.right_shift => {
                 // Cycle through palettes backward with shift+tab
-                const total = PALETTES.len + custom_palettes_count;
-                if (rl.isKeyDown(rl.KeyboardKey.tab) and total > 0) {
+                if (rl.isKeyDown(rl.KeyboardKey.tab) and palettes_count > 0) {
                     if (current_palette_index == 0) {
-                        current_palette_index = total - 1;
+                        current_palette_index = palettes_count - 1;
                     } else {
                         current_palette_index -= 1;
                     }
-                    current_palette = getPaletteAt(current_palette_index);
+                    current_palette = palettes[current_palette_index];
                     if (active_color > 0) active_color = 1;
                 }
             },
@@ -328,12 +358,9 @@ pub fn main() !void {
         sx = PIVOT_BR_X - TOOLS_X;
         sy = PIVOT_BR_Y - TOOLS_Y;
 
+        // Show palette index
         var idx_buf: [32:0]u8 = undefined;
-        const is_custom = current_palette_index >= PALETTES.len;
-        const display_idx = if (is_custom) current_palette_index - PALETTES.len + 1 else current_palette_index + 1;
-        const palette_type = if (is_custom) "CUSTOM" else "PRESET";
-        const total = PALETTES.len + custom_palettes_count;
-        _ = std.fmt.bufPrintZ(&idx_buf, "{s} {d}/{d}", .{ palette_type, display_idx, total }) catch {};
+        _ = std.fmt.bufPrintZ(&idx_buf, "Palette {d}/{d}", .{ current_palette_index + 1, palettes_count }) catch {};
         rl.drawText(&idx_buf, sx, sy, 20, DB16.BLUE);
 
         // Add Save and Delete buttons
@@ -352,7 +379,7 @@ pub fn main() !void {
             .width = 96,
             .height = 28,
             .label = "Delete",
-            .color = if (current_palette_index >= PALETTES.len) DB16.RED else DB16.DARK_GRAY,
+            .color = if (palettes_count > 1) DB16.RED else DB16.DARK_GRAY,
         };
 
         save_btn.draw();
@@ -362,7 +389,7 @@ pub fn main() !void {
         if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
             if (save_btn.isClicked(mouse)) {
                 savePalette();
-            } else if (delete_btn.isClicked(mouse) and current_palette_index >= PALETTES.len) {
+            } else if (delete_btn.isClicked(mouse) and palettes_count > 1) {
                 deletePalette();
             }
         }

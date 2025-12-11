@@ -20,20 +20,4 @@ pub const DB16 = struct {
 };
 
 // Palette struct holds 4 color indices from DB16
-pub const Palette = struct {
-    colors: [4]u8, // Indices into DB16 colors (0-15)
-};
-
-// Predefined palettes for quick selection
-pub const PALETTES = [_][4]u8{
-    .{ 0, 3, 7, 15 },
-    .{ 15, 14, 11, 5 }, // WHITE, YELLOW, GREEN, DARK_GREEN (light background)
-    .{ 0, 6, 9, 14 }, // BLACK, RED, ORANGE, YELLOW
-    .{ 0, 2, 8, 13 }, // BLACK, NAVY_BLUE, BLUE, CYAN
-    .{ 0, 1, 12, 15 }, // BLACK, DEEP_PURPLE, PINK_BEIGE, WHITE
-    .{ 4, 5, 11, 14 }, // BROWN, DARK_GREEN, GREEN, YELLOW
-    .{ 1, 6, 9, 14 }, // DEEP_PURPLE, RED, ORANGE, YELLOW
-    .{ 13, 10, 8, 15 }, // CYAN, STEEL_BLUE, BLUE, WHITE (cyan background)
-    .{ 4, 9, 14, 6 }, // BROWN, ORANGE, YELLOW, RED
-    .{ 3, 12, 13, 11 }, // DARK_GRAY, PINK_BEIGE, CYAN, GREEN (dark gray background)
-};
+pub const Palette = [4]u8;

@@ -1,0 +1,192 @@
+// P1Xel Editor by Krzysztof Krystian Jankowski
+//
+const std = @import("std");
+const rl = @import("raylib");
+const math = @import("math.zig");
+const DB16 = @import("palette.zig").DB16;
+const THE_NAME = "P1Xel Editor";
+const SCREEN_W = 640;
+const SCREEN_H = 480;
+
+const CANVAS_SIZE = 256; // 16×16 grid scaled ×16
+const GRID_SIZE = 16;
+const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
+
+const PREVIEW_SIZE = 128;
+const SIDEBAR_X = CANVAS_SIZE + 40;
+const SIDEBAR_W = SCREEN_W - SIDEBAR_X - 20;
+
+var active_color: u8 = 1; // currently selected color index (0–15)
+var current_palette = [4]u8{ 0, 1, 2, 3 }; // the 4 colors this sprite uses
+var active_tool: u8 = 0; // 0=pencil, 1=eraser, etc.
+
+fn getColorFromIndex(index: u8) rl.Color {
+    return switch (index) {
+        0 => DB16.BLACK,
+        1 => DB16.PURPLE,
+        2 => DB16.RED,
+        3 => DB16.BROWN,
+        4 => DB16.DARK_GREEN,
+        5 => DB16.DARK_GRAY,
+        6 => DB16.GRAY,
+        7 => DB16.WHITE,
+        8 => DB16.LIGHT_RED,
+        9 => DB16.ORANGE,
+        10 => DB16.YELLOW,
+        11 => DB16.GREEN,
+        12 => DB16.CYAN,
+        13 => DB16.BLUE,
+        14 => DB16.LIGHT_BLUE,
+        15 => DB16.PINK,
+        else => DB16.BLACK, // Fallback for any index > 15
+    };
+}
+
+pub fn main() !void {
+    rl.initWindow(SCREEN_W, SCREEN_H, THE_NAME);
+    defer rl.closeWindow();
+
+    rl.setTargetFPS(60);
+
+    var canvas = [_][GRID_SIZE]u8{[_]u8{0} ** GRID_SIZE} ** GRID_SIZE;
+
+    while (!rl.windowShouldClose()) {
+        // ——————————————————————— INPUT ———————————————————————
+        const mouse = rl.getMousePosition();
+        const mouse_cell_x: i32 = @intFromFloat((mouse.x - 20) / @as(f32, @floatFromInt(CELL_SIZE)));
+        const mouse_cell_y: i32 = @intFromFloat((mouse.y - 80) / @as(f32, @floatFromInt(CELL_SIZE)));
+
+        const in_canvas = mouse.x >= 20 and mouse.x < 20 + CANVAS_SIZE and
+            mouse.y >= 80 and mouse.y < 80 + CANVAS_SIZE;
+
+        if (in_canvas and rl.isMouseButtonDown(rl.MouseButton.left)) {
+            if (mouse_cell_x >= 0 and mouse_cell_x < GRID_SIZE and
+                mouse_cell_y >= 0 and mouse_cell_y < GRID_SIZE)
+            {
+                canvas[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = active_color;
+            }
+        }
+
+        // ——————————————————————— DRAW ———————————————————————
+        rl.beginDrawing();
+        defer rl.endDrawing();
+
+        rl.clearBackground(rl.getColor(0x1E1E1EFF));
+
+        rl.drawText(THE_NAME, 20, 15, 20, DB16.LIGHT_BLUE);
+
+        // ——— Canvas background (checkerboard) ———
+        for (0..GRID_SIZE) |y| {
+            for (0..GRID_SIZE) |x| {
+                const checker = (x + y) % 2 == 0;
+                const col = if (checker) rl.getColor(0x333333FF) else rl.getColor(0x2D2D2DFF);
+                rl.drawRectangle(
+                    20 + @as(i32, @intCast(x * CELL_SIZE)),
+                    80 + @as(i32, @intCast(y * CELL_SIZE)),
+                    CELL_SIZE,
+                    CELL_SIZE,
+                    col,
+                );
+            }
+        }
+
+        // ——— Draw actual pixels ———
+        for (0..GRID_SIZE) |y| {
+            for (0..GRID_SIZE) |x| {
+                const idx = canvas[y][x];
+                if (idx != 0) { // 0 = transparent
+                    const color = getColorFromIndex(idx);
+                    rl.drawRectangle(
+                        20 + @as(i32, @intCast(x * CELL_SIZE)),
+                        80 + @as(i32, @intCast(y * CELL_SIZE)),
+                        CELL_SIZE,
+                        CELL_SIZE,
+                        color,
+                    );
+                }
+            }
+        }
+
+        // ——— Canvas grid overlay ———
+        for (0..GRID_SIZE) |i| {
+            const pos = @as(i32, @intCast(i * CELL_SIZE));
+            rl.drawLine(20 + pos, 80, 20 + pos, 80 + CANVAS_SIZE, rl.getColor(0x44444488));
+            rl.drawLine(20, 80 + pos, 20 + CANVAS_SIZE, 80 + pos, rl.getColor(0x44444488));
+        }
+
+        // ——— Canvas border ———
+        rl.drawRectangleLines(19, 79, CANVAS_SIZE + 2, CANVAS_SIZE + 2, rl.Color.white);
+
+        // ——— Right sidebar ———
+        const sx: i32 = SIDEBAR_X;
+        var sy: i32 = 20;
+
+        rl.drawText("PREVIEW", sx, sy, 10, DB16.BLUE);
+        sy += 20;
+        rl.drawRectangleLines(sx, sy, PREVIEW_SIZE, PREVIEW_SIZE, rl.Color.ray_white);
+        drawPreview(&canvas, sx + 4, sy + 4, PREVIEW_SIZE - 8);
+        sy += PREVIEW_SIZE + 20;
+
+        rl.drawText("ACTIVE PALETTE (DRAWING)", sx, sy, 10, DB16.BLUE);
+        sy += 20;
+
+        // 4-color sub-palette (the ones this sprite can use)
+        inline for (0..4) |i| {
+            const xoff: i32 = @intCast(i * 50);
+            const color = current_palette[i];
+            const pos: math.IVec2 = math.IVec2.init(sx + xoff, sy);
+            rl.drawRectangle(pos.x, pos.y, 40, 40, getColorFromIndex(color));
+            if (active_color == color) {
+                const rx: i32 = pos.x - 1;
+                const ry: i32 = pos.y - 1;
+                rl.drawRectangleLines(rx, ry, 42, 42, rl.Color.sky_blue);
+            }
+        }
+        sy += 70;
+
+        // Tools
+        rl.drawText("TOOLS", sx, sy, 10, DB16.BLUE);
+        sy += 20;
+        // _ = rl.GuiToggle(.{ .x = @floatFromInt(sx), .y = @floatFromInt(sy), .width = 40, .height = 40 }, rl.GuiIconText(rl.ICON_PENCIL, ""), active_tool == 0);
+        // _ = rl.GuiToggle(.{ .x = @floatFromInt(sx + 50), .y = @floatFromInt(sy), .width = 40, .height = 40 }, rl.GuiIconText(rl.ICON_ERASER, ""), active_tool == 1);
+        sy += 60;
+
+        // Master 16-color palette
+        rl.drawText("DB16 COLOR PALETTE", sx, sy, 10, DB16.BLUE);
+        sy += 20;
+
+        for (0..16) |i| {
+            const x = @as(i32, @intCast(i % 8));
+            const y = @as(i32, @intCast(i / 8));
+            const rec = rl.Rectangle{
+                .x = @floatFromInt(sx + x * 40),
+                .y = @floatFromInt(sy + y * 40),
+                .width = 36,
+                .height = 36,
+            };
+
+            rl.drawRectangleRec(rec, getColorFromIndex(@intCast(i)));
+            if (active_color == i) {
+                rl.drawRectangleLinesEx(rec, 3, rl.Color.sky_blue);
+            }
+        }
+    }
+}
+
+fn drawPreview(canvas: *const [GRID_SIZE][GRID_SIZE]u8, x: i32, y: i32, size: i32) void {
+    const scale = @divFloor(size, GRID_SIZE);
+    for (0..GRID_SIZE) |py| {
+        for (0..GRID_SIZE) |px| {
+            const idx = canvas[py][px];
+            if (idx != 0) {
+                rl.drawRectangle(
+                    x + @as(i32, @intCast(px)) * scale,
+                    y + @as(i32, @intCast(py)) * scale,
+                    scale,
+                    scale,
+                    getColorFromIndex(idx),
+                );
+            }
+        }
+    }
+}

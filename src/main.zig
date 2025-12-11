@@ -24,7 +24,7 @@ const GRID_SIZE = 32; // How large each pixel appears on screen (24x24 pixels)
 const CANVAS_SIZE = SPRITE_SIZE * GRID_SIZE; // Total canvas size on screen (384x384)
 
 const PREVIEW_SIZE = 240;
-const PREVIEW_BIG = 96;
+const PREVIEW_SMALL_SIZE = 96;
 const SIDEBAR_X = 402;
 const TOOLS_X = 402;
 const TOOLS_Y = 300;
@@ -280,7 +280,7 @@ pub fn main() !void {
         const tool_size = 48;
         const tool_spacing = 8;
         if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
-            inline for (0..4) |i| {
+            inline for (0..6) |i| {
                 const tx = tool_x + @as(i32, @intCast(i * (tool_size + tool_spacing)));
                 if (mouse.x >= @as(f32, @floatFromInt(tx)) and
                     mouse.x < @as(f32, @floatFromInt(tx + tool_size)) and
@@ -289,9 +289,11 @@ pub fn main() !void {
                 {
                     switch (i) {
                         0 => savePalette(), // SAVE button (sets palette_modified internally)
-                        1 => if (palettes_count > 1) deletePalette(), // DEL button
+                        1 => {}, // DEL button - disabled for click (use 'D' key instead)
                         2 => active_tool = 0, // PEN tool
                         3 => active_tool = 1, // FILL tool (TODO: implement)
+                        4 => std.debug.print("Export feature coming soon!\n", .{}), // EXPORT tool
+                        5 => std.debug.print("Import feature coming soon!\n", .{}), // IMPORT tool
                         else => {},
                     }
                     break;
@@ -305,6 +307,21 @@ pub fn main() !void {
             rl.KeyboardKey.two => active_color = 1,
             rl.KeyboardKey.three => active_color = 2,
             rl.KeyboardKey.four => active_color = 3,
+            rl.KeyboardKey.s => savePalette(), // Save current palette
+            rl.KeyboardKey.d => {
+                // Delete current palette (only if more than one exists)
+                if (palettes_count > 1) {
+                    deletePalette();
+                }
+            },
+            rl.KeyboardKey.e => {
+                // TODO: Export sprite
+                std.debug.print("Export feature coming soon!\n", .{});
+            },
+            rl.KeyboardKey.i => {
+                // TODO: Import sprite
+                std.debug.print("Import feature coming soon!\n", .{});
+            },
             rl.KeyboardKey.n => {
                 // Clear canvas (start over)
                 canvas = [_][SPRITE_SIZE]u8{[_]u8{0} ** SPRITE_SIZE} ** SPRITE_SIZE;
@@ -399,6 +416,10 @@ pub fn main() !void {
         rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx), .y = @floatFromInt(sy), .width = PREVIEW_SIZE, .height = PREVIEW_SIZE }, 0.08, 8, rl.getColor(0x718096FF));
         drawPreview(&canvas, sx + 8, sy + 8, PREVIEW_SIZE - 16);
 
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx + 8 + PREVIEW_SIZE), .y = @floatFromInt(sy + 4), .width = PREVIEW_SMALL_SIZE, .height = PREVIEW_SMALL_SIZE }, 0.08, 8, DB16.BLACK);
+        rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(sx + PREVIEW_SIZE + 4), .y = @floatFromInt(sy), .width = PREVIEW_SMALL_SIZE, .height = PREVIEW_SMALL_SIZE }, 0.08, 8, rl.getColor(0x718096FF));
+        drawPreview(&canvas, sx + 12 + PREVIEW_SIZE, sy + 8, PREVIEW_SMALL_SIZE - 16);
+
         // Star indicator in top right
         const star_x = PIVOT_BR_X - 40;
         const star_y = PIVOT_TR_Y;
@@ -408,17 +429,17 @@ pub fn main() !void {
 
         // Tool buttons section
         sx = PIVOT_BR_X - TOOLS_X;
-        sy = sy + PREVIEW_SIZE + 30;
+        sy = sy + PREVIEW_SIZE + 24;
 
         // Draw tool icons
-        const tool_labels = [_][:0]const u8{ "SAVE", "DEL", "PEN", "FILL" };
+        const tool_labels = [_][:0]const u8{ "SAVE", "[D]", "PEN", "FILL", "OUT", "IN" };
 
         inline for (0..tool_labels.len) |i| {
             const tx = sx + @as(i32, @intCast(i * (48 + 8)));
             // Shadow
-            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx + 2), .y = @floatFromInt(sy + 2), .width = 48, .height = 48 }, 0.2, 8, DB16.BLACK);
-            // Button (highlight active tool, dim delete if only one palette, highlight save if modified)
-            const btn_color = if (i == 0 and palette_modified) rl.getColor(0xF6AD55FF) else if (i == 2 and active_tool == 0) DB16.WHITE else if (i == 3 and active_tool == 1) DB16.WHITE else if (i == 4 and active_tool == 2) DB16.WHITE else if (i == 1 and palettes_count <= 1) rl.getColor(0x2A2E38FF) else rl.getColor(0x4A5568FF);
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx + 2), .y = @floatFromInt(sy + 2), .width = 48, .height = 48 }, 0.2, 8, rl.getColor(0x00000044));
+            // Button (highlight active tool, dim delete always since it's keyboard-only, highlight save if modified)
+            const btn_color = if (i == 0 and palette_modified) rl.getColor(0xF6AD55FF) else if (i == 2 and active_tool == 0) rl.getColor(0x5A8A9AFF) else if (i == 3 and active_tool == 1) rl.getColor(0x5A8A9AFF) else if (i == 1) rl.getColor(0x2A2E38FF) else rl.getColor(0x4A5568FF);
             rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(tx), .y = @floatFromInt(sy), .width = 48, .height = 48 }, 0.2, 8, btn_color);
 
             // Add indicator dot for unsaved changes
@@ -426,14 +447,15 @@ pub fn main() !void {
                 rl.drawCircle(tx + 40, sy + 8, 4, rl.getColor(0xFFFFFFFF));
             }
 
-            // Draw tool label
-            const label_width = rl.measureText(tool_labels[i], 10);
-            const text_color = if (i == 0 and palette_modified) rl.Color.black else rl.Color.ray_white;
-            rl.drawText(tool_labels[i], tx + @divFloor(48 - label_width, 2), sy + 48 / 2 - 5, 10, text_color);
+            // Draw tool label (smaller font for longer labels)
+            const font_size: i32 = if (i >= 4) 8 else 10;
+            const label_width = rl.measureText(tool_labels[i], font_size);
+            const text_color = if (i == 0 and palette_modified) rl.Color.black else if (i == 1) rl.getColor(0x666666FF) else rl.Color.ray_white;
+            rl.drawText(tool_labels[i], tx + @divFloor(48 - label_width, 2), sy + 48 / 2 - font_size / 2, font_size, text_color);
         }
 
         sx = PIVOT_BR_X - TOOLS_X;
-        sy = sy + 48 + 30;
+        sy = sy + 96;
 
         // Active swatches section with palette index
         rl.drawText("ACTIVE SWATCHES", sx, sy - 24, 20, rl.Color.ray_white);
@@ -446,14 +468,14 @@ pub fn main() !void {
         // Save and Delete buttons removed from this position
 
         // 4-color active swatches with modern styling
-        inline for (0..tool_labels.len) |i| {
+        inline for (0..4) |i| {
             const xoff: i32 = @intCast(i * 50);
             const index: u8 = @intCast(i);
             const db16_idx = current_palette[i];
             const pos: math.IVec2 = math.IVec2.init(sx + xoff, sy);
 
             // Draw shadow for depth
-            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x + 4), .y = @floatFromInt(pos.y + 4), .width = 44, .height = 44 }, 0.15, 8, DB16.BLACK);
+            rl.drawRectangleRounded(rl.Rectangle{ .x = @floatFromInt(pos.x + 2), .y = @floatFromInt(pos.y + 2), .width = 44, .height = 44 }, 0.15, 8, rl.getColor(0x00000044));
 
             // Draw background for swatch
             const bg_color = if (active_color == index) DB16.WHITE else rl.getColor(0x4A5568FF);
@@ -496,21 +518,14 @@ pub fn main() !void {
         }
 
         // Status bar with dynamic info
-        var status_buf: [256:0]u8 = undefined;
-        const tool_name = switch (active_tool) {
-            0 => "Pencil",
-            1 => "Fill",
-            else => "Unknown",
-        };
+        var status_buf: [64:0]u8 = undefined;
         const pos_x = if (mouse_cell_x >= 0 and mouse_cell_x < SPRITE_SIZE) mouse_cell_x else -1;
         const pos_y = if (mouse_cell_y >= 0 and mouse_cell_y < SPRITE_SIZE) mouse_cell_y else -1;
-
         if (pos_x >= 0 and pos_y >= 0) {
             _ = std.fmt.bufPrintZ(&status_buf, "Pos: {d}, {d}", .{ pos_x, pos_y }) catch {};
             rl.drawText(&status_buf, PIVOT_BL_X, PIVOT_BL_Y - 64, 20, DB16.WHITE);
         }
-        _ = std.fmt.bufPrintZ(&status_buf, "Tool: {s}  |  Tip: [TAB] cycle palette, [1-4] select swatch", .{tool_name}) catch {};
-        rl.drawText(&status_buf, PIVOT_BL_X + 160, PIVOT_BL_Y - 20, 20, DB16.BLUE);
+        rl.drawText("[TAB] cycle palette, [1-4] select swatch, [D]elete palette, [S]ave palette", PIVOT_BL_X + 160, PIVOT_BL_Y - 20, 20, DB16.BLUE);
     }
 }
 

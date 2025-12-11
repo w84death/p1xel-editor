@@ -9,7 +9,7 @@ _|     _|  _/\_\ \___| _|     _____| \__,_| _| \__|  \___/  _|
 
 pre-alpha
 
-![prealpha](screenshot.png)
+![prealpha](media/screenshot5.png)
 
 ## Run
 ```
@@ -17,8 +17,6 @@ zig build run
 ```
 
 ## Build Small Binary
-
-![Windows vs Linux](win-linux.png)
 
 Host Linux -> Linux.
 ```
@@ -34,3 +32,12 @@ zig build \
   -Doptimize=ReleaseSmall \
   upx
 ```
+
+## Usage
+
+![prealpha](media/screenshot4.png)
+
+### Palette Switching
+![prealpha](media/screenshot1.png)
+![prealpha](media/screenshot2.png)
+![prealpha](media/screenshot3.png)

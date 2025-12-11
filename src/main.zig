@@ -5,15 +5,27 @@ const rl = @import("raylib");
 const math = @import("math.zig");
 const DB16 = @import("palette.zig").DB16;
 const THE_NAME = "P1Xel Editor";
-const SCREEN_W = 640;
-const SCREEN_H = 480;
+const SCREEN_W = 1024;
+const SCREEN_H = 768;
 
-const CANVAS_SIZE = 256; // 16×16 grid scaled ×16
-const GRID_SIZE = 16;
+const PIVOT_TL_X = 8;
+const PIVOT_TL_Y = 8;
+const PIVOT_TR_X = SCREEN_W - 8;
+const PIVOT_TR_Y = 8;
+const PIVOT_BL_X = 8;
+const PIVOT_BL_Y = SCREEN_H - 8;
+const PIVOT_BR_X = SCREEN_W - 8;
+const PIVOT_BR_Y = SCREEN_H - 8;
+
+const GRID_SIZE = 24;
+const CANVAS_SIZE = GRID_SIZE * GRID_SIZE;
 const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
 
 const PREVIEW_SIZE = 128;
-const SIDEBAR_X = CANVAS_SIZE + 40;
+const PREVIEW_BIG = 256;
+const SIDEBAR_X = 402;
+const TOOLS_X = 402;
+const TOOLS_Y = 300;
 const SIDEBAR_W = SCREEN_W - SIDEBAR_X - 20;
 
 var active_color: u8 = 1; // currently selected color index (0–15)
@@ -53,11 +65,11 @@ pub fn main() !void {
     while (!rl.windowShouldClose()) {
         // ——————————————————————— INPUT ———————————————————————
         const mouse = rl.getMousePosition();
-        const mouse_cell_x: i32 = @intFromFloat((mouse.x - 20) / @as(f32, @floatFromInt(CELL_SIZE)));
-        const mouse_cell_y: i32 = @intFromFloat((mouse.y - 80) / @as(f32, @floatFromInt(CELL_SIZE)));
+        const mouse_cell_x: i32 = @intFromFloat((mouse.x - PIVOT_TL_X) / @as(f32, @floatFromInt(CELL_SIZE)));
+        const mouse_cell_y: i32 = @intFromFloat((mouse.y - PIVOT_TL_Y) / @as(f32, @floatFromInt(CELL_SIZE)));
 
-        const in_canvas = mouse.x >= 20 and mouse.x < 20 + CANVAS_SIZE and
-            mouse.y >= 80 and mouse.y < 80 + CANVAS_SIZE;
+        const in_canvas = mouse.x >= PIVOT_TL_X and mouse.x < PIVOT_TL_X + CANVAS_SIZE and
+            mouse.y >= PIVOT_TL_Y and mouse.y < PIVOT_TL_Y + CANVAS_SIZE;
 
         if (in_canvas and rl.isMouseButtonDown(rl.MouseButton.left)) {
             if (mouse_cell_x >= 0 and mouse_cell_x < GRID_SIZE and
@@ -67,38 +79,43 @@ pub fn main() !void {
             }
         }
 
+        const key = rl.getKeyPressed();
+        switch (key) {
+            rl.KeyboardKey.one => active_color = 0,
+            rl.KeyboardKey.two => active_color = 1,
+            rl.KeyboardKey.three => active_color = 2,
+            rl.KeyboardKey.four => active_color = 3,
+            else => {},
+        }
+
         // ——————————————————————— DRAW ———————————————————————
         rl.beginDrawing();
         defer rl.endDrawing();
 
         rl.clearBackground(rl.getColor(0x1E1E1EFF));
 
-        rl.drawText(THE_NAME, 20, 15, 20, DB16.LIGHT_BLUE);
+        rl.drawText(THE_NAME, PIVOT_BL_X, PIVOT_BL_Y - 20, 20, DB16.LIGHT_BLUE);
 
         // ——— Canvas background (checkerboard) ———
         for (0..GRID_SIZE) |y| {
             for (0..GRID_SIZE) |x| {
                 const checker = (x + y) % 2 == 0;
                 const col = if (checker) rl.getColor(0x333333FF) else rl.getColor(0x2D2D2DFF);
+
                 rl.drawRectangle(
-                    20 + @as(i32, @intCast(x * CELL_SIZE)),
-                    80 + @as(i32, @intCast(y * CELL_SIZE)),
+                    PIVOT_TL_X + @as(i32, @intCast(x * CELL_SIZE)),
+                    PIVOT_TL_Y + @as(i32, @intCast(y * CELL_SIZE)),
                     CELL_SIZE,
                     CELL_SIZE,
                     col,
                 );
-            }
-        }
 
-        // ——— Draw actual pixels ———
-        for (0..GRID_SIZE) |y| {
-            for (0..GRID_SIZE) |x| {
                 const idx = canvas[y][x];
                 if (idx != 0) { // 0 = transparent
                     const color = getColorFromIndex(idx);
                     rl.drawRectangle(
-                        20 + @as(i32, @intCast(x * CELL_SIZE)),
-                        80 + @as(i32, @intCast(y * CELL_SIZE)),
+                        PIVOT_TL_X + @as(i32, @intCast(x * CELL_SIZE)),
+                        PIVOT_TL_Y + @as(i32, @intCast(y * CELL_SIZE)),
                         CELL_SIZE,
                         CELL_SIZE,
                         color,
@@ -110,22 +127,25 @@ pub fn main() !void {
         // ——— Canvas grid overlay ———
         for (0..GRID_SIZE) |i| {
             const pos = @as(i32, @intCast(i * CELL_SIZE));
-            rl.drawLine(20 + pos, 80, 20 + pos, 80 + CANVAS_SIZE, rl.getColor(0x44444488));
-            rl.drawLine(20, 80 + pos, 20 + CANVAS_SIZE, 80 + pos, rl.getColor(0x44444488));
+            rl.drawLine(PIVOT_TL_X + pos, PIVOT_TL_Y, PIVOT_TL_X + pos, PIVOT_TL_Y + CANVAS_SIZE, rl.getColor(0x44444488));
+            rl.drawLine(PIVOT_TL_X, PIVOT_TL_Y + pos, PIVOT_TL_X + CANVAS_SIZE, PIVOT_TL_Y + pos, rl.getColor(0x44444488));
         }
 
         // ——— Canvas border ———
-        rl.drawRectangleLines(19, 79, CANVAS_SIZE + 2, CANVAS_SIZE + 2, rl.Color.white);
+        rl.drawRectangleLines(PIVOT_TL_X - 1, PIVOT_TL_Y - 1, CANVAS_SIZE + 2, CANVAS_SIZE + 2, rl.Color.white);
 
         // ——— Right sidebar ———
-        const sx: i32 = SIDEBAR_X;
-        var sy: i32 = 20;
+        var sx: i32 = PIVOT_TR_X - SIDEBAR_X;
+        var sy: i32 = PIVOT_TR_Y;
 
-        rl.drawText("PREVIEW", sx, sy, 10, DB16.BLUE);
-        sy += 20;
         rl.drawRectangleLines(sx, sy, PREVIEW_SIZE, PREVIEW_SIZE, rl.Color.ray_white);
         drawPreview(&canvas, sx + 4, sy + 4, PREVIEW_SIZE - 8);
-        sy += PREVIEW_SIZE + 20;
+        const next_prev: i32 = @intCast(PREVIEW_SIZE);
+        rl.drawRectangleLines(sx + next_prev + 16, sy, PREVIEW_BIG, PREVIEW_BIG, rl.Color.ray_white);
+        drawPreview(&canvas, sx + next_prev + 20, sy + 4, PREVIEW_BIG - 8);
+
+        sx = PIVOT_BR_X - TOOLS_X;
+        sy = PIVOT_BR_Y - TOOLS_Y;
 
         rl.drawText("ACTIVE PALETTE (DRAWING)", sx, sy, 10, DB16.BLUE);
         sy += 20;
@@ -133,14 +153,19 @@ pub fn main() !void {
         // 4-color sub-palette (the ones this sprite can use)
         inline for (0..4) |i| {
             const xoff: i32 = @intCast(i * 50);
+            const index: u8 = @intCast(i);
             const color = current_palette[i];
             const pos: math.IVec2 = math.IVec2.init(sx + xoff, sy);
             rl.drawRectangle(pos.x, pos.y, 40, 40, getColorFromIndex(color));
+            var buf: [2:0]u8 = undefined;
+            buf[0] = '0' + index;
+            buf[1] = 0;
             if (active_color == color) {
                 const rx: i32 = pos.x - 1;
                 const ry: i32 = pos.y - 1;
-                rl.drawRectangleLines(rx, ry, 42, 42, rl.Color.sky_blue);
-            }
+                rl.drawRectangleLines(rx, ry, 42, 42, DB16.WHITE);
+                rl.drawText(&buf, pos.x + 2, pos.y + 42, 20, DB16.WHITE);
+            } else rl.drawText(&buf, pos.x + 2, pos.y + 42, 20, DB16.LIGHT_BLUE);
         }
         sy += 70;
 

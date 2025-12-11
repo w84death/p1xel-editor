@@ -11,8 +11,22 @@ pre-alpha
 
 ![prealpha](screenshot.png)
 
+## Run
 ```
 zig build run
+```
+
+## Build Small Binary
+
+![Windows vs Linux](win-linux.png)
+
+Linux
+```
 zig build -Doptimize=ReleaseSmall upx
+```
+
+Windows
+``` 
 zig build -Dtarget=x86_64-windows -Doptimize=ReleaseSmall
+upx zig-out/bin/ray_zig_engine.exe
 ```

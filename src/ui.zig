@@ -73,11 +73,9 @@ pub const UI = struct {
         const mouse = rl.getMousePosition();
         rl.clearBackground(DB16.NAVY_BLUE);
         rl.drawText(self.app_name, self.pivots[P_CENTER].x - @divFloor(rl.measureText(self.app_name, DEFAULT_FONT_SIZE), 2), self.pivots[P_CENTER].y, DEFAULT_FONT_SIZE, self.primary_color);
-        if (button(12, 12, 100, 32, "Red", DB16.RED, mouse)) {
-            rl.drawText("Clicked Red", 120, 12, DEFAULT_FONT_SIZE, self.primary_color);
+        if (button(self.pivots[P_TOPLEFT].x, self.pivots[P_TOPLEFT].y, 200, 32, "Open Tileset", DB16.BLUE, mouse)) {
+            rl.drawText("Clicked Blue", self.pivots[P_CENTER].x, self.pivots[P_CENTER].y + 24, DEFAULT_FONT_SIZE, self.primary_color);
         }
-        if (button(12, 56, 100, 32, "Blue", DB16.BLUE, mouse)) {
-            rl.drawText("Clicked Blue", 120, 56, DEFAULT_FONT_SIZE, self.primary_color);
-        }
+        _ = button(self.pivots[P_TOPRIGHT].x - 100, self.pivots[P_TOPRIGHT].y, 100, 32, "Quit", DB16.RED, mouse);
     }
 };

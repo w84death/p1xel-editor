@@ -27,7 +27,6 @@ pub fn main() !void {
     while (!rl.windowShouldClose()) {
         rl.beginDrawing();
         defer rl.endDrawing();
-
         ui.demo();
     }
 }

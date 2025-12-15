@@ -14,20 +14,20 @@ const SPRITE_SIZE = 16; // The actual sprite dimensions (16x16 pixels)
 const GRID_SIZE = 32; // How large each pixel appears on screen (24x24 pixels)
 const CANVAS_SIZE = SPRITE_SIZE * GRID_SIZE; // Total canvas size on screen (384x384)
 
-const CORNER_RADIUS = 0.1;
-const CORNER_QUALITY = 2;
-
 pub fn main() !void {
-    // const name: [:0]u8 = THE_NAME;
-    const ui = UI.init(THE_NAME);
+    const ui = UI.init(THE_NAME, DB16.NAVY_BLUE, DB16.YELLOW);
+    ui.createWindow();
     defer ui.closeWindow();
 
     rl.setTargetFPS(60);
 
     // var canvas_main = [_][SPRITE_SIZE]u8{[_]u8{0} ** SPRITE_SIZE} ** SPRITE_SIZE;
+    // const mouse = rl.getMousePosition();
 
     while (!rl.windowShouldClose()) {
         rl.beginDrawing();
         defer rl.endDrawing();
+
+        ui.demo();
     }
 }

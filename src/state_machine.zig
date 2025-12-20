@@ -1,4 +1,4 @@
-pub const State = enum { intro, tileset, editor };
+pub const State = enum { main_menu, tileset, editor, about };
 pub const StateMachine = struct {
     current: State,
     next: ?State,

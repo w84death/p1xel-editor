@@ -18,12 +18,14 @@ pub const UI = struct {
     app_name: [:0]const u8,
     bg_color: rl.Color,
     primary_color: rl.Color,
+    secondary_color: rl.Color,
     pivots: [5]rl.Vector2,
-    pub fn init(title: [:0]const u8, bg_color: rl.Color, primary_color: rl.Color) UI {
+    pub fn init(title: [:0]const u8, bg_color: rl.Color, primary_color: rl.Color, secondary_color: rl.Color) UI {
         return UI{
             .app_name = title,
             .bg_color = bg_color,
             .primary_color = primary_color,
+            .secondary_color = secondary_color,
             .pivots = .{
                 rl.Vector2.init(CONF.SCREEN_W / 2, CONF.SCREEN_H / 2),
                 rl.Vector2.init(PIVOTS.PADDING, PIVOTS.PADDING),

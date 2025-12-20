@@ -1,4 +1,5 @@
 pub const CONF = struct {
+    pub const VERSION = "pre-alpha0";
     pub const THE_NAME = "P1Xel Editor";
     pub const SCREEN_W = 1024;
     pub const SCREEN_H = 768;

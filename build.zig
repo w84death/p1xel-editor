@@ -1,6 +1,6 @@
 const std = @import("std");
 const filename = "p1xel_editor";
-const filename_win = "p1xel_editor";
+const filename_win = "p1xel_editor.exe";
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});

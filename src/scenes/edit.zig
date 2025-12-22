@@ -2,7 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const CONF = @import("../config.zig").CONF;
 const DB16 = @import("../palette.zig").DB16;
-const palette = @import("../palette.zig");
+const Palette = @import("../palette.zig").Palette;
 const Ui = @import("../ui.zig").UI;
 const PIVOTS = @import("../ui.zig").PIVOTS;
 const State = @import("../state.zig").State;
@@ -16,20 +16,24 @@ const Canvas = struct {
     data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8,
 };
 
+const Popup = enum {
+    confirm_clear,
+};
+
 pub const Edit = struct {
     ui: Ui,
     sm: *StateMachine,
     canvas: Canvas,
-    active_color: u8,
-    current_palette_index: usize,
-    current_palette: [4]u8,
-    wait: bool,
-    ask_for_clear: bool,
+    palette: Palette,
+    locked: bool,
+    popup: ?Popup,
 
     pub fn init(ui: Ui, sm: *StateMachine) Edit {
         const ix: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X);
         const iy: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y);
-
+        var pal = Palette.init();
+        pal.loadPalettesFromFile();
+        std.debug.print("Palettes loaded: {d}\n", .{pal.count});
         return Edit{
             .ui = ui,
             .sm = sm,
@@ -40,30 +44,28 @@ pub const Edit = struct {
                 .y = iy,
                 .data = [_][CONF.SPRITE_SIZE]u8{[_]u8{0} ** CONF.SPRITE_SIZE} ** CONF.SPRITE_SIZE,
             },
-            .active_color = 1,
-            .current_palette_index = 0,
-            .current_palette = [4]u8{ 0, 3, 7, 15 },
-            .wait = false,
-            .ask_for_clear = false,
+            .palette = pal,
+            .locked = false,
+            .popup = null,
         };
     }
     pub fn handleKeyboard(self: *Edit) void {
-        if (self.wait) return;
+        if (self.locked) return;
         const key = rl.getKeyPressed();
         switch (key) {
-            rl.KeyboardKey.one => self.active_color = 0,
-            rl.KeyboardKey.two => self.active_color = 1,
-            rl.KeyboardKey.three => self.active_color = 2,
-            rl.KeyboardKey.four => self.active_color = 3,
+            rl.KeyboardKey.one => self.palette.swatch = 0,
+            rl.KeyboardKey.two => self.palette.swatch = 1,
+            rl.KeyboardKey.three => self.palette.swatch = 2,
+            rl.KeyboardKey.four => self.palette.swatch = 3,
             else => {},
         }
     }
     pub fn handleMouse(self: *Edit, mouse: rl.Vector2) void {
-        if (self.wait) return;
+        if (self.locked) return;
 
-        if (self.sm.fresh and rl.isMouseButtonReleased(rl.MouseButton.left)) {
-            self.sm.fresh = false;
-        } else if (self.sm.fresh) {
+        if (self.sm.hot and rl.isMouseButtonReleased(rl.MouseButton.left)) {
+            self.sm.hot = false;
+        } else if (self.sm.hot) {
             return;
         }
 
@@ -73,7 +75,7 @@ pub const Edit = struct {
         const mouse_cell_y: i32 = @divFloor(my - self.canvas.y, CONF.GRID_SIZE);
 
         if ((rl.isMouseButtonDown(rl.MouseButton.left) or rl.isMouseButtonDown(rl.MouseButton.right))) {
-            var color: u8 = self.active_color;
+            var color: u8 = self.palette.swatch;
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.SPRITE_SIZE and
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.SPRITE_SIZE)
             {
@@ -92,24 +94,26 @@ pub const Edit = struct {
         }
 
         if (self.ui.button(nav.x + 88, nav.y, 160, 32, "Clear canvas", DB16.RED, mouse)) {
-            self.wait = true;
-            self.ask_for_clear = true;
+            self.locked = true;
+            self.popup = Popup.confirm_clear;
         }
-        if (self.ui.button(nav.x + 88 + 160 + 8, nav.y, 80, 32, "Save", DB16.GREEN, mouse)) {}
+        if (self.ui.button(nav.x + 88 + 160 + 8, nav.y, 80, 32, "Save", DB16.GREEN, mouse)) {
+            self.palette.savePalettesToFile();
+        }
 
         for (0..CONF.SPRITE_SIZE) |y| {
             for (0..CONF.SPRITE_SIZE) |x| {
                 const idx = self.canvas.data[y][x];
-                const db16_idx = self.current_palette[idx];
+                const db16_idx = self.palette.current[idx];
                 const xx: i32 = @intCast(x * CONF.GRID_SIZE);
                 const yy: i32 = @intCast(y * CONF.GRID_SIZE);
                 var color: rl.Color = undefined;
 
-                if (idx == 0 and self.current_palette[0] == 0) {
+                if (idx == 0 and self.palette.current[0] == 0) {
                     const checker = (x + y) % 2 == 0;
                     color = if (checker) rl.getColor(0x33333310) else rl.getColor(0xAAAAAA10);
                 } else {
-                    color = palette.getColorFromIndex(db16_idx);
+                    color = self.palette.getColorFromIndex(db16_idx);
                 }
                 rl.drawRectangle(
                     self.canvas.x + xx,
@@ -137,15 +141,15 @@ pub const Edit = struct {
         self.draw_preview(px, py, 4, DB16.BLACK);
         self.draw_preview(px + dw + 8, py, 4, DB16.WHITE);
 
-        if (self.ask_for_clear) {
+        if (self.popup == Popup.confirm_clear) {
             const result = self.ui.yesNoPopup("Clear canvas?", mouse);
             if (result) |res| {
                 if (res) {
                     self.clearCanvas();
                 }
-                self.ask_for_clear = false;
-                self.wait = false;
-                self.sm.fresh = true;
+                self.popup = null;
+                self.locked = false;
+                self.sm.hot = true;
             }
         }
     }
@@ -158,29 +162,27 @@ pub const Edit = struct {
         for (0..CONF.SPRITE_SIZE) |py| {
             for (0..CONF.SPRITE_SIZE) |px| {
                 const idx = self.canvas.data[py][px];
-                const db16_idx = self.current_palette[idx];
+                const db16_idx = self.palette.current[idx];
                 const scaled_grid_size: i32 = @divFloor(CONF.GRID_SIZE, down_scale);
                 const xx: i32 = @intCast(px);
                 const yy: i32 = @intCast(py);
 
-                if (!(idx == 0 and self.current_palette[0] == 0)) {
+                if (!(idx == 0 and self.palette.current[0] == 0)) {
                     rl.drawRectangle(
                         x + xx * scaled_grid_size,
                         y + yy * scaled_grid_size,
                         scaled_grid_size,
                         scaled_grid_size,
-                        palette.getColorFromIndex(db16_idx),
+                        self.palette.getColorFromIndex(db16_idx),
                     );
                 }
             }
         }
 
-        rl.drawRectangleLines(
-            x,
-            y,
-            w,
-            h,
-            DB16.STEEL_BLUE,
-        );
+        rl.drawRectangleLines(x, y, w, h, DB16.STEEL_BLUE);
     }
+
+    fn draw_palette() void {}
+
+    fn draw_swatches() void {}
 };

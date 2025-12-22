@@ -72,14 +72,12 @@ pub const UI = struct {
         const popup_corner = rl.Vector2.init(center.x - @divFloor(popup_size.x, 2), center.y - @divFloor(popup_size.y, 2));
         const rec = rl.Rectangle.init(popup_corner.x, popup_corner.y, popup_size.x, popup_size.y);
         const rec_shadow = rl.Rectangle.init(popup_corner.x + 8, popup_corner.y + 8, popup_size.x, popup_size.y);
+        const text_x = popup_corner.x + @divFloor(popup_size.x - text_width, 2);
+        const text_y = popup_corner.y + 24.0;
 
-        // Draw shadow and main popup background
         rl.drawRectangleRounded(rec_shadow, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, DB16.BLACK);
         rl.drawRectangleRounded(rec, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, DB16.DARK_GRAY);
         rl.drawRectangleRoundedLines(rec, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, DB16.RED);
-        // Draw message text (centered horizontally, near top)
-        const text_x = popup_corner.x + @divFloor(popup_size.x - text_width, 2);
-        const text_y = popup_corner.y + 24.0;
         rl.drawText(message, @intFromFloat(text_x), @intFromFloat(text_y), CONF.DEFAULT_FONT_SIZE, DB16.WHITE);
 
         const button_y = popup_corner.y + popup_size.y - 50.0;

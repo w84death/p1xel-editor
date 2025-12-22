@@ -1,4 +1,6 @@
+const std = @import("std");
 const rl = @import("raylib");
+const CONF = @import("config.zig").CONF;
 
 pub const DB16 = struct {
     pub const BLACK = rl.Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
@@ -19,27 +21,76 @@ pub const DB16 = struct {
     pub const WHITE = rl.Color{ .r = 222, .g = 238, .b = 214, .a = 255 };
 };
 
-// Palette struct holds 4 color indices from DB16
-pub const Palette = [4]u8;
+pub const Palette = struct {
+    swatch: u8 = 1,
+    index: u8 = 0,
+    current: [4]u8 = [4]u8{ 0, 3, 7, 15 },
+    db: [CONF.MAX_PALETTES][4]u8 = undefined,
+    count: usize = 0,
+    pub fn init() Palette {
+        return Palette{};
+    }
+    pub fn getColorFromIndex(self: Palette, index: u8) rl.Color {
+        _ = self;
+        return switch (index) {
+            0 => DB16.BLACK,
+            1 => DB16.DEEP_PURPLE,
+            2 => DB16.NAVY_BLUE,
+            3 => DB16.DARK_GRAY,
+            4 => DB16.BROWN,
+            5 => DB16.DARK_GREEN,
+            6 => DB16.RED,
+            7 => DB16.LIGHT_GRAY,
+            8 => DB16.BLUE,
+            9 => DB16.ORANGE,
+            10 => DB16.STEEL_BLUE,
+            11 => DB16.GREEN,
+            12 => DB16.PINK_BEIGE,
+            13 => DB16.CYAN,
+            14 => DB16.YELLOW,
+            15 => DB16.WHITE,
+            else => DB16.BLACK,
+        };
+    }
+    pub fn loadPalettesFromFile(self: *Palette) void {
+        const file = std.fs.cwd().openFile(CONF.PALETTES_FILE, .{}) catch {
+            self.db[0] = .{ 0, 3, 7, 15 };
+            self.count = 1;
+            return;
+        };
+        defer file.close();
 
-pub fn getColorFromIndex(index: u8) rl.Color {
-    return switch (index) {
-        0 => DB16.BLACK, // Transparent if first color in palette
-        1 => DB16.DEEP_PURPLE,
-        2 => DB16.NAVY_BLUE,
-        3 => DB16.DARK_GRAY,
-        4 => DB16.BROWN,
-        5 => DB16.DARK_GREEN,
-        6 => DB16.RED,
-        7 => DB16.LIGHT_GRAY,
-        8 => DB16.BLUE,
-        9 => DB16.ORANGE,
-        10 => DB16.STEEL_BLUE,
-        11 => DB16.GREEN,
-        12 => DB16.PINK_BEIGE,
-        13 => DB16.CYAN,
-        14 => DB16.YELLOW,
-        15 => DB16.WHITE,
-        else => DB16.BLACK, // Fallback for any index > 15
-    };
-}
+        const data = file.readToEndAlloc(std.heap.page_allocator, 1024 * 1024) catch {
+            self.db[0] = .{ 0, 3, 7, 15 };
+            self.count = 1;
+            return;
+        };
+        defer std.heap.page_allocator.free(data);
+
+        self.count = @min(data.len / 4, CONF.MAX_PALETTES);
+        for (0..self.count) |i| {
+            self.db[i][0] = data[i * 4];
+            self.db[i][1] = data[i * 4 + 1];
+            self.db[i][2] = data[i * 4 + 2];
+            self.db[i][3] = data[i * 4 + 3];
+        }
+
+        if (self.count == 0) {
+            self.db[0] = .{ 0, 3, 7, 15 };
+            self.count = 1;
+        }
+    }
+    pub fn savePalettesToFile(self: Palette) void {
+        var buf: [CONF.MAX_PALETTES * 4]u8 = undefined;
+        for (0..self.count) |i| {
+            buf[i * 4] = self.db[i][0];
+            buf[i * 4 + 1] = self.db[i][1];
+            buf[i * 4 + 2] = self.db[i][2];
+            buf[i * 4 + 3] = self.db[i][3];
+        }
+
+        const file = std.fs.cwd().createFile(CONF.PALETTES_FILE, .{}) catch return;
+        defer file.close();
+        _ = file.write(buf[0 .. self.count * 4]) catch return;
+    }
+};

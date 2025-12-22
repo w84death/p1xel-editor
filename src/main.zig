@@ -21,6 +21,7 @@ pub fn main() !void {
     defer ui.closeWindow();
 
     rl.setTargetFPS(60);
+    rl.setMouseCursor(rl.MouseCursor.crosshair);
 
     var shouldClose = false;
     while (!rl.windowShouldClose() and !shouldClose) {

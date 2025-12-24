@@ -13,22 +13,23 @@ const MenuItem = struct {
     target_state: State,
 };
 
-pub const Menu = struct {
+pub const MenuScreen = struct {
     ui: Ui,
     sm: *StateMachine,
     menu_items: []const MenuItem,
-    pub fn init(ui: Ui, sm: *StateMachine) Menu {
+    pub fn init(ui: Ui, sm: *StateMachine) MenuScreen {
         const menu_items = [_]MenuItem{
             .{ .text = "Editor", .color = DB16.BLUE, .target_state = State.editor },
+            .{ .text = "Tileset", .color = DB16.BLUE, .target_state = State.tileset },
             .{ .text = "About", .color = DB16.DARK_GRAY, .target_state = State.about },
         };
-        return Menu{
+        return MenuScreen{
             .ui = ui,
             .sm = sm,
             .menu_items = menu_items[0..],
         };
     }
-    pub fn draw(self: Menu, mouse: rl.Vector2) void {
+    pub fn draw(self: MenuScreen, mouse: rl.Vector2) void {
         const cx: i32 = @intFromFloat(self.ui.pivots[PIVOTS.CENTER].x);
         const cy: i32 = @intFromFloat(self.ui.pivots[PIVOTS.CENTER].y - 96);
         const fx: f32 = self.ui.pivots[PIVOTS.CENTER].x;

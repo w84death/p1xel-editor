@@ -7,13 +7,13 @@ const PIVOTS = @import("../ui.zig").PIVOTS;
 const State = @import("../state.zig").State;
 const StateMachine = @import("../state.zig").StateMachine;
 
-pub const About = struct {
+pub const AboutScreen = struct {
     ui: Ui,
     sm: *StateMachine,
-    pub fn init(ui: Ui, sm: *StateMachine) About {
-        return About{ .ui = ui, .sm = sm };
+    pub fn init(ui: Ui, sm: *StateMachine) AboutScreen {
+        return AboutScreen{ .ui = ui, .sm = sm };
     }
-    pub fn draw(self: About, mouse: rl.Vector2) void {
+    pub fn draw(self: AboutScreen, mouse: rl.Vector2) void {
         const px = self.ui.pivots[PIVOTS.TOP_LEFT].x;
         const py = self.ui.pivots[PIVOTS.TOP_LEFT].y;
         if (self.ui.button(px, py, 80, 32, "< Menu", DB16.BLUE, mouse)) {

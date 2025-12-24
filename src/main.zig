@@ -3,19 +3,26 @@ const rl = @import("raylib");
 const Ui = @import("ui.zig").UI;
 const PIVOTS = @import("ui.zig").PIVOTS;
 const DB16 = @import("palette.zig").DB16;
+const Palette = @import("palette.zig").Palette;
 const CONF = @import("config.zig").CONF;
 const StateMachine = @import("state.zig").StateMachine;
 const State = @import("state.zig").State;
-const Menu = @import("scenes/menu.zig").Menu;
-const Edit = @import("scenes/edit.zig").Edit;
-const About = @import("scenes/about.zig").About;
+const Tiles = @import("tiles.zig").Tiles;
+const MenuScreen = @import("scenes/menu.zig").MenuScreen;
+const EditScreen = @import("scenes/edit.zig").EditScreen;
+const AboutScreen = @import("scenes/about.zig").AboutScreen;
+const TilesetScreen = @import("scenes/tileset.zig").TilesetScene;
 
 pub fn main() !void {
     const ui = Ui.init(CONF.THE_NAME, DB16.NAVY_BLUE, DB16.WHITE, DB16.BLUE);
     var sm = StateMachine.init(State.main_menu);
-    const menu = Menu.init(ui, &sm);
-    var edit = Edit.init(ui, &sm);
-    const about = About.init(ui, &sm);
+    var pal = Palette.init();
+    pal.loadPalettesFromFile();
+    var tiles = Tiles.init(&pal);
+    const menu = MenuScreen.init(ui, &sm);
+    var edit = EditScreen.init(ui, &sm, &pal, &tiles);
+    const about = AboutScreen.init(ui, &sm);
+    var tileset = TilesetScreen.init(ui, &sm, &pal, &tiles);
 
     ui.createWindow();
     defer ui.closeWindow();
@@ -44,8 +51,8 @@ pub fn main() !void {
             State.about => {
                 about.draw(mouse);
             },
-            else => {
-                @panic("Not supported state!");
+            State.tileset => {
+                tileset.draw(mouse);
             },
         }
 

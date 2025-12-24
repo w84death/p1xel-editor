@@ -22,7 +22,7 @@ pub const DB16 = struct {
 };
 
 pub const Palette = struct {
-    swatch: u8 = 0,
+    swatch: u8 = 1, // second, after transparent
     index: u8 = 0,
     current: [4]u8 = [4]u8{ 0, 3, 7, 15 },
     db: [CONF.MAX_PALETTES][4]u8 = undefined,

@@ -7,6 +7,8 @@ const Ui = @import("../ui.zig").UI;
 const PIVOTS = @import("../ui.zig").PIVOTS;
 const State = @import("../state.zig").State;
 const StateMachine = @import("../state.zig").StateMachine;
+const Tiles = @import("../tiles.zig").Tiles;
+const Tile = @import("../tiles.zig").Tile;
 const Ppm = @import("../ppm.zig").Ppm;
 const RGB = @import("../ppm.zig").RGB;
 const Color = @import("../ppm.zig").Color;
@@ -28,21 +30,20 @@ const Popup = enum {
     info_save_tileset,
 };
 
-pub const Edit = struct {
+pub const EditScreen = struct {
     ui: Ui,
     sm: *StateMachine,
     canvas: Canvas,
-    palette: Palette,
+    palette: *Palette,
+    tiles: *Tiles,
     locked: bool,
     popup: Popup,
     status_buffer: [256]u8 = undefined,
 
-    pub fn init(ui: Ui, sm: *StateMachine) Edit {
+    pub fn init(ui: Ui, sm: *StateMachine, pal: *Palette, tiles: *Tiles) EditScreen {
         const ix: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X);
         const iy: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y);
-        var pal = Palette.init();
-        pal.loadPalettesFromFile();
-        return Edit{
+        return EditScreen{
             .ui = ui,
             .sm = sm,
             .canvas = Canvas{
@@ -50,14 +51,15 @@ pub const Edit = struct {
                 .height = CONF.SPRITE_SIZE * CONF.GRID_SIZE,
                 .x = ix,
                 .y = iy,
-                .data = [_][CONF.SPRITE_SIZE]u8{[_]u8{0} ** CONF.SPRITE_SIZE} ** CONF.SPRITE_SIZE,
+                .data = tiles.db[0].data,
             },
             .palette = pal,
+            .tiles = tiles,
             .locked = false,
             .popup = Popup.none,
         };
     }
-    pub fn handleKeyboard(self: *Edit) void {
+    pub fn handleKeyboard(self: *EditScreen) void {
         if (self.locked) return;
         const key = rl.getKeyPressed();
         switch (key) {
@@ -71,7 +73,7 @@ pub const Edit = struct {
             else => {},
         }
     }
-    pub fn handleMouse(self: *Edit, mouse: rl.Vector2) void {
+    pub fn handleMouse(self: *EditScreen, mouse: rl.Vector2) void {
         if (self.locked) return;
 
         if (self.sm.hot and rl.isMouseButtonReleased(rl.MouseButton.left)) {
@@ -105,10 +107,10 @@ pub const Edit = struct {
         }
     }
 
-    pub fn clearCanvas(self: *Edit) void {
+    pub fn clearCanvas(self: *EditScreen) void {
         self.canvas.data = [_][CONF.SPRITE_SIZE]u8{[_]u8{0} ** CONF.SPRITE_SIZE} ** CONF.SPRITE_SIZE;
     }
-    pub fn draw(self: *Edit, mouse: rl.Vector2) !void {
+    pub fn draw(self: *EditScreen, mouse: rl.Vector2) !void {
 
         // Navigation (top)
         const nav: rl.Vector2 = rl.Vector2.init(self.ui.pivots[PIVOTS.TOP_LEFT].x, self.ui.pivots[PIVOTS.TOP_LEFT].y);
@@ -214,8 +216,10 @@ pub const Edit = struct {
         if (self.palette.count > 1 and self.ui.button(fsx + 64, fsy, 80, 32, "Delete", DB16.RED, mouse) and !self.locked) {
             self.palette.deletePalette();
         }
-        fsy += 40;
+
         fsx += 64;
+        rl.drawText("OPTIONS:", @intFromFloat(fsx), swa_y, 20, rl.Color.ray_white);
+        fsy += 40;
         if (self.palette.updated) {
             if (self.ui.button(fsx, fsy, 120, 32, "Update", DB16.BLUE, mouse) and !self.locked) {
                 self.palette.updatePalette();
@@ -300,7 +304,7 @@ pub const Edit = struct {
         }
     }
 
-    fn draw_preview(self: Edit, x: i32, y: i32, down_scale: i32, background: rl.Color) void {
+    fn draw_preview(self: EditScreen, x: i32, y: i32, down_scale: i32, background: rl.Color) void {
         const w: i32 = @divFloor(self.canvas.width, down_scale);
         const h: i32 = @divFloor(self.canvas.height, down_scale);
         rl.drawRectangle(x, y, w, h, background);
@@ -328,7 +332,7 @@ pub const Edit = struct {
         rl.drawRectangleLines(x, y, w, h, DB16.STEEL_BLUE);
     }
 
-    fn export_to_ppm(self: *Edit) !void {
+    fn export_to_ppm(self: *EditScreen) !void {
         var gpa = std.heap.GeneralPurposeAllocator(.{}){};
         defer _ = gpa.deinit();
         const allocator = gpa.allocator();

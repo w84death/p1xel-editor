@@ -26,7 +26,7 @@ pub const Palette = struct {
     index: u8 = 0,
     current: [4]u8 = [4]u8{ 0, 3, 7, 15 },
     db: [CONF.MAX_PALETTES][4]u8 = undefined,
-    count: usize = 0,
+    count: u8 = 0,
     pub fn init() Palette {
         return Palette{};
     }
@@ -92,5 +92,14 @@ pub const Palette = struct {
         const file = std.fs.cwd().createFile(CONF.PALETTES_FILE, .{}) catch return;
         defer file.close();
         _ = file.write(buf[0 .. self.count * 4]) catch return;
+    }
+    pub fn swapCurrentSwatch(self: *Palette, new: u8) void {
+        self.current[self.swatch] = new;
+    }
+    pub fn cyclePalette(self: *Palette) void {
+        if (self.count > 0) {
+            self.index = @mod(self.index + 1, self.count);
+            self.current = self.db[self.index];
+        }
     }
 };

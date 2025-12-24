@@ -66,6 +66,9 @@ pub const Edit = struct {
             rl.KeyboardKey.two => self.palette.swatch = 1,
             rl.KeyboardKey.three => self.palette.swatch = 2,
             rl.KeyboardKey.four => self.palette.swatch = 3,
+            rl.KeyboardKey.tab => {
+                self.palette.cyclePalette();
+            },
             else => {},
         }
     }
@@ -176,60 +179,43 @@ pub const Edit = struct {
         // Swatches
         const swa_x: i32 = px;
         const swa_y: i32 = py + 160;
+        const swa_size: i32 = 48;
         rl.drawText("ACTIVE SWATCHES", swa_x, swa_y, 20, rl.Color.ray_white);
         inline for (0..4) |i| {
-            const x_shift: i32 = @intCast(i * 54);
+            const x_shift: i32 = @intCast(i * (swa_size + 6));
             const index: u8 = @intCast(i);
             const db16_idx = self.palette.current[i];
             const fx: f32 = @floatFromInt(swa_x + x_shift);
             const fy: f32 = @floatFromInt(swa_y + 28);
 
-            if (self.ui.button(fx, fy, 48, 48, "", self.palette.getColorFromIndex(db16_idx), mouse)) {
+            if (self.ui.button(fx, fy, swa_size, swa_size, "", self.palette.getColorFromIndex(db16_idx), mouse)) {
                 self.palette.swatch = index;
             }
 
             if (self.palette.swatch == i) {
-                rl.drawRectangleRoundedLinesEx(
-                    rl.Rectangle.init(
-                        fx + 5,
-                        fy + 5,
-                        40,
-                        40,
-                    ),
-                    CONF.CORNER_RADIUS,
-                    CONF.CORNER_QUALITY,
-                    2,
-                    DB16.BLACK,
-                );
-                rl.drawRectangleRoundedLinesEx(
-                    rl.Rectangle.init(
-                        fx + 4,
-                        fy + 4,
-                        40,
-                        40,
-                    ),
-                    CONF.CORNER_RADIUS,
-                    CONF.CORNER_QUALITY,
-                    2,
-                    DB16.WHITE,
-                );
+                rl.drawRectangleRoundedLinesEx(rl.Rectangle.init(fx + 5, fy + 5, swa_size - 8, swa_size - 8), CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, 2, DB16.BLACK);
+                rl.drawRectangleRoundedLinesEx(rl.Rectangle.init(fx + 4, fy + 4, swa_size - 8, swa_size - 8), CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, 2, DB16.WHITE);
+            }
+
+            if (i == 0 and self.palette.current[0] == 0) {
+                rl.drawText("TRANSPARENT", swa_x, swa_y + swa_size + 32, 10, DB16.WHITE);
             }
         }
 
         // Palette
         const pal_x: i32 = swa_x;
         const pal_y: i32 = swa_y + 100;
-
+        const pal_size: i32 = 32;
         rl.drawText("DB16 PALETTE", pal_x, pal_y, 20, rl.Color.ray_white);
         const colors_in_row: usize = 4;
         inline for (0..16) |i| {
-            const x_shift: i32 = @intCast(@mod(i, colors_in_row) * (32 + 6));
+            const x_shift: i32 = @intCast(@mod(i, colors_in_row) * (pal_size + 6));
             const fx: f32 = @floatFromInt(pal_x + x_shift);
-            const iy: i32 = @divFloor(i, colors_in_row) * (32 + 6);
+            const iy: i32 = @divFloor(i, colors_in_row) * (pal_size + 6);
             const fy: f32 = @floatFromInt(pal_y + iy + 28);
 
-            if (self.ui.button(fx, fy, 32, 32, "", self.palette.getColorFromIndex(i), mouse)) {
-                // swap color in palette
+            if (self.ui.button(fx, fy, pal_size, pal_size, "", self.palette.getColorFromIndex(i), mouse)) {
+                self.palette.swapCurrentSwatch(i);
             }
         }
 

@@ -42,7 +42,6 @@ pub const Edit = struct {
         const iy: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y);
         var pal = Palette.init();
         pal.loadPalettesFromFile();
-        std.debug.print("Palettes loaded: {d}\n", .{pal.count});
         return Edit{
             .ui = ui,
             .sm = sm,
@@ -105,6 +104,7 @@ pub const Edit = struct {
             rl.drawText(&status_buf, self.canvas.x, self.canvas.x + CONF.SPRITE_SIZE * CONF.GRID_SIZE + 68, 20, DB16.WHITE);
         }
     }
+
     pub fn clearCanvas(self: *Edit) void {
         self.canvas.data = [_][CONF.SPRITE_SIZE]u8{[_]u8{0} ** CONF.SPRITE_SIZE} ** CONF.SPRITE_SIZE;
     }
@@ -199,6 +199,29 @@ pub const Edit = struct {
 
             if (i == 0 and self.palette.current[0] == 0) {
                 rl.drawText("TRANSPARENT", swa_x, swa_y + swa_size + 32, 10, DB16.WHITE);
+            }
+        }
+
+        var fsx: f32 = @floatFromInt(swa_x + swa_size * 4 + 24);
+        var fsy: f32 = @floatFromInt(swa_y + 28);
+        var status_buf: [7:0]u8 = undefined;
+        _ = std.fmt.bufPrintZ(&status_buf, "{d:0>2}/{d:0>2}", .{ self.palette.index + 1, self.palette.count }) catch {};
+        rl.drawText(&status_buf, @intFromFloat(fsx), @intFromFloat(fsy), CONF.DEFAULT_FONT_SIZE, DB16.WHITE);
+        if (self.palette.count > 1 and self.ui.button(fsx, fsy + 24, 64, 24, ">", DB16.BLUE, mouse) and !self.locked) {
+            self.palette.cyclePalette();
+        }
+        fsx += 38;
+        if (self.palette.count > 1 and self.ui.button(fsx + 64, fsy, 80, 32, "Delete", DB16.RED, mouse) and !self.locked) {
+            self.palette.deletePalette();
+        }
+        fsy += 40;
+        fsx += 64;
+        if (self.palette.updated) {
+            if (self.ui.button(fsx, fsy, 120, 32, "Update", DB16.BLUE, mouse) and !self.locked) {
+                self.palette.updatePalette();
+            }
+            if (self.ui.button(fsx, fsy + 40, 120, 32, "Save new", DB16.GREEN, mouse) and !self.locked) {
+                self.palette.newPalette();
             }
         }
 

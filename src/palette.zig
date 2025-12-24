@@ -22,11 +22,12 @@ pub const DB16 = struct {
 };
 
 pub const Palette = struct {
-    swatch: u8 = 1,
+    swatch: u8 = 0,
     index: u8 = 0,
     current: [4]u8 = [4]u8{ 0, 3, 7, 15 },
     db: [CONF.MAX_PALETTES][4]u8 = undefined,
     count: u8 = 0,
+    updated: bool = false,
     pub fn init() Palette {
         return Palette{};
     }
@@ -55,6 +56,7 @@ pub const Palette = struct {
     pub fn loadPalettesFromFile(self: *Palette) void {
         const file = std.fs.cwd().openFile(CONF.PALETTES_FILE, .{}) catch {
             self.db[0] = .{ 0, 3, 7, 15 };
+            self.current = self.db[0];
             self.count = 1;
             return;
         };
@@ -62,6 +64,7 @@ pub const Palette = struct {
 
         const data = file.readToEndAlloc(std.heap.page_allocator, 1024 * 1024) catch {
             self.db[0] = .{ 0, 3, 7, 15 };
+            self.current = self.db[0];
             self.count = 1;
             return;
         };
@@ -77,10 +80,13 @@ pub const Palette = struct {
 
         if (self.count == 0) {
             self.db[0] = .{ 0, 3, 7, 15 };
+            self.current = self.db[0];
             self.count = 1;
+        } else {
+            self.current = self.db[0];
         }
     }
-    pub fn savePalettesToFile(self: Palette) void {
+    pub fn savePalettesToFile(self: *Palette) void {
         var buf: [CONF.MAX_PALETTES * 4]u8 = undefined;
         for (0..self.count) |i| {
             buf[i * 4] = self.db[i][0];
@@ -93,13 +99,44 @@ pub const Palette = struct {
         defer file.close();
         _ = file.write(buf[0 .. self.count * 4]) catch return;
     }
+    pub fn updatePalette(self: *Palette) void {
+        self.db[self.index] = self.current;
+        self.savePalettesToFile();
+        self.updated = false;
+    }
+    pub fn newPalette(self: *Palette) void {
+        if (self.count < CONF.MAX_PALETTES) {
+            self.db[self.count] = self.current;
+            self.index = self.count - 1;
+            self.count += 1;
+            self.savePalettesToFile();
+            self.updated = false;
+        }
+    }
+    pub fn deletePalette(self: *Palette) void {
+        if (self.count <= 1) {
+            return;
+        }
+
+        var i = self.index;
+        while (i < self.count - 1) : (i += 1) {
+            self.db[i] = self.db[i + 1];
+        }
+        self.count -= 1;
+        self.index = if (self.index > 0) self.index - 1 else 0;
+        self.current = self.db[self.index];
+        self.updated = false;
+        self.savePalettesToFile();
+    }
     pub fn swapCurrentSwatch(self: *Palette, new: u8) void {
         self.current[self.swatch] = new;
+        self.updated = true;
     }
     pub fn cyclePalette(self: *Palette) void {
         if (self.count > 0) {
             self.index = @mod(self.index + 1, self.count);
             self.current = self.db[self.index];
+            self.updated = false;
         }
     }
 };

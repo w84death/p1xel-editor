@@ -118,14 +118,17 @@ pub const EditScreen = struct {
         if (self.ui.button(nav_step, nav.y, 80, 32, "< Menu", DB16.BLUE, mouse) and !self.locked) {
             self.sm.goTo(State.main_menu);
         }
-
         nav_step += 88;
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Clear canvas", DB16.RED, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.confirm_clear;
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Select tile", DB16.BLUE, mouse) and !self.locked) {
+            self.sm.goTo(State.tileset);
         }
         nav_step += 168;
-        if (self.ui.button(nav_step, nav.y, 240, 32, "Export Image (PPM)", DB16.GREEN, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tile", DB16.GREEN, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.info_not_implemented;
+        }
+        nav_step += 168;
+        if (self.ui.button(nav_step, nav.y, 240, 32, "Export Tile (PPM)", DB16.GREEN, mouse) and !self.locked) {
             self.locked = true;
             self.export_to_ppm() catch {
                 self.popup = Popup.info_save_ppm_fail;
@@ -206,7 +209,7 @@ pub const EditScreen = struct {
             const fx: f32 = @floatFromInt(swa_x + x_shift);
             const fy: f32 = @floatFromInt(swa_y + 28);
 
-            if (self.ui.button(fx, fy, swa_size, swa_size, "", self.palette.getColorFromIndex(db16_idx), mouse)) {
+            if (self.ui.button(fx, fy, swa_size, swa_size, "", self.palette.getColorFromIndex(db16_idx), mouse) and !self.locked) {
                 self.palette.swatch = index;
             }
 
@@ -257,7 +260,7 @@ pub const EditScreen = struct {
             const iy: i32 = @divFloor(i, colors_in_row) * (pal_size + 6);
             const fy: f32 = @floatFromInt(pal_y + iy + 28);
 
-            if (self.ui.button(fx, fy, pal_size, pal_size, "", self.palette.getColorFromIndex(i), mouse)) {
+            if (self.ui.button(fx, fy, pal_size, pal_size, "", self.palette.getColorFromIndex(i), mouse) and !self.locked) {
                 self.palette.swapCurrentSwatch(i);
             }
         }

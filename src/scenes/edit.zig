@@ -123,12 +123,12 @@ pub const EditScreen = struct {
             self.sm.goTo(State.tileset);
         }
         nav_step += 168;
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tile", DB16.GREEN, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tile", DB16.DARK_GREEN, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }
         nav_step += 168;
-        if (self.ui.button(nav_step, nav.y, 240, 32, "Export Tile (PPM)", DB16.GREEN, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 240, 32, "Export Tile (PPM)", DB16.DARK_GREEN, mouse) and !self.locked) {
             self.locked = true;
             self.export_to_ppm() catch {
                 self.popup = Popup.info_save_ppm_fail;
@@ -137,7 +137,7 @@ pub const EditScreen = struct {
             self.popup = Popup.info_save_ppm_ok;
         }
         nav_step += 248;
-        if (self.ui.button(nav_step, nav.y, 240, 32, "Export Tileset (ASM)", DB16.GREEN, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 240, 32, "Export Tileset (ASM)", DB16.DARK_GREEN, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }

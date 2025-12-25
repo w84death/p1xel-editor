@@ -67,4 +67,14 @@ pub const Tiles = struct {
             }
         }
     }
+    pub fn newTile(self: *Tiles) void {
+        var data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = undefined;
+        for (0..CONF.SPRITE_SIZE) |y| {
+            for (0..CONF.SPRITE_SIZE) |x| {
+                data[y][x] = 0;
+            }
+        }
+        self.db[self.count] = Tile.init(data, 0);
+        self.count += 1;
+    }
 };

@@ -41,7 +41,10 @@ pub const TilesetScene = struct {
         }
 
         nav_step += 88;
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Export tileset", DB16.GREEN, mouse) and !self.locked) {}
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Export tileset", DB16.DARK_GREEN, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.info_not_implemented;
+        }
 
         const t_pos = rl.Vector2.init(self.ui.pivots[PIVOTS.TOP_LEFT].x, self.ui.pivots[PIVOTS.TOP_LEFT].y + 64);
         const tiles_x: i32 = @intFromFloat(t_pos.x);
@@ -67,8 +70,7 @@ pub const TilesetScene = struct {
             } else {
                 if (i == self.tiles.count) {
                     if (self.ui.button(@floatFromInt(x), @floatFromInt(tiles_y + y), size, size, "+", DB16.DARK_GREEN, mouse)) {
-                        self.locked = true;
-                        self.popup = Popup.info_not_implemented;
+                        self.tiles.newTile();
                     }
                 } else {
                     rl.drawRectangleLines(x, tiles_y + y, size, size, DB16.DARK_GRAY);

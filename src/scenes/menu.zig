@@ -18,25 +18,25 @@ pub const MenuScreen = struct {
     sm: *StateMachine,
     menu_items: []const MenuItem,
     pub fn init(ui: Ui, sm: *StateMachine) MenuScreen {
-        const menu_items = [_]MenuItem{
-            .{ .text = "Editor", .color = DB16.BLUE, .target_state = State.editor },
-            .{ .text = "Tileset", .color = DB16.BLUE, .target_state = State.tileset },
-            .{ .text = "About", .color = DB16.DARK_GRAY, .target_state = State.about },
-        };
         return MenuScreen{
             .ui = ui,
             .sm = sm,
-            .menu_items = menu_items[0..],
+            .menu_items = &[_]MenuItem{
+                .{ .text = "Editor", .color = CONF.COLOR_MENU_NORMAL, .target_state = State.editor },
+                .{ .text = "Tileset", .color = CONF.COLOR_MENU_NORMAL, .target_state = State.tileset },
+                .{ .text = "About", .color = CONF.COLOR_MENU_SECONDARY, .target_state = State.about },
+            },
         };
     }
-    pub fn draw(self: MenuScreen, mouse: rl.Vector2) void {
+    pub fn draw(self: *MenuScreen, mouse: rl.Vector2) void {
         const cx: i32 = @intFromFloat(self.ui.pivots[PIVOTS.CENTER].x);
         const cy: i32 = @intFromFloat(self.ui.pivots[PIVOTS.CENTER].y - 96);
         const fx: f32 = self.ui.pivots[PIVOTS.CENTER].x;
         const fy: f32 = self.ui.pivots[PIVOTS.CENTER].y - 96;
+
         const welcome = "Welcome to the indexed pixelart editor!";
-        rl.drawText(CONF.THE_NAME, cx - @divFloor(rl.measureText(CONF.THE_NAME, CONF.DEFAULT_FONT_SIZE), 2), cy, CONF.DEFAULT_FONT_SIZE, self.ui.primary_color);
-        rl.drawText(welcome, cx - @divFloor(rl.measureText(welcome, CONF.DEFAULT_FONT_SIZE), 2), cy + 22, CONF.DEFAULT_FONT_SIZE, self.ui.primary_color);
+        rl.drawText(CONF.THE_NAME, cx - @divFloor(rl.measureText(CONF.THE_NAME, CONF.FONT_BIG), 2), cy, CONF.FONT_BIG, CONF.COLOR_PRIMARY);
+        rl.drawText(welcome, cx - @divFloor(rl.measureText(welcome, CONF.FONT_DEFAULT_SIZE), 2), cy + 44, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
 
         var y: f32 = fy + 128;
         for (self.menu_items) |item| {

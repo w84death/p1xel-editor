@@ -8,23 +8,24 @@ const CONF = @import("config.zig").CONF;
 const StateMachine = @import("state.zig").StateMachine;
 const State = @import("state.zig").State;
 const Tiles = @import("tiles.zig").Tiles;
+const Vfx = @import("vfx.zig").Vfx;
 const MenuScreen = @import("scenes/menu.zig").MenuScreen;
 const EditScreen = @import("scenes/edit.zig").EditScreen;
 const AboutScreen = @import("scenes/about.zig").AboutScreen;
 const TilesetScreen = @import("scenes/tileset.zig").TilesetScene;
 
 pub fn main() !void {
-    const ui = Ui.init(CONF.THE_NAME, DB16.NAVY_BLUE, DB16.WHITE, DB16.BLUE);
+    const ui = Ui.init(CONF.THE_NAME);
     var sm = StateMachine.init(State.main_menu);
     var pal = Palette.init();
     pal.loadPalettesFromFile();
     var tiles = Tiles.init(&pal);
     tiles.loadTilesFromFile();
-    const menu = MenuScreen.init(ui, &sm);
+    var menu = MenuScreen.init(ui, &sm);
     var edit = EditScreen.init(ui, &sm, &pal, &tiles);
     const about = AboutScreen.init(ui, &sm);
     var tileset = TilesetScreen.init(ui, &sm, &pal, &tiles, &edit);
-
+    var vfx = Vfx.init();
     ui.createWindow();
     defer ui.closeWindow();
 
@@ -38,7 +39,8 @@ pub fn main() !void {
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        rl.clearBackground(ui.bg_color);
+        rl.clearBackground(CONF.COLOR_BG);
+        vfx.draw();
         ui.drawCursorLines(mouse);
 
         switch (sm.current) {
@@ -61,10 +63,17 @@ pub fn main() !void {
         // Default UI
 
         // Quit
-        if (ui.button(ui.pivots[PIVOTS.TOP_RIGHT].x - 80, ui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", DB16.RED, mouse)) {
+        if (ui.button(
+            ui.pivots[PIVOTS.TOP_RIGHT].x - 80,
+            ui.pivots[PIVOTS.TOP_RIGHT].y,
+            80,
+            32,
+            "Quit",
+            CONF.COLOR_MENU_SECONDARY,
+            mouse,
+        )) {
             shouldClose = true;
         }
-
         // Version
         ui.drawVersion();
     }

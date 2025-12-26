@@ -15,21 +15,12 @@ pub const PIVOTS = struct {
 
 pub const UI = struct {
     app_name: [:0]const u8,
-    bg_color: rl.Color,
-    primary_color: rl.Color,
-    secondary_color: rl.Color,
     pivots: [5]rl.Vector2,
     pub fn init(
         title: [:0]const u8,
-        bg_color: rl.Color,
-        primary_color: rl.Color,
-        secondary_color: rl.Color,
     ) UI {
         return UI{
             .app_name = title,
-            .bg_color = bg_color,
-            .primary_color = primary_color,
-            .secondary_color = secondary_color,
             .pivots = .{
                 rl.Vector2.init(CONF.SCREEN_W / 2, CONF.SCREEN_H / 2),
                 rl.Vector2.init(PIVOTS.PADDING, PIVOTS.PADDING),
@@ -67,13 +58,13 @@ pub const UI = struct {
         const rec = rl.Rectangle.init(x, y, fw, fh);
         const hover = rl.checkCollisionPointRec(mouse, rec);
         const c = if (hover) DB16.YELLOW else DB16.WHITE;
-        const text_x: i32 = ix + @divFloor(width - rl.measureText(label, CONF.DEFAULT_FONT_SIZE), 2);
-        const text_y: i32 = iy + @divFloor(height - CONF.DEFAULT_FONT_SIZE, 2);
+        const text_x: i32 = ix + @divFloor(width - rl.measureText(label, CONF.FONT_DEFAULT_SIZE), 2);
+        const text_y: i32 = iy + @divFloor(height - CONF.FONT_DEFAULT_SIZE, 2);
 
         rl.drawRectangle(ix + CONF.SHADOW, iy + CONF.SHADOW, width, height, DB16.BLACK);
         rl.drawRectangle(ix, iy, width, height, color);
         rl.drawRectangleLines(ix, iy, width, height, c);
-        rl.drawText(label, text_x, text_y, CONF.DEFAULT_FONT_SIZE, c);
+        rl.drawText(label, text_x, text_y, CONF.FONT_DEFAULT_SIZE, c);
 
         return rl.isMouseButtonPressed(rl.MouseButton.left) and hover;
     }
@@ -83,7 +74,7 @@ pub const UI = struct {
         message: [:0]const u8,
         bg_color: rl.Color,
     ) rl.Vector4 {
-        const text_width: f32 = @floatFromInt(rl.measureText(message, CONF.DEFAULT_FONT_SIZE));
+        const text_width: f32 = @floatFromInt(rl.measureText(message, CONF.FONT_DEFAULT_SIZE));
         const popup_size = rl.Vector2.init(text_width + 128, 128);
         const center = rl.Vector2.init(self.pivots[PIVOTS.CENTER].x, self.pivots[PIVOTS.CENTER].y);
         const popup_corner = rl.Vector2.init(center.x - @divFloor(popup_size.x, 2), center.y - @divFloor(popup_size.y, 2));
@@ -92,10 +83,10 @@ pub const UI = struct {
         const text_x = popup_corner.x + @divFloor(popup_size.x - text_width, 2);
         const text_y = popup_corner.y + 24.0;
 
-        rl.drawRectangleRounded(rec_shadow, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, DB16.BLACK);
+        rl.drawRectangleRounded(rec_shadow, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, CONF.COLOR_SHADOW);
         rl.drawRectangleRounded(rec, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, bg_color);
-        rl.drawRectangleRoundedLines(rec, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, DB16.WHITE);
-        rl.drawText(message, @intFromFloat(text_x), @intFromFloat(text_y), CONF.DEFAULT_FONT_SIZE, DB16.WHITE);
+        rl.drawRectangleRoundedLines(rec, CONF.CORNER_RADIUS, CONF.CORNER_QUALITY, CONF.COLOR_LIGHT);
+        rl.drawText(message, @intFromFloat(text_x), @intFromFloat(text_y), CONF.FONT_DEFAULT_SIZE, CONF.COLOR_POPUP_MSG);
         return rl.Vector4.init(
             popup_corner.x,
             popup_corner.y,
@@ -126,7 +117,7 @@ pub const UI = struct {
             button_width,
             button_height,
             "OK",
-            DB16.DARK_GRAY,
+            CONF.COLOR_OK,
             mouse,
         );
         if (ok_clicked) return true;
@@ -139,7 +130,7 @@ pub const UI = struct {
         mouse: rl.Vector2,
     ) ?bool {
         // Popup
-        const popupv4 = self.drawBasePopup(message, DB16.NAVY_BLUE);
+        const popupv4 = self.drawBasePopup(message, CONF.COLOR_POPUP);
         const popup_corner = rl.Vector2.init(popupv4.x, popupv4.y);
         const popup_size = rl.Vector2.init(popupv4.z, popupv4.w);
 
@@ -156,7 +147,7 @@ pub const UI = struct {
             button_width,
             button_height,
             "Yes",
-            DB16.GREEN,
+            CONF.COLOR_YES,
             mouse,
         );
         if (yes_clicked) return true;
@@ -167,7 +158,7 @@ pub const UI = struct {
             button_width,
             button_height,
             "No",
-            DB16.RED,
+            CONF.COLOR_NO,
             mouse,
         );
         if (no_clicked) return false;
@@ -180,15 +171,15 @@ pub const UI = struct {
 
         rl.drawText(
             CONF.VERSION,
-            ver_x - rl.measureText(CONF.VERSION, CONF.DEFAULT_FONT_SIZE),
-            ver_y - CONF.DEFAULT_FONT_SIZE,
-            CONF.DEFAULT_FONT_SIZE,
-            self.secondary_color,
+            ver_x - rl.measureText(CONF.VERSION, CONF.FONT_DEFAULT_SIZE),
+            ver_y - CONF.FONT_DEFAULT_SIZE,
+            CONF.FONT_DEFAULT_SIZE,
+            CONF.COLOR_SECONDARY,
         );
     }
     pub fn drawCursorLines(self: UI, mouse: rl.Vector2) void {
         _ = self;
-        rl.drawLine(@intFromFloat(mouse.x), 0, @intFromFloat(mouse.x), @intFromFloat(CONF.SCREEN_H), DB16.LIGHT_GRAY);
-        rl.drawLine(0, @intFromFloat(mouse.y), @intFromFloat(CONF.SCREEN_W), @intFromFloat(mouse.y), DB16.LIGHT_GRAY);
+        rl.drawLine(@intFromFloat(mouse.x), 0, @intFromFloat(mouse.x), @intFromFloat(CONF.SCREEN_H), CONF.COLOR_CROSSHAIR);
+        rl.drawLine(0, @intFromFloat(mouse.y), @intFromFloat(CONF.SCREEN_W), @intFromFloat(mouse.y), CONF.COLOR_CROSSHAIR);
     }
 };

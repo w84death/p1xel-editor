@@ -227,7 +227,7 @@ pub const EditScreen = struct {
         var fsy: f32 = @floatFromInt(swa_y + 28);
         var status_buf: [7:0]u8 = undefined;
         _ = std.fmt.bufPrintZ(&status_buf, "{d:0>2}/{d:0>2}", .{ self.palette.index + 1, self.palette.count }) catch {};
-        rl.drawText(&status_buf, @intFromFloat(fsx), @intFromFloat(fsy), CONF.DEFAULT_FONT_SIZE, DB16.WHITE);
+        rl.drawText(&status_buf, @intFromFloat(fsx), @intFromFloat(fsy), CONF.FONT_DEFAULT_SIZE, DB16.WHITE);
         if (self.palette.count > 1 and self.ui.button(fsx, fsy + 24, 64, 24, ">", DB16.BLUE, mouse) and !self.locked) {
             self.palette.cyclePalette();
             self.needs_saving = true;
@@ -275,9 +275,9 @@ pub const EditScreen = struct {
         rl.drawText(
             "[TAB] cycle palette, [1-4] select swatch",
             foo_x,
-            foo_y - CONF.DEFAULT_FONT_SIZE,
-            CONF.DEFAULT_FONT_SIZE,
-            self.ui.secondary_color,
+            foo_y - CONF.FONT_DEFAULT_SIZE,
+            CONF.FONT_DEFAULT_SIZE,
+            CONF.COLOR_SECONDARY,
         );
 
         // Popups

@@ -38,12 +38,12 @@ pub const TilesetScene = struct {
     pub fn draw(self: *TilesetScene, mouse: rl.Vector2) void {
         const nav: rl.Vector2 = rl.Vector2.init(self.ui.pivots[PIVOTS.TOP_LEFT].x, self.ui.pivots[PIVOTS.TOP_LEFT].y);
         var nav_step = nav.x;
-        if (self.ui.button(nav_step, nav.y, 80, 32, "< Menu", DB16.BLUE, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.sm.goTo(State.main_menu);
         }
-        nav_step += 88;
+        nav_step += 128;
 
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Edit", DB16.BLUE, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Edit", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             const selected = self.tiles.db[self.selected];
             self.edit.canvas.data = selected.data;
             self.palette.current = self.palette.db[selected.pal];
@@ -53,11 +53,11 @@ pub const TilesetScene = struct {
         }
 
         nav_step += 168;
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", DB16.DARK_GREEN, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.tiles.saveTilesToFile();
         }
         nav_step += 168;
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Export tileset", DB16.DARK_GREEN, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Export tileset", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }
@@ -89,7 +89,7 @@ pub const TilesetScene = struct {
                         self.tiles.newTile();
                     }
                 } else {
-                    rl.drawRectangleLines(x, tiles_y + y, size, size, DB16.DARK_GRAY);
+                    rl.drawRectangleLines(x, tiles_y + y, size, size, DB16.LIGHT_GRAY);
                 }
             }
         }
@@ -97,22 +97,22 @@ pub const TilesetScene = struct {
         const tools: rl.Vector2 = rl.Vector2.init(self.ui.pivots[PIVOTS.BOTTOM_LEFT].x, self.ui.pivots[PIVOTS.BOTTOM_LEFT].y - 20);
         var tools_step = tools.x;
 
-        if (self.ui.button(tools_step, tools.y, 160, 32, "Duplicate", DB16.LIGHT_GRAY, mouse) and !self.locked) {
+        if (self.ui.button(tools_step, tools.y, 160, 32, "Duplicate", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }
         tools_step += 168;
-        if (self.ui.button(tools_step, tools.y, 160, 32, "<< Shift left", DB16.LIGHT_GRAY, mouse) and !self.locked) {
+        if (self.ui.button(tools_step, tools.y, 160, 32, "<< Shift left", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }
         tools_step += 168;
-        if (self.ui.button(tools_step, tools.y, 160, 32, "Shift right >>", DB16.LIGHT_GRAY, mouse) and !self.locked) {
+        if (self.ui.button(tools_step, tools.y, 160, 32, "Shift right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }
         tools_step += 168;
-        if (self.ui.button(tools_step, tools.y, 160, 32, "Delete tile", DB16.RED, mouse) and !self.locked) {
+        if (self.ui.button(tools_step, tools.y, 160, 32, "Delete tile", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.info_not_implemented;
         }
@@ -122,7 +122,7 @@ pub const TilesetScene = struct {
             rl.drawRectangle(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, rl.Color.init(0, 0, 0, 128));
             switch (self.popup) {
                 Popup.info_not_implemented => {
-                    if (self.ui.infoPopup("Not implemented yet...", mouse, DB16.DARK_GRAY)) |dismissed| {
+                    if (self.ui.infoPopup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

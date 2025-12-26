@@ -23,6 +23,7 @@ pub const Tiles = struct {
     db: [CONF.MAX_TILES]Tile = undefined,
     count: u8 = 0,
     palette: *Palette,
+    updated: bool = false,
     pub fn init(palette: *Palette) Tiles {
         var example_data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = undefined;
         for (0..CONF.SPRITE_SIZE) |y| {
@@ -36,6 +37,7 @@ pub const Tiles = struct {
             .db = tiles,
             .palette = palette,
             .count = 1,
+            .updated = false,
         };
     }
     pub fn loadTilesFromFile(self: *Tiles) void {
@@ -72,6 +74,8 @@ pub const Tiles = struct {
             }
             self.db[i] = Tile.init(tile_data, pal);
         }
+
+        self.updated = false;
     }
     pub fn saveTilesToFile(self: *Tiles) !void {
         const per_tile: usize = CONF.SPRITE_SIZE * CONF.SPRITE_SIZE + 1;
@@ -90,6 +94,7 @@ pub const Tiles = struct {
         const file = try std.fs.cwd().createFile(CONF.TILES_FILE, .{});
         defer file.close();
         _ = try file.write(buf[0..total_bytes]);
+        self.updated = false;
     }
     pub fn draw(self: *Tiles, index: usize, x: i32, y: i32, scale: i32) void {
         for (0..CONF.SPRITE_SIZE) |py| {
@@ -118,9 +123,9 @@ pub const Tiles = struct {
         }
         self.db[self.count] = Tile.init(data, 0);
         self.count += 1;
+        self.updated = true;
     }
-
-    pub fn delete(self: *Tiles, index: usize) !void {
+    pub fn delete(self: *Tiles, index: usize) void {
         if (self.count <= 1) {
             return;
         }
@@ -129,7 +134,23 @@ pub const Tiles = struct {
             self.db[i] = self.db[i + 1];
         }
         self.count -= 1;
-        try self.saveTilesToFile();
+        self.updated = true;
         return;
+    }
+    pub fn shiftLeft(self: *Tiles, index: usize) void {
+        if (index > 0 and index < self.count) {
+            const temp = self.db[index];
+            self.db[index] = self.db[index - 1];
+            self.db[index - 1] = temp;
+            self.updated = true;
+        }
+    }
+    pub fn shiftRight(self: *Tiles, index: usize) void {
+        if (index >= 0 and index < self.count - 1) {
+            const temp = self.db[index];
+            self.db[index] = self.db[index + 1];
+            self.db[index + 1] = temp;
+            self.updated = true;
+        }
     }
 };

@@ -14,6 +14,7 @@ const Popup = enum {
     info_not_implemented,
     save_ok,
     save_fail,
+    confirm_delete,
 };
 
 pub const TilesetScene = struct {
@@ -37,7 +38,7 @@ pub const TilesetScene = struct {
             .popup = Popup.none,
         };
     }
-    pub fn draw(self: *TilesetScene, mouse: rl.Vector2) void {
+    pub fn draw(self: *TilesetScene, mouse: rl.Vector2) !void {
         const nav: rl.Vector2 = rl.Vector2.init(self.ui.pivots[PIVOTS.TOP_LEFT].x, self.ui.pivots[PIVOTS.TOP_LEFT].y);
         var nav_step = nav.x;
         if (self.ui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
@@ -55,7 +56,7 @@ pub const TilesetScene = struct {
         }
 
         nav_step += 168;
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", if (self.tiles.updated) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.tiles.saveTilesToFile() catch {
                 self.popup = Popup.save_fail;
@@ -109,19 +110,23 @@ pub const TilesetScene = struct {
             self.popup = Popup.info_not_implemented;
         }
         tools_step += 168;
-        if (self.ui.button(tools_step, tools.y, 160, 32, "<< Shift left", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
+        if (self.selected > 0) {
+            if (self.ui.button(tools_step, tools.y, 160, 32, "<< Shift left", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+                self.tiles.shiftLeft(self.selected);
+                self.selected -= 1;
+            }
+            tools_step += 168;
         }
-        tools_step += 168;
-        if (self.ui.button(tools_step, tools.y, 160, 32, "Shift right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
+        if (self.selected < self.tiles.count - 1) {
+            if (self.ui.button(tools_step, tools.y, 160, 32, "Shift right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+                self.tiles.shiftRight(self.selected);
+                self.selected += 1;
+            }
+            tools_step += 168;
         }
-        tools_step += 168;
         if (self.ui.button(tools_step, tools.y, 160, 32, "Delete tile", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
-            self.tiles.delete(self.selected) catch {};
-            self.selected = self.selected - 1;
+            self.locked = true;
+            self.popup = Popup.confirm_delete;
         }
 
         // Popups
@@ -153,6 +158,18 @@ pub const TilesetScene = struct {
                             self.locked = false;
                             self.sm.hot = true;
                         }
+                    }
+                },
+                Popup.confirm_delete => {
+                    if (self.ui.yesNoPopup("Delete selected tile?", mouse)) |confirmed| {
+                        if (confirmed) {
+                            self.tiles.delete(self.selected);
+
+                            self.selected = self.selected - 1;
+                        }
+                        self.popup = Popup.none;
+                        self.locked = false;
+                        self.sm.hot = true;
                     }
                 },
                 else => {},

@@ -59,7 +59,7 @@ pub fn main() !void {
                 about.draw(mouse);
             },
             State.tileset => {
-                tileset.draw(mouse);
+                try tileset.draw(mouse);
             },
         }
 

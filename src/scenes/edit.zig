@@ -129,7 +129,12 @@ pub const EditScreen = struct {
         if (self.ui.button(nav_step, nav.y, 160, 32, "Save tile", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.tiles.db[self.tile_id].data = self.canvas.data;
             self.tiles.db[self.tile_id].pal = self.palette.index;
-            self.tiles.saveTilesToFile();
+            self.locked = true;
+            self.tiles.saveTilesToFile() catch {
+                self.popup = Popup.info_save_ppm_fail;
+                return;
+            };
+            self.popup = Popup.info_save_ppm_ok;
             self.needs_saving = false;
         }
         nav_step += 168;
@@ -290,7 +295,7 @@ pub const EditScreen = struct {
                     }
                 },
                 Popup.info_save_ppm_ok => {
-                    if (self.ui.infoPopup("PPM file saved!", mouse, DB16.DARK_GREEN)) |dismissed| {
+                    if (self.ui.infoPopup("PPM file saved!", mouse, CONF.COLOR_OK)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;
@@ -299,7 +304,7 @@ pub const EditScreen = struct {
                     }
                 },
                 Popup.info_save_ppm_fail => {
-                    if (self.ui.infoPopup("Failed", mouse, DB16.RED)) |dismissed| {
+                    if (self.ui.infoPopup("Failed", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

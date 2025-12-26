@@ -2,7 +2,7 @@ const rl = @import("raylib");
 const DB16 = @import("palette.zig").DB16;
 
 pub const CONF = struct {
-    pub const VERSION = "alpha2";
+    pub const VERSION = "alpha3";
     pub const THE_NAME = "P1Xel Editor";
     pub const SCREEN_W = 1280;
     pub const SCREEN_H = 800;

@@ -73,7 +73,7 @@ pub const Tiles = struct {
             self.db[i] = Tile.init(tile_data, pal);
         }
     }
-    pub fn saveTilesToFile(self: *Tiles) void {
+    pub fn saveTilesToFile(self: *Tiles) !void {
         const per_tile: usize = CONF.SPRITE_SIZE * CONF.SPRITE_SIZE + 1;
         const total_bytes = self.count * per_tile;
         var buf: [CONF.MAX_TILES * per_tile]u8 = undefined;
@@ -87,11 +87,11 @@ pub const Tiles = struct {
             }
         }
 
-        const file = std.fs.cwd().createFile(CONF.TILES_FILE, .{}) catch return;
+        const file = try std.fs.cwd().createFile(CONF.TILES_FILE, .{});
         defer file.close();
-        _ = file.write(buf[0..total_bytes]) catch return;
+        _ = try file.write(buf[0..total_bytes]);
     }
-    pub fn draw_tile(self: *Tiles, index: usize, x: i32, y: i32, scale: i32) void {
+    pub fn draw(self: *Tiles, index: usize, x: i32, y: i32, scale: i32) void {
         for (0..CONF.SPRITE_SIZE) |py| {
             for (0..CONF.SPRITE_SIZE) |px| {
                 const pal = self.db[index].pal;
@@ -99,8 +99,6 @@ pub const Tiles = struct {
                 const db16_idx = self.palette.db[pal][idx];
                 const xx: i32 = @intCast(px);
                 const yy: i32 = @intCast(py);
-
-                // if (!(idx == 0 and self.palette.current[0] == 0)) {
                 rl.drawRectangle(
                     x + xx * scale,
                     y + yy * scale,
@@ -108,7 +106,6 @@ pub const Tiles = struct {
                     scale,
                     self.palette.getColorFromIndex(db16_idx),
                 );
-                // }
             }
         }
     }
@@ -121,5 +118,18 @@ pub const Tiles = struct {
         }
         self.db[self.count] = Tile.init(data, 0);
         self.count += 1;
+    }
+
+    pub fn delete(self: *Tiles, index: usize) !void {
+        if (self.count <= 1) {
+            return;
+        }
+        var i = index;
+        while (i < self.count - 1) : (i += 1) {
+            self.db[i] = self.db[i + 1];
+        }
+        self.count -= 1;
+        try self.saveTilesToFile();
+        return;
     }
 };

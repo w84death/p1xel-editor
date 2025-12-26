@@ -12,6 +12,8 @@ const Edit = @import("edit.zig").EditScreen;
 const Popup = enum {
     none,
     info_not_implemented,
+    save_ok,
+    save_fail,
 };
 
 pub const TilesetScene = struct {
@@ -54,7 +56,12 @@ pub const TilesetScene = struct {
 
         nav_step += 168;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.tiles.saveTilesToFile();
+            self.locked = true;
+            self.tiles.saveTilesToFile() catch {
+                self.popup = Popup.save_fail;
+                return;
+            };
+            self.popup = Popup.save_ok;
         }
         nav_step += 168;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Export tileset", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
@@ -78,7 +85,7 @@ pub const TilesetScene = struct {
                 if (self.ui.button(fx, fy, size, size, "", DB16.BLACK, mouse)) {
                     self.selected = i;
                 }
-                self.tiles.draw_tile(i, x + 1, tiles_y + y + 1, scale);
+                self.tiles.draw(i, x + 1, tiles_y + y + 1, scale);
                 if (self.selected == i) {
                     rl.drawRectangleLines(x + 5, y + tiles_y + 5, size - 8, size - 8, DB16.BLACK);
                     rl.drawRectangleLines(x + 4, y + tiles_y + 4, size - 8, size - 8, DB16.WHITE);
@@ -113,8 +120,8 @@ pub const TilesetScene = struct {
         }
         tools_step += 168;
         if (self.ui.button(tools_step, tools.y, 160, 32, "Delete tile", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
+            self.tiles.delete(self.selected) catch {};
+            self.selected = self.selected - 1;
         }
 
         // Popups
@@ -123,6 +130,24 @@ pub const TilesetScene = struct {
             switch (self.popup) {
                 Popup.info_not_implemented => {
                     if (self.ui.infoPopup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.save_ok => {
+                    if (self.ui.infoPopup("Saved!", mouse, CONF.COLOR_OK)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.save_fail => {
+                    if (self.ui.infoPopup("Failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

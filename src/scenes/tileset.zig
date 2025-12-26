@@ -12,8 +12,8 @@ const Edit = @import("edit.zig").EditScreen;
 const Popup = enum {
     none,
     info_not_implemented,
-    save_ok,
-    save_fail,
+    info_save_ok,
+    info_save_fail,
     confirm_delete,
 };
 
@@ -59,10 +59,10 @@ pub const TilesetScene = struct {
         if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", if (self.tiles.updated) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.tiles.saveTilesToFile() catch {
-                self.popup = Popup.save_fail;
+                self.popup = Popup.info_save_fail;
                 return;
             };
-            self.popup = Popup.save_ok;
+            self.popup = Popup.info_save_ok;
         }
         nav_step += 168;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Export tileset", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
@@ -142,8 +142,8 @@ pub const TilesetScene = struct {
                         }
                     }
                 },
-                Popup.save_ok => {
-                    if (self.ui.infoPopup("Saved!", mouse, CONF.COLOR_OK)) |dismissed| {
+                Popup.info_save_ok => {
+                    if (self.ui.infoPopup("File saved!", mouse, CONF.COLOR_OK)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;
@@ -151,8 +151,8 @@ pub const TilesetScene = struct {
                         }
                     }
                 },
-                Popup.save_fail => {
-                    if (self.ui.infoPopup("Failed...", mouse, CONF.COLOR_NO)) |dismissed| {
+                Popup.info_save_fail => {
+                    if (self.ui.infoPopup("File saving failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

@@ -25,9 +25,8 @@ const Popup = enum {
     none,
     info_not_implemented,
     confirm_clear,
-    info_save_ppm_ok,
-    info_save_ppm_fail,
-    info_save_tileset,
+    info_save_ok,
+    info_save_fail,
 };
 
 pub const EditScreen = struct {
@@ -131,20 +130,20 @@ pub const EditScreen = struct {
             self.tiles.db[self.tile_id].pal = self.palette.index;
             self.locked = true;
             self.tiles.saveTilesToFile() catch {
-                self.popup = Popup.info_save_ppm_fail;
+                self.popup = Popup.info_save_fail;
                 return;
             };
-            self.popup = Popup.info_save_ppm_ok;
+            self.popup = Popup.info_save_ok;
             self.needs_saving = false;
         }
         nav_step += 168;
         if (self.ui.button(nav_step, nav.y, 240, 32, "Export Tile (PPM)", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.export_to_ppm() catch {
-                self.popup = Popup.info_save_ppm_fail;
+                self.popup = Popup.info_save_fail;
                 return;
             };
-            self.popup = Popup.info_save_ppm_ok;
+            self.popup = Popup.info_save_ok;
         }
 
         // Canvas
@@ -294,8 +293,8 @@ pub const EditScreen = struct {
                         self.sm.hot = true;
                     }
                 },
-                Popup.info_save_ppm_ok => {
-                    if (self.ui.infoPopup("PPM file saved!", mouse, CONF.COLOR_OK)) |dismissed| {
+                Popup.info_save_ok => {
+                    if (self.ui.infoPopup("File saved!", mouse, CONF.COLOR_OK)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;
@@ -303,8 +302,8 @@ pub const EditScreen = struct {
                         }
                     }
                 },
-                Popup.info_save_ppm_fail => {
-                    if (self.ui.infoPopup("Failed", mouse, CONF.COLOR_NO)) |dismissed| {
+                Popup.info_save_fail => {
+                    if (self.ui.infoPopup("File saving failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

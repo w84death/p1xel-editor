@@ -85,10 +85,7 @@ pub const TilesetScene = struct {
                 if (self.ui.button(fx, fy, size, size, "", DB16.BLACK, mouse)) {
                     self.tiles.selected = i;
 
-                    const selected = self.tiles.db[self.tiles.selected];
-                    self.edit.canvas.data = selected.data;
-                    self.palette.current = self.palette.db[selected.pal];
-                    self.palette.index = selected.pal;
+                    self.edit.select();
                 }
                 self.tiles.draw(i, x + 1, tiles_y + y + 1, scale);
                 if (self.tiles.selected == i) {

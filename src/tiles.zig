@@ -175,6 +175,8 @@ pub const Tiles = struct {
         const tiles_x: i32 = @intFromFloat(t_pos.x);
         const tiles_y: i32 = @intFromFloat(t_pos.y);
 
+        rl.drawRectangle(@intFromFloat(t_pos.x - 12), @intFromFloat(t_pos.y - 12), @intFromFloat(w + 24), @intFromFloat(h + 24), CONF.COLOR_POPUP);
+
         inline for (0..CONF.MAX_TILES) |i| {
             const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
             const x: i32 = tiles_x + x_shift;

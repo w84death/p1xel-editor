@@ -457,4 +457,10 @@ pub const EditScene = struct {
 
         try ppm.save("tile.ppm");
     }
+    pub fn select(self: *EditScene) void {
+        const selected = self.tiles.db[self.tiles.selected];
+        self.canvas.data = selected.data;
+        self.palette.current = self.palette.db[selected.pal];
+        self.palette.index = selected.pal;
+    }
 };

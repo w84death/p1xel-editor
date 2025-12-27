@@ -221,11 +221,7 @@ pub const PreviewScene = struct {
                             self.popup = Popup.none;
                             self.locked = false;
                             self.sm.hot = true;
-
-                            const selected = self.tiles.db[self.tiles.selected];
-                            self.edit.canvas.data = selected.data;
-                            self.palette.current = self.palette.db[selected.pal];
-                            self.palette.index = selected.pal;
+                            self.edit.select();
                         }
                     }
                 },

@@ -28,7 +28,7 @@ pub fn main() !void {
     var tileset = TilesetScene.init(ui, &sm, &pal, &tiles, &edit);
     var vfx = try Vfx.init();
     var preview = PreviewScene.init(ui, &sm, &pal, &tiles);
-
+    preview.loadPreviewFromFile();
     ui.createWindow();
     defer ui.closeWindow();
 
@@ -46,7 +46,10 @@ pub fn main() !void {
         defer rl.endDrawing();
 
         rl.clearBackground(CONF.COLOR_BG);
-        vfx.draw(dt);
+        switch (sm.current) {
+            State.main_menu, State.about => vfx.draw(dt),
+            else => {},
+        }
         ui.drawCursorLines(mouse);
 
         switch (sm.current) {
@@ -69,8 +72,6 @@ pub fn main() !void {
                 try tileset.draw(mouse);
             },
         }
-
-        // Default UI
 
         // Quit
         if (ui.button(ui.pivots[PIVOTS.TOP_RIGHT].x - 80, ui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_SECONDARY, mouse)) {

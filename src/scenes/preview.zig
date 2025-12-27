@@ -38,10 +38,6 @@ pub const PreviewScene = struct {
                     data[y][x] = 255;
                 }
             }
-            data[2][2] = 0;
-            data[2][3] = 1;
-            data[3][2] = 2;
-            data[3][3] = 3;
             layers[i].data = data;
         }
         return PreviewScene{
@@ -77,7 +73,40 @@ pub const PreviewScene = struct {
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.PREVIEW_H)
             {
                 if (rl.isMouseButtonDown(rl.MouseButton.right)) tile = 255;
-                self.layers[0].data[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = tile;
+                self.layers[self.selected].data[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = tile;
+            }
+        }
+    }
+    pub fn savePreviewToFile(self: *const PreviewScene) !void {
+        const per_layer = CONF.PREVIEW_H * CONF.PREVIEW_W;
+        var buf = [_]u8{0} ** (CONF.PREVIEW_LAYERS * CONF.PREVIEW_H * CONF.PREVIEW_W);
+        for (0..CONF.PREVIEW_LAYERS) |l| {
+            for (0..CONF.PREVIEW_H) |y| {
+                for (0..CONF.PREVIEW_W) |x| {
+                    buf[l * per_layer + y * CONF.PREVIEW_W + x] = self.layers[l].data[y][x];
+                }
+            }
+        }
+        const file = try std.fs.cwd().createFile(CONF.PREVIEW_FILE, .{});
+        defer file.close();
+        _ = try file.write(&buf);
+    }
+    pub fn loadPreviewFromFile(self: *PreviewScene) void {
+        const per_layer = CONF.PREVIEW_H * CONF.PREVIEW_W;
+        const file = std.fs.cwd().openFile(CONF.PREVIEW_FILE, .{}) catch {
+            return;
+        };
+        defer file.close();
+        const data = file.readToEndAlloc(std.heap.page_allocator, 1024 * 1024) catch {
+            return;
+        };
+        defer std.heap.page_allocator.free(data);
+        if (data.len < CONF.PREVIEW_LAYERS * per_layer) return;
+        for (0..CONF.PREVIEW_LAYERS) |l| {
+            for (0..CONF.PREVIEW_H) |y| {
+                for (0..CONF.PREVIEW_W) |x| {
+                    self.layers[l].data[y][x] = data[l * per_layer + y * CONF.PREVIEW_W + x];
+                }
             }
         }
     }
@@ -98,7 +127,11 @@ pub const PreviewScene = struct {
         nav_step += 188 + 32;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Save Preview", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
-            self.popup = Popup.info_not_implemented;
+            self.savePreviewToFile() catch {
+                self.popup = Popup.info_save_fail;
+                return;
+            };
+            self.popup = Popup.info_save_ok;
         }
 
         // Tile
@@ -109,24 +142,37 @@ pub const PreviewScene = struct {
         rl.drawRectangleLines(tx, ty, CONF.SPRITE_SIZE * 4, CONF.SPRITE_SIZE * 4, DB16.STEEL_BLUE);
 
         // Layers
+        const lx: f32 = self.tiles_area.x - 72;
+        var ly: f32 = @floatFromInt(ty + 128);
+        if (self.ui.button(lx, ly, 64, 32, "1", if (self.selected == 0) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.selected = 0;
+        }
+        ly += 40;
+        if (self.ui.button(lx, ly, 64, 32, "2", if (self.selected == 1) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.selected = 1;
+        }
+        ly += 40;
+        if (self.ui.button(lx, ly, 64, 32, "3", if (self.selected == 2) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.selected = 2;
+        }
 
         // Playground
         const px: i32 = @intFromFloat(self.tiles_area.x);
         const py: i32 = @intFromFloat(self.tiles_area.y);
         const pw: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_W;
         const ph: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_H;
-        // for (self.layers) |layer| {
-        for (0..CONF.PREVIEW_H) |y| {
-            for (0..CONF.PREVIEW_W) |x| {
-                const tile = self.layers[0].data[y][x];
-                if (tile < 255) {
-                    const xx: i32 = @intCast(x * CONF.PREVIEW_SIZE);
-                    const yy: i32 = @intCast(y * CONF.PREVIEW_SIZE);
-                    self.tiles.draw(tile, px + xx, py + yy, CONF.PREVIEW_SCALE);
+        for (self.layers) |layer| {
+            for (0..CONF.PREVIEW_H) |y| {
+                for (0..CONF.PREVIEW_W) |x| {
+                    const tile = layer.data[y][x];
+                    if (tile < 255) {
+                        const xx: i32 = @intCast(x * CONF.PREVIEW_SIZE);
+                        const yy: i32 = @intCast(y * CONF.PREVIEW_SIZE);
+                        self.tiles.draw(tile, px + xx, py + yy, CONF.PREVIEW_SCALE);
+                    }
                 }
             }
         }
-        // }
         rl.drawRectangleLines(px, py, pw, ph, DB16.STEEL_BLUE);
 
         // Popups
@@ -135,6 +181,24 @@ pub const PreviewScene = struct {
             switch (self.popup) {
                 Popup.info_not_implemented => {
                     if (self.ui.infoPopup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.info_save_ok => {
+                    if (self.ui.infoPopup("File saved!", mouse, CONF.COLOR_OK)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.info_save_fail => {
+                    if (self.ui.infoPopup("File saving failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

@@ -99,6 +99,7 @@ pub const Tiles = struct {
                 const db16_idx = self.palette.db[pal][idx];
                 const xx: i32 = @intCast(px);
                 const yy: i32 = @intCast(py);
+                if (db16_idx == 0 and idx == 0) continue;
                 rl.drawRectangle(
                     x + xx * scale,
                     y + yy * scale,

@@ -25,6 +25,7 @@ const Popup = enum {
     none,
     info_not_implemented,
     confirm_clear,
+    confirm_del,
     info_save_ok,
     info_save_fail,
 };
@@ -44,6 +45,9 @@ pub const EditScreen = struct {
     pub fn init(ui: Ui, sm: *StateMachine, pal: *Palette, tiles: *Tiles) EditScreen {
         const ix: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X);
         const iy: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y);
+        const p: *Palette = pal;
+        p.index = tiles.db[0].pal;
+        p.current = p.db[p.index];
         return EditScreen{
             .ui = ui,
             .sm = sm,
@@ -54,7 +58,7 @@ pub const EditScreen = struct {
                 .y = iy,
                 .data = tiles.db[0].data,
             },
-            .palette = pal,
+            .palette = p,
             .tiles = tiles,
             .tile_id = 0,
             .locked = false,
@@ -70,9 +74,9 @@ pub const EditScreen = struct {
             rl.KeyboardKey.two => self.palette.swatch = 1,
             rl.KeyboardKey.three => self.palette.swatch = 2,
             rl.KeyboardKey.four => self.palette.swatch = 3,
-            rl.KeyboardKey.tab => {
-                self.palette.cyclePalette();
-            },
+            rl.KeyboardKey.tab => self.palette.cyclePalette(),
+            rl.KeyboardKey.q => self.palette.prevPalette(),
+            rl.KeyboardKey.w => self.palette.nextPalette(),
             else => {},
         }
     }
@@ -157,7 +161,7 @@ pub const EditScreen = struct {
 
                 if (idx == 0 and self.palette.current[0] == 0) {
                     const checker = (x + y) % 2 == 0;
-                    color = if (checker) rl.getColor(0x33333310) else rl.getColor(0xAAAAAA10);
+                    color = if (checker) rl.getColor(0x11111170) else rl.getColor(0x22222270);
                 } else {
                     color = self.palette.getColorFromIndex(db16_idx);
                 }
@@ -190,8 +194,19 @@ pub const EditScreen = struct {
         const px = self.canvas.x + self.canvas.width + 24;
         const py = self.canvas.y;
         const dw: i32 = @divFloor(self.canvas.height, 4);
-        self.draw_preview(px, py, 4, DB16.BLACK);
-        self.draw_preview(px + dw + 8, py, 4, DB16.WHITE);
+        self.draw_preview(px, py, 4, DB16.BLACK, true);
+        self.draw_preview(px + dw + 8, py, 4, DB16.WHITE, true);
+        const till_x = px + dw + 16 + 8 * 16;
+        self.draw_preview(till_x, py, 8, DB16.BLACK, false);
+        self.draw_preview(till_x + 64, py, 8, DB16.BLACK, false);
+        self.draw_preview(till_x + 128, py, 8, DB16.BLACK, false);
+        self.draw_preview(till_x, py + 64, 8, DB16.BLACK, false);
+        self.draw_preview(till_x + 64, py + 64, 8, DB16.BLACK, false);
+        self.draw_preview(till_x + 128, py + 64, 8, DB16.BLACK, false);
+        self.draw_preview(till_x, py + 128, 8, DB16.BLACK, false);
+        self.draw_preview(till_x + 64, py + 128, 8, DB16.BLACK, false);
+        self.draw_preview(till_x + 128, py + 128, 8, DB16.BLACK, false);
+        rl.drawRectangleLines(till_x, py, 192, 192, DB16.STEEL_BLUE);
 
         // Swatches
         const swa_x: i32 = px;
@@ -213,43 +228,60 @@ pub const EditScreen = struct {
                 rl.drawRectangleLines(swa_x + x_shift + 5, swa_y + 28 + 5, swa_size - 8, swa_size - 8, DB16.BLACK);
                 rl.drawRectangleLines(swa_x + x_shift + 4, swa_y + 28 + 4, swa_size - 8, swa_size - 8, DB16.WHITE);
             }
+        }
+        if (self.palette.current[0] == 0) {
+            rl.drawText("TRANSPARENT", swa_x, swa_y + swa_size + 32, 10, CONF.COLOR_PRIMARY);
+        }
 
-            if (i == 0 and self.palette.current[0] == 0) {
-                rl.drawText("TRANSPARENT", swa_x, swa_y + swa_size + 32, 10, CONF.COLOR_SECONDARY);
+        // Swatches info
+        var fsi_x: f32 = @floatFromInt(swa_x);
+        const fsi_y: f32 = @floatFromInt(swa_y + swa_size + 48);
+        var status_buf: [7:0]u8 = undefined;
+        _ = std.fmt.bufPrintZ(&status_buf, "{d:0>2}/{d:0>2}", .{ self.palette.index + 1, self.palette.count }) catch {};
+        rl.drawText(&status_buf, @intFromFloat(fsi_x), @intFromFloat(fsi_y), CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+        fsi_x += 75;
+        if (self.palette.count > 1) {
+            if (self.palette.swatch > 0) {
+                if (self.ui.button(fsi_x, fsi_y, 64, 24, "<", CONF.COLOR_OK, mouse) and !self.locked) {
+                    self.palette.prevPalette();
+                    self.needs_saving = true;
+                }
+                fsi_x += 64 + 8;
+            }
+            if (self.palette.swatch < self.palette.count) {
+                if (self.palette.swatch < self.palette.count and self.ui.button(fsi_x, fsi_y, 64, 24, ">", CONF.COLOR_OK, mouse) and !self.locked) {
+                    self.palette.nextPalette();
+                    self.needs_saving = true;
+                }
+                fsi_x += 64 + 8;
             }
         }
 
-        var fsx: f32 = @floatFromInt(swa_x + swa_size * 4 + 24);
-        var fsy: f32 = @floatFromInt(swa_y + 28);
-        var status_buf: [7:0]u8 = undefined;
-        _ = std.fmt.bufPrintZ(&status_buf, "{d:0>2}/{d:0>2}", .{ self.palette.index + 1, self.palette.count }) catch {};
-        rl.drawText(&status_buf, @intFromFloat(fsx), @intFromFloat(fsy), CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
-        if (self.palette.count > 1 and self.ui.button(fsx, fsy + 24, 64, 24, ">", CONF.COLOR_OK, mouse) and !self.locked) {
-            self.palette.cyclePalette();
-            self.needs_saving = true;
+        // Swatches options
+        var fso_x: f32 = @floatFromInt(swa_x);
+        const fso_y: f32 = @floatFromInt(swa_y + 132);
+        if (self.palette.count > 1 and self.ui.button(fso_x, fso_y, 120, 32, "Del swatch", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.confirm_del;
         }
-        fsx += 38;
-        if (self.palette.count > 1 and self.ui.button(fsx + 64, fsy, 80, 32, "Delete", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
-            self.palette.deletePalette();
-        }
+        fso_x += 128;
 
-        fsx += 64;
-        rl.drawText("OPTIONS:", @intFromFloat(fsx), swa_y, 20, CONF.COLOR_PRIMARY);
-        fsy += 40;
         if (self.palette.updated) {
-            if (self.ui.button(fsx, fsy, 120, 32, "Update", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            if (self.ui.button(fso_x, fso_y, 120, 32, "Update", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
                 self.palette.updatePalette();
                 self.needs_saving = true;
             }
-            if (self.ui.button(fsx, fsy + 40, 120, 32, "Save new", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            fso_x += 128;
+            if (self.ui.button(fso_x, fso_y, 120, 32, "Save new", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
                 self.palette.newPalette();
                 self.needs_saving = true;
             }
+            fso_x += 128;
         }
 
         // Palette
         const pal_x: i32 = swa_x;
-        const pal_y: i32 = swa_y + 100;
+        const pal_y: i32 = swa_y + 200;
         const pal_size: i32 = 32;
         rl.drawText("DB16 PALETTE", pal_x, pal_y, 20, CONF.COLOR_PRIMARY);
         const colors_in_row: usize = 4;
@@ -268,7 +300,7 @@ pub const EditScreen = struct {
         const foo_x: i32 = @intFromFloat(self.ui.pivots[PIVOTS.BOTTOM_LEFT].x);
         const foo_y: i32 = @intFromFloat(self.ui.pivots[PIVOTS.BOTTOM_LEFT].y);
 
-        rl.drawText("[TAB] cycle palette, [1-4] select swatch", foo_x, foo_y - CONF.FONT_DEFAULT_SIZE, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
+        rl.drawText("[1-4] select swatch, [q-w] change palette, [TAB] cycle palette", foo_x, foo_y - CONF.FONT_DEFAULT_SIZE, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
 
         // Popups
         if (self.popup != Popup.none) {
@@ -287,6 +319,16 @@ pub const EditScreen = struct {
                     if (self.ui.yesNoPopup("Clear canvas?", mouse)) |confirmed| {
                         if (confirmed) {
                             self.clearCanvas();
+                        }
+                        self.popup = Popup.none;
+                        self.locked = false;
+                        self.sm.hot = true;
+                    }
+                },
+                Popup.confirm_del => {
+                    if (self.ui.yesNoPopup("Delete swatch?", mouse)) |confirmed| {
+                        if (confirmed) {
+                            self.palette.deletePalette();
                         }
                         self.popup = Popup.none;
                         self.locked = false;
@@ -316,7 +358,7 @@ pub const EditScreen = struct {
         }
     }
 
-    fn draw_preview(self: EditScreen, x: i32, y: i32, down_scale: i32, background: rl.Color) void {
+    fn draw_preview(self: EditScreen, x: i32, y: i32, down_scale: i32, background: rl.Color, frame: bool) void {
         const w: i32 = @divFloor(self.canvas.width, down_scale);
         const h: i32 = @divFloor(self.canvas.height, down_scale);
         rl.drawRectangle(x, y, w, h, background);
@@ -341,7 +383,7 @@ pub const EditScreen = struct {
             }
         }
 
-        rl.drawRectangleLines(x, y, w, h, DB16.STEEL_BLUE);
+        if (frame) rl.drawRectangleLines(x, y, w, h, DB16.STEEL_BLUE);
     }
 
     fn export_to_ppm(self: *EditScreen) !void {

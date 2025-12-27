@@ -125,6 +125,12 @@ pub const Tiles = struct {
         self.count += 1;
         self.updated = true;
     }
+    pub fn duplicateTile(self: *Tiles, index: usize) void {
+        const data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = self.db[index].data;
+        self.db[self.count] = Tile.init(data, self.db[index].pal);
+        self.count += 1;
+        self.updated = true;
+    }
     pub fn delete(self: *Tiles, index: usize) void {
         if (self.count <= 1) {
             return;

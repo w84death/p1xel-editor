@@ -106,8 +106,7 @@ pub const TilesetScene = struct {
         var tools_step = tools.x;
 
         if (self.ui.button(tools_step, tools.y, 160, 32, "Duplicate", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
+            self.tiles.duplicateTile(self.selected);
         }
         tools_step += 168;
         if (self.selected > 0) {

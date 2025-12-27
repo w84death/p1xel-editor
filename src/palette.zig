@@ -139,4 +139,18 @@ pub const Palette = struct {
             self.updated = false;
         }
     }
+    pub fn prevPalette(self: *Palette) void {
+        if (self.count > 0 and self.index > 0) {
+            self.index = self.index - 1;
+            self.current = self.db[self.index];
+            self.updated = false;
+        }
+    }
+    pub fn nextPalette(self: *Palette) void {
+        if (self.count > 0 and self.index < self.count - 1) {
+            self.index = self.index + 1;
+            self.current = self.db[self.index];
+            self.updated = false;
+        }
+    }
 };

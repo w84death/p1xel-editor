@@ -194,26 +194,6 @@ pub const EditScreen = struct {
             self.tool = Tools.fill;
         }
 
-        // Layers
-        const lx: i32 = self.canvas.x - 88;
-        var ly: i32 = self.canvas.y + 192;
-        rl.drawText("SLOTS", lx, ly, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
-        ly += 28;
-        // rl.drawText("1", lx + @divFloor(64 - rl.measureText("1", CONF.FONT_DEFAULT_SIZE), 2), ly + 22, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
-        // rl.drawRectangleLines(lx, ly, 64, 64, DB16.STEEL_BLUE);
-        if (self.ui.button(@floatFromInt(lx), @floatFromInt(ly), 64, 64, "1", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
-        }
-        ly += 72;
-        self.draw_preview(lx, ly, 8, DB16.BLACK, true);
-        ly += 72;
-        // rl.drawText("3", lx + @divFloor(64 - rl.measureText("3", CONF.FONT_DEFAULT_SIZE), 2), ly + 22, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
-        // rl.drawRectangleLines(lx, ly, 64, 64, DB16.STEEL_BLUE);
-        if (self.ui.button(@floatFromInt(lx), @floatFromInt(ly), 64, 64, "3", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
-        }
         // Canvas
         for (0..CONF.SPRITE_SIZE) |y| {
             for (0..CONF.SPRITE_SIZE) |x| {

@@ -30,6 +30,11 @@ const Popup = enum {
     info_save_fail,
 };
 
+const Tools = enum {
+    pixel,
+    fill,
+};
+
 pub const EditScreen = struct {
     ui: Ui,
     sm: *StateMachine,
@@ -40,10 +45,11 @@ pub const EditScreen = struct {
     locked: bool,
     popup: Popup,
     needs_saving: bool,
+    tool: Tools = Tools.pixel,
     status_buffer: [256]u8 = undefined,
 
     pub fn init(ui: Ui, sm: *StateMachine, pal: *Palette, tiles: *Tiles) EditScreen {
-        const ix: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X);
+        const ix: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X + 128);
         const iy: i32 = @intFromFloat(ui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y);
         const p: *Palette = pal;
         p.index = tiles.db[0].pal;
@@ -64,6 +70,7 @@ pub const EditScreen = struct {
             .locked = false,
             .popup = Popup.none,
             .needs_saving = false,
+            .tool = Tools.pixel,
         };
     }
     pub fn handleKeyboard(self: *EditScreen) void {
@@ -77,6 +84,8 @@ pub const EditScreen = struct {
             rl.KeyboardKey.tab => self.palette.cyclePalette(),
             rl.KeyboardKey.q => self.palette.prevPalette(),
             rl.KeyboardKey.w => self.palette.nextPalette(),
+            rl.KeyboardKey.e => self.tool = Tools.pixel,
+            rl.KeyboardKey.r => self.tool = Tools.fill,
             else => {},
         }
     }
@@ -99,8 +108,31 @@ pub const EditScreen = struct {
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.SPRITE_SIZE and
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.SPRITE_SIZE)
             {
-                if (rl.isMouseButtonDown(rl.MouseButton.right)) color = 0;
-                self.canvas.data[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = color;
+                switch (self.tool) {
+                    Tools.pixel => {
+                        if (rl.isMouseButtonDown(rl.MouseButton.right)) color = 0;
+                        self.canvas.data[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = color;
+                    },
+                    Tools.fill => {
+                        if (rl.isMouseButtonDown(rl.MouseButton.right)) color = 0;
+                        const start_x: usize = @intCast(mouse_cell_x);
+                        const start_y: usize = @intCast(mouse_cell_y);
+                        const old_color = self.canvas.data[start_y][start_x];
+                        if (old_color == color) return; // No change needed
+                        const floodFill = struct {
+                            fn flood(data: *[CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8, x: usize, y: usize, old: u8, new: u8) void {
+                                if (x >= CONF.SPRITE_SIZE or y >= CONF.SPRITE_SIZE) return;
+                                if (data[y][x] != old) return;
+                                data[y][x] = new;
+                                if (x > 0) flood(data, x - 1, y, old, new);
+                                if (x < CONF.SPRITE_SIZE - 1) flood(data, x + 1, y, old, new);
+                                if (y > 0) flood(data, x, y - 1, old, new);
+                                if (y < CONF.SPRITE_SIZE - 1) flood(data, x, y + 1, old, new);
+                            }
+                        }.flood;
+                        floodFill(&self.canvas.data, start_x, start_y, old_color, color);
+                    },
+                }
                 self.needs_saving = true;
             }
         }
@@ -124,11 +156,11 @@ pub const EditScreen = struct {
         if (self.ui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.sm.goTo(State.main_menu);
         }
-        nav_step += 128;
+        nav_step += 128 + 32;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Change tile", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.sm.goTo(State.tileset);
         }
-        nav_step += 168;
+        nav_step += 168 + 32;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Save tile", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.tiles.db[self.tile_id].data = self.canvas.data;
             self.tiles.db[self.tile_id].pal = self.palette.index;
@@ -149,7 +181,39 @@ pub const EditScreen = struct {
             };
             self.popup = Popup.info_save_ok;
         }
+        // Tools
+        const tx: i32 = self.canvas.x - 88;
+        var ty: i32 = self.canvas.y;
+        rl.drawText("TOOLS", tx, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+        ty += 28;
+        if (self.ui.button(@floatFromInt(tx), @floatFromInt(ty), 64, 64, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+            self.tool = Tools.pixel;
+        }
+        ty += 72;
+        if (self.ui.button(@floatFromInt(tx), @floatFromInt(ty), 64, 64, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+            self.tool = Tools.fill;
+        }
 
+        // Layers
+        const lx: i32 = self.canvas.x - 88;
+        var ly: i32 = self.canvas.y + 192;
+        rl.drawText("SLOTS", lx, ly, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+        ly += 28;
+        // rl.drawText("1", lx + @divFloor(64 - rl.measureText("1", CONF.FONT_DEFAULT_SIZE), 2), ly + 22, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
+        // rl.drawRectangleLines(lx, ly, 64, 64, DB16.STEEL_BLUE);
+        if (self.ui.button(@floatFromInt(lx), @floatFromInt(ly), 64, 64, "1", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.info_not_implemented;
+        }
+        ly += 72;
+        self.draw_preview(lx, ly, 8, DB16.BLACK, true);
+        ly += 72;
+        // rl.drawText("3", lx + @divFloor(64 - rl.measureText("3", CONF.FONT_DEFAULT_SIZE), 2), ly + 22, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
+        // rl.drawRectangleLines(lx, ly, 64, 64, DB16.STEEL_BLUE);
+        if (self.ui.button(@floatFromInt(lx), @floatFromInt(ly), 64, 64, "3", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.info_not_implemented;
+        }
         // Canvas
         for (0..CONF.SPRITE_SIZE) |y| {
             for (0..CONF.SPRITE_SIZE) |x| {

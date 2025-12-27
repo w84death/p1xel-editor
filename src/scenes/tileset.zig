@@ -44,9 +44,9 @@ pub const TilesetScene = struct {
         if (self.ui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.sm.goTo(State.main_menu);
         }
-        nav_step += 128;
+        nav_step += 128 + 32;
 
-        if (self.ui.button(nav_step, nav.y, 160, 32, "Edit", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 180, 32, "Edit in SLOT 1", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             const selected = self.tiles.db[self.selected];
             self.edit.canvas.data = selected.data;
             self.palette.current = self.palette.db[selected.pal];
@@ -54,8 +54,12 @@ pub const TilesetScene = struct {
             self.edit.tile_id = self.selected;
             self.sm.goTo(State.editor);
         }
+        nav_step += 188;
+        if (self.ui.button(nav_step, nav.y, 180, 32, "Edit in SLOT 2", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {}
+        nav_step += 188;
+        if (self.ui.button(nav_step, nav.y, 180, 32, "Edit in SLOT 3", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {}
 
-        nav_step += 168;
+        nav_step += 188 + 32;
         if (self.ui.button(nav_step, nav.y, 160, 32, "Save tiles", if (self.tiles.updated) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.tiles.saveTilesToFile() catch {

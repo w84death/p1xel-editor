@@ -3,6 +3,8 @@ const rl = @import("raylib");
 const CONF = @import("config.zig").CONF;
 const DB16 = @import("palette.zig").DB16;
 const Palette = @import("palette.zig").Palette;
+const Ui = @import("ui.zig").UI;
+const PIVOTS = @import("ui.zig").PIVOTS;
 
 pub const Tile = struct {
     w: f32,
@@ -23,12 +25,15 @@ pub const Tiles = struct {
     db: [CONF.MAX_TILES]Tile = undefined,
     selected: u8 = 0,
     count: u8 = 0,
+    ui: Ui,
     palette: *Palette,
     updated: bool = false,
-    pub fn init(palette: *Palette) Tiles {
+    hot: bool = false,
+    pub fn init(ui: Ui, palette: *Palette) Tiles {
         return Tiles{
             .db = undefined,
             .selected = 0,
+            .ui = ui,
             .palette = palette,
             .count = 1,
             .updated = false,
@@ -154,5 +159,43 @@ pub const Tiles = struct {
             self.db[index + 1] = temp;
             self.updated = true;
         }
+    }
+    pub fn showTilesSelector(self: *Tiles, mouse: rl.Vector2) ?bool {
+        if (self.hot and rl.isMouseButtonReleased(rl.MouseButton.left)) {
+            self.hot = false;
+        } else if (self.hot) {
+            return null;
+        }
+
+        const tiles_in_row: usize = 16;
+        const scale: i32 = 4;
+        const w: f32 = tiles_in_row * (CONF.SPRITE_SIZE * scale + 12);
+        const h: f32 = @floatFromInt(@divFloor(CONF.MAX_TILES, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
+        const t_pos = rl.Vector2.init(self.ui.pivots[PIVOTS.CENTER].x - w / 2, self.ui.pivots[PIVOTS.CENTER].y - h / 2);
+        const tiles_x: i32 = @intFromFloat(t_pos.x);
+        const tiles_y: i32 = @intFromFloat(t_pos.y);
+
+        inline for (0..CONF.MAX_TILES) |i| {
+            const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
+            const x: i32 = tiles_x + x_shift;
+            const y: i32 = @divFloor(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12);
+            const size: i32 = CONF.SPRITE_SIZE * scale + 2;
+            const fx: f32 = @floatFromInt(x);
+            const fy: f32 = @floatFromInt(tiles_y + y);
+            if (i < self.count) {
+                if (self.ui.button(fx, fy, size, size, "", DB16.BLACK, mouse)) {
+                    self.selected = i;
+                    return true;
+                }
+                self.draw(i, x + 1, tiles_y + y + 1, scale);
+                if (self.selected == i) {
+                    rl.drawRectangleLines(x + 5, y + tiles_y + 5, size - 8, size - 8, DB16.BLACK);
+                    rl.drawRectangleLines(x + 4, y + tiles_y + 4, size - 8, size - 8, DB16.WHITE);
+                }
+            } else {
+                rl.drawRectangleLines(x, tiles_y + y, size, size, DB16.LIGHT_GRAY);
+            }
+        }
+        return null;
     }
 };

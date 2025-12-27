@@ -8,6 +8,7 @@ const PIVOTS = @import("../ui.zig").PIVOTS;
 const State = @import("../state.zig").State;
 const StateMachine = @import("../state.zig").StateMachine;
 const Tiles = @import("../tiles.zig").Tiles;
+const Edit = @import("edit.zig").EditScene;
 
 const Popup = enum {
     none,
@@ -15,6 +16,7 @@ const Popup = enum {
     info_save_ok,
     info_save_fail,
     confirm_delete,
+    select_tile,
 };
 const Layer = struct {
     data: [CONF.PREVIEW_H][CONF.PREVIEW_W]u8,
@@ -22,6 +24,7 @@ const Layer = struct {
 pub const PreviewScene = struct {
     ui: Ui,
     sm: *StateMachine,
+    edit: *Edit,
     palette: *Palette,
     tiles: *Tiles,
     tiles_area: rl.Vector2,
@@ -29,7 +32,7 @@ pub const PreviewScene = struct {
     selected: u8,
     locked: bool,
     popup: Popup,
-    pub fn init(ui: Ui, sm: *StateMachine, pal: *Palette, tiles: *Tiles) PreviewScene {
+    pub fn init(ui: Ui, sm: *StateMachine, edit: *Edit, pal: *Palette, tiles: *Tiles) PreviewScene {
         var layers: [CONF.PREVIEW_LAYERS]Layer = undefined;
         for (0..CONF.PREVIEW_LAYERS) |i| {
             var data: [CONF.PREVIEW_H][CONF.PREVIEW_W]u8 = undefined;
@@ -43,6 +46,7 @@ pub const PreviewScene = struct {
         return PreviewScene{
             .ui = ui,
             .sm = sm,
+            .edit = edit,
             .tiles = tiles,
             .tiles_area = rl.Vector2.init(ui.pivots[PIVOTS.TOP_LEFT].x + 72, ui.pivots[PIVOTS.TOP_LEFT].y + 64),
             .layers = layers,
@@ -117,7 +121,7 @@ pub const PreviewScene = struct {
             self.sm.goTo(State.main_menu);
         }
         nav_step += 128 + 32;
-        if (self.ui.button(nav_step, nav.y, 180, 32, "Change tile", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+        if (self.ui.button(nav_step, nav.y, 180, 32, "Tileset", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.sm.goTo(State.tileset);
         }
         nav_step += 188;
@@ -138,6 +142,11 @@ pub const PreviewScene = struct {
 
         const tx: i32 = @intFromFloat(self.tiles_area.x - 72);
         const ty: i32 = @intFromFloat(self.tiles_area.y);
+        if (self.ui.button(@floatFromInt(tx), @floatFromInt(ty), 64, 64, "", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.select_tile;
+            self.tiles.hot = true;
+        }
         self.tiles.draw(self.tiles.selected, tx + 1, ty + 1, 4);
         rl.drawRectangleLines(tx, ty, CONF.SPRITE_SIZE * 4, CONF.SPRITE_SIZE * 4, DB16.STEEL_BLUE);
 
@@ -203,6 +212,20 @@ pub const PreviewScene = struct {
                             self.popup = Popup.none;
                             self.locked = false;
                             self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.select_tile => {
+                    if (self.tiles.showTilesSelector(mouse)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+
+                            const selected = self.tiles.db[self.tiles.selected];
+                            self.edit.canvas.data = selected.data;
+                            self.palette.current = self.palette.db[selected.pal];
+                            self.palette.index = selected.pal;
                         }
                     }
                 },

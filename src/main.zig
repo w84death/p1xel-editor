@@ -20,14 +20,14 @@ pub fn main() !void {
     var sm = StateMachine.init(State.main_menu);
     var pal = Palette.init();
     pal.loadPalettesFromFile();
-    var tiles = Tiles.init(&pal);
+    var tiles = Tiles.init(ui, &pal);
     tiles.loadTilesFromFile();
     var menu = MenuScene.init(ui, &sm);
     var edit = EditScene.init(ui, &sm, &pal, &tiles);
     const about = AboutScene.init(ui, &sm);
     var tileset = TilesetScene.init(ui, &sm, &pal, &tiles, &edit);
     var vfx = try Vfx.init();
-    var preview = PreviewScene.init(ui, &sm, &pal, &tiles);
+    var preview = PreviewScene.init(ui, &sm, &edit, &pal, &tiles);
     preview.loadPreviewFromFile();
     ui.createWindow();
     defer ui.closeWindow();

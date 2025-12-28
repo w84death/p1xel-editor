@@ -3,7 +3,7 @@ const c = @cImport({
     @cInclude("fenster.h");
 });
 const CONF = @import("config.zig").CONF;
-const PIVOTS = @import("ui.zig").PIVOTS;
+const PIVOTS = @import("fui.zig").PIVOTS;
 const DB16 = @import("palette.zig").DB16;
 const Palette = @import("palette.zig").Palette;
 const StateMachine = @import("state.zig").StateMachine;
@@ -29,6 +29,8 @@ pub fn main() void {
     });
     _ = c.fenster_open(&f);
     defer c.fenster_close(&f);
+    var mouse_pressed = false;
+    var mouse_lock = false;
     var fui = Fui.init(&buf);
     var sm = StateMachine.init(State.main_menu);
     var pal = Palette.init();
@@ -39,10 +41,9 @@ pub fn main() void {
     var menu = MenuScene.init(fui, &sm);
     var about = AboutScene.init(fui, &sm);
     var edit = EditScene.init(fui, &sm, &pal, &tiles);
-    // To be ported
-    // var tileset = TilesetScene.init(fui, &sm, &pal, &tiles, &edit);
-    // var preview = PreviewScene.init(fui, &sm, &edit, &pal, &tiles);
-    // preview.loadPreviewFromFile();
+    var tileset = TilesetScene.init(fui, &sm, &pal, &tiles, &edit);
+    var preview = PreviewScene.init(fui, &sm, &edit, &pal, &tiles);
+    preview.loadPreviewFromFile();
 
     var shouldClose = false;
     var dt: f32 = 0.0;
@@ -59,20 +60,40 @@ pub fn main() void {
             else => {},
         }
         fui.draw_cursor_lines(Vec2.init(f.x, f.y));
-        const mouse = Mouse.init(f.x, f.y, f.mouse == 1);
+
+        if (mouse_lock and mouse_pressed and f.mouse == 0) {
+            mouse_pressed = false;
+            mouse_lock = false;
+        } else if (!mouse_lock and !mouse_pressed and f.mouse == 1) {
+            mouse_pressed = true;
+            mouse_lock = true;
+        } else if (mouse_lock and !mouse_pressed and f.mouse == 0) {
+            mouse_pressed = false;
+            mouse_lock = false;
+        } else {
+            mouse_pressed = false;
+        }
+        const mouse = Mouse.init(f.x, f.y, mouse_pressed);
+
         switch (sm.current) {
             State.main_menu => {
                 menu.draw(mouse);
             },
             State.editor => {
-                edit.handleKeyboard();
+                edit.handleKeyboard(&f.keys);
                 edit.handleMouse(mouse);
                 try edit.draw(mouse);
+            },
+            State.tileset => {
+                try tileset.draw(mouse);
+            },
+            State.preview => {
+                preview.handleMouse(mouse);
+                preview.draw(mouse);
             },
             State.about => {
                 about.draw(mouse);
             },
-            else => {},
         }
 
         if (f.keys[27] != 0) {

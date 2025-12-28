@@ -3,7 +3,7 @@ const CONF = @import("../config.zig").CONF;
 const DB16 = @import("../palette.zig").DB16;
 const Palette = @import("../palette.zig").Palette;
 const Fui = @import("../fui.zig").Fui;
-const PIVOTS = @import("../ui.zig").PIVOTS;
+const PIVOTS = @import("../fui.zig").PIVOTS;
 const State = @import("../state.zig").State;
 const StateMachine = @import("../state.zig").StateMachine;
 const Tiles = @import("../tiles.zig").Tiles;
@@ -74,22 +74,25 @@ pub const EditScene = struct {
             .tool = Tools.pixel,
         };
     }
-    pub fn handleKeyboard(self: *EditScene) void {
-        _ = self;
-        // if (self.locked) return;
-        // const key = rl.getKeyPressed();
-        // switch (key) {
-        //     rl.KeyboardKey.one => self.palette.swatch = 0,
-        //     rl.KeyboardKey.two => self.palette.swatch = 1,
-        //     rl.KeyboardKey.three => self.palette.swatch = 2,
-        //     rl.KeyboardKey.four => self.palette.swatch = 3,
-        //     rl.KeyboardKey.tab => self.palette.cyclePalette(),
-        //     rl.KeyboardKey.q => self.palette.prevPalette(),
-        //     rl.KeyboardKey.w => self.palette.nextPalette(),
-        //     rl.KeyboardKey.e => self.tool = Tools.pixel,
-        //     rl.KeyboardKey.r => self.tool = Tools.fill,
-        //     else => {},
-        // }
+    pub fn handleKeyboard(self: *EditScene, keys: *[256]c_int) void {
+        if (self.locked) return;
+
+        for (0..256) |i| {
+            if (keys[i] != 0) {
+                switch (i) {
+                    49 => self.palette.swatch = 0, // '1'
+                    50 => self.palette.swatch = 1, // '2'
+                    51 => self.palette.swatch = 2, // '3'
+                    52 => self.palette.swatch = 3, // '4'
+                    9 => self.palette.cyclePalette(), // Tab
+                    81 => self.palette.prevPalette(), // 'q'
+                    87 => self.palette.nextPalette(), // 'w'
+                    69 => self.tool = Tools.pixel, // 'e'
+                    82 => self.tool = Tools.fill, // 'r'
+                    else => {},
+                }
+            }
+        }
     }
     pub fn handleMouse(self: *EditScene, mouse: Mouse) void {
         if (self.locked) return;
@@ -440,16 +443,17 @@ pub const EditScene = struct {
             CONF.SPRITE_SIZE,
         );
         defer ppm.deinit();
-        _ = self;
-        // for (0..ppm.height) |y| {
-        //     for (0..ppm.width) |x| {
-        //         const idx = self.canvas.data[y][x];
-        //         const db16_idx = self.palette.current[idx];
-        //         const color = self.palette.getColorFromIndex(db16_idx);
-        //         // TODO
-        //         ppm.data[y * ppm.width + x] = Color{ .data = RGB{ .r = color.r, .g = color.g, .b = color.b } };
-        //     }
-        // }
+        for (0..ppm.height) |y| {
+            for (0..ppm.width) |x| {
+                const idx = self.canvas.data[y][x];
+                const db16_idx = self.palette.current[idx];
+                const color = self.palette.getColorFromIndex(db16_idx);
+                const r: u8 = @truncate(color >> 16);
+                const g: u8 = @truncate(color >> 8);
+                const b: u8 = @truncate(color);
+                ppm.data[y * ppm.width + x] = Color{ .data = RGB{ .r = r, .g = g, .b = b } };
+            }
+        }
 
         try ppm.save("tile.ppm");
     }

@@ -1,11 +1,10 @@
 const std = @import("std");
-const rl = @import("raylib");
 const CONF = @import("config.zig").CONF;
 const DB16 = @import("palette.zig").DB16;
 const Palette = @import("palette.zig").Palette;
-const Ui = @import("ui.zig").UI;
-const PIVOTS = @import("ui.zig").PIVOTS;
-
+const Fui = @import("fui.zig").Fui;
+const PIVOTS = @import("fui.zig").PIVOTS;
+const Vec2 = @import("math.zig").Vec2;
 pub const Tile = struct {
     w: f32,
     h: f32,
@@ -25,15 +24,15 @@ pub const Tiles = struct {
     db: [CONF.MAX_TILES]Tile = undefined,
     selected: u8 = 0,
     count: u8 = 0,
-    ui: Ui,
+    fui: Fui,
     palette: *Palette,
     updated: bool = false,
     hot: bool = false,
-    pub fn init(ui: Ui, palette: *Palette) Tiles {
+    pub fn init(fui: Fui, palette: *Palette) Tiles {
         return Tiles{
             .db = undefined,
             .selected = 0,
-            .ui = ui,
+            .fui = fui,
             .palette = palette,
             .count = 1,
             .updated = false,
@@ -105,7 +104,7 @@ pub const Tiles = struct {
                 const xx: i32 = @intCast(px);
                 const yy: i32 = @intCast(py);
                 if (db16_idx == 0 and idx == 0) continue;
-                rl.drawRectangle(
+                self.fui.draw.drawRectangle(
                     x + xx * scale,
                     y + yy * scale,
                     scale,
@@ -160,8 +159,8 @@ pub const Tiles = struct {
             self.updated = true;
         }
     }
-    pub fn showTilesSelector(self: *Tiles, mouse: rl.Vector2) ?bool {
-        if (self.hot and rl.isMouseButtonReleased(rl.MouseButton.left)) {
+    pub fn showTilesSelector(self: *Tiles, mouse: Vec2) ?bool {
+        if (self.hot and mouse == 1) {
             self.hot = false;
         } else if (self.hot) {
             return null;
@@ -171,11 +170,11 @@ pub const Tiles = struct {
         const scale: i32 = 4;
         const w: f32 = tiles_in_row * (CONF.SPRITE_SIZE * scale + 12);
         const h: f32 = @floatFromInt(@divFloor(CONF.MAX_TILES, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
-        const t_pos = rl.Vector2.init(self.ui.pivots[PIVOTS.CENTER].x - w / 2, self.ui.pivots[PIVOTS.CENTER].y - h / 2);
+        const t_pos = Vec2.init(self.fui.pivots[PIVOTS.CENTER].x - w / 2, self.fui.pivots[PIVOTS.CENTER].y - h / 2);
         const tiles_x: i32 = @intFromFloat(t_pos.x);
         const tiles_y: i32 = @intFromFloat(t_pos.y);
 
-        rl.drawRectangle(@intFromFloat(t_pos.x - 12), @intFromFloat(t_pos.y - 12), @intFromFloat(w + 24), @intFromFloat(h + 24), CONF.COLOR_POPUP);
+        self.fui.draw_rect(@intFromFloat(t_pos.x - 12), @intFromFloat(t_pos.y - 12), @intFromFloat(w + 24), @intFromFloat(h + 24), CONF.COLOR_POPUP);
 
         inline for (0..CONF.MAX_TILES) |i| {
             const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
@@ -191,11 +190,11 @@ pub const Tiles = struct {
                 }
                 self.draw(i, x + 1, tiles_y + y + 1, scale);
                 if (self.selected == i) {
-                    rl.drawRectangleLines(x + 5, y + tiles_y + 5, size - 8, size - 8, DB16.BLACK);
-                    rl.drawRectangleLines(x + 4, y + tiles_y + 4, size - 8, size - 8, DB16.WHITE);
+                    self.fui.draw_rect_lines(x + 5, y + tiles_y + 5, size - 8, size - 8, DB16.BLACK);
+                    self.fui.draw_rect_lines(x + 4, y + tiles_y + 4, size - 8, size - 8, DB16.WHITE);
                 }
             } else {
-                rl.drawRectangleLines(x, tiles_y + y, size, size, DB16.LIGHT_GRAY);
+                self.fui.draw_rect_lines(x, tiles_y + y, size, size, DB16.LIGHT_GRAY);
             }
         }
         return null;

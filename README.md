@@ -42,7 +42,7 @@ zig build \
 Host Linux -> Windows
 ``` 
 zig build \
-  -Dtarget=x86_64-windows \
+  -Dtarget=x86-windows \
   -Doptimize=ReleaseSmall \
   upx
 ```

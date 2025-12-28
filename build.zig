@@ -1,15 +1,11 @@
 const std = @import("std");
-const filename = "p1xel_editor";
-const filename_win = "p1xel_editor.exe";
+const filename = "fenster";
+const filename_win = "fenster.exe";
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const raylib_dep = b.dependency("raylib_zig", .{
-        .target = target,
-        .optimize = optimize,
-    });
     const exe = b.addExecutable(.{
         .name = filename,
         .root_module = b.createModule(.{
@@ -18,12 +14,17 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    exe.addIncludePath(b.path("src"));
 
-    const raylib_artifact = raylib_dep.artifact("raylib");
-    exe.linkLibrary(raylib_artifact);
+    exe.addCSourceFile(.{ .file = b.path("src/fenster.c"), .flags = &[_][]const u8{} });
+    switch (target.result.os.tag) {
+        .macos => exe.linkFramework("Cocoa"),
+        .windows => exe.linkSystemLibrary("gdi32"),
+        .linux => exe.linkSystemLibrary("X11"),
+        else => {},
+    }
 
-    const raylib = raylib_dep.module("raylib");
-    exe.root_module.addImport("raylib", raylib);
+    exe.linkLibC();
 
     b.installArtifact(exe);
 

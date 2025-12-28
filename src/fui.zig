@@ -211,9 +211,9 @@ pub const Fui = struct {
             mouse.y >= target.y and mouse.y < target.y + target.h;
     }
     pub fn draw_version(self: *Fui) void {
-        const center = self.text_center(CONF.VERSION, CONF.FONT_DEFAULT_SIZE);
-        const ver_x: i32 = self.pivots[PIVOTS.BOTTOM_RIGHT].x - center.x;
-        const ver_y: i32 = self.pivots[PIVOTS.BOTTOM_RIGHT].y - center.y;
+        const len = self.text_length(CONF.VERSION, CONF.FONT_DEFAULT_SIZE);
+        const ver_x: i32 = self.pivots[PIVOTS.BOTTOM_RIGHT].x - len;
+        const ver_y: i32 = self.pivots[PIVOTS.BOTTOM_RIGHT].y;
         self.draw_text(CONF.VERSION, ver_x, ver_y, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_SECONDARY);
     }
     fn draw_base_popup(self: *Fui, message: [:0]const u8, bg_color: u32) Rect {

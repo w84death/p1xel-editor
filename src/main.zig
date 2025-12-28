@@ -101,7 +101,7 @@ pub fn main() void {
         }
 
         // Quit
-        if (fui.button(fui.pivots[PIVOTS.TOP_RIGHT].x - 80, fui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_SECONDARY, mouse)) {
+        if (fui.button(fui.pivots[PIVOTS.TOP_RIGHT].x - 80, fui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_NORMAL, mouse)) {
             shouldClose = true;
         }
         // Version

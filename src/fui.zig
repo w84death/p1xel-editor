@@ -180,12 +180,12 @@ pub const Fui = struct {
     pub fn text_length(self: *Fui, s: []const u8, scale: i32) i32 {
         _ = self;
         const len: i32 = @intCast(s.len);
-        return len * scale * CONF.FONT_WIDTH;
+        return len * scale * CONF.FONT_WIDTH + (len - 2) * scale;
     }
     pub fn text_center(self: *Fui, s: []const u8, scale: i32) Vec2 {
         _ = self;
-        const size: i32 = @intCast(s.len);
-        return Vec2.init(@divFloor(size * scale * CONF.FONT_WIDTH, 2), @divFloor(scale * CONF.FONT_HEIGHT, 2));
+        const len: i32 = @intCast(s.len);
+        return Vec2.init(@divFloor(len * scale * CONF.FONT_WIDTH + (len - 2) * scale, 2), @divFloor(scale * CONF.FONT_HEIGHT, 2));
     }
     pub fn draw_cursor_lines(self: *Fui, mouse: Vec2) void {
         self.draw_line(mouse.x, 0, mouse.x, CONF.SCREEN_H, CONF.COLOR_CROSSHAIR);

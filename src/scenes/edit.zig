@@ -279,7 +279,7 @@ pub const EditScene = struct {
             }
         }
         if (self.palette.current[0] == 0) {
-            self.fui.draw_text("TRANSPARENT", swa_x, swa_y + swa_size + 32, 10, CONF.COLOR_PRIMARY);
+            self.fui.draw_text("TRANSPARENT", swa_x + 4, swa_y + 2 + swa_size + 32, CONF.FONT_SMOL, CONF.COLOR_PRIMARY);
         }
 
         // Swatches info

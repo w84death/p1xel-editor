@@ -197,6 +197,10 @@ pub const Tiles = struct {
                 self.fui.draw_rect_lines(x, tiles_y + y, size, size, DB16.LIGHT_GRAY);
             }
         }
+
+        if (self.fui.button(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y, 80, 32, "Close", CONF.COLOR_MENU_NORMAL, mouse)) {
+            return true;
+        }
         return null;
     }
 };

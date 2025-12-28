@@ -11,6 +11,8 @@ const State = @import("state.zig").State;
 const Tiles = @import("tiles.zig").Tiles;
 const Vfx = @import("vfx.zig").Vfx;
 const Fui = @import("fui.zig").Fui;
+const Vec2 = @import("math.zig").Vec2;
+const Mouse = @import("math.zig").Mouse;
 const MenuScene = @import("scenes/menu.zig").MenuScene;
 const EditScene = @import("scenes/edit.zig").EditScene;
 const AboutScene = @import("scenes/about.zig").AboutScene;
@@ -33,19 +35,45 @@ pub fn main() void {
     pal.loadPalettesFromFile();
     var tiles = Tiles.init(fui, &pal);
     tiles.loadTilesFromFile();
-    // var menu = MenuScene.init(fui, &sm);
+    var vfx = Vfx.init(fui);
+    var menu = MenuScene.init(fui, &sm);
+    var about = AboutScene.init(fui, &sm);
     // var edit = EditScene.init(fui, &sm, &pal, &tiles);
-    // const about = AboutScene.init(fui, &sm);
+    // To be ported
     // var tileset = TilesetScene.init(fui, &sm, &pal, &tiles, &edit);
-    // var vfx = try Vfx.init();
     // var preview = PreviewScene.init(fui, &sm, &edit, &pal, &tiles);
     // preview.loadPreviewFromFile();
 
-    const shouldClose = false;
+    var shouldClose = false;
+    var dt: f32 = 0.0;
     var now: i64 = c.fenster_time();
     while (!shouldClose and c.fenster_loop(&f) == 0) {
+        const d: f32 = @floatFromInt(c.fenster_time() - now);
+        dt = @as(f32, d / 1000.0);
+        now = c.fenster_time();
+
         sm.update();
         fui.clear_background(CONF.COLOR_BG);
+        switch (sm.current) {
+            State.main_menu, State.about => vfx.draw(CONF.VFX_SNOW_COLOR, dt),
+            else => {},
+        }
+        fui.draw_cursor_lines(Vec2.init(f.x, f.y));
+        const mouse = Mouse.init(f.x, f.y, f.mouse == 1);
+        switch (sm.current) {
+            State.main_menu => {
+                menu.draw(mouse);
+            },
+            State.editor => {
+                // edit.handleKeyboard();
+                // edit.handleMouse(mouse);
+                // try edit.draw(mouse);
+            },
+            State.about => {
+                about.draw(mouse);
+            },
+            else => {},
+        }
 
         if (f.keys[27] != 0) {
             break;
@@ -55,6 +83,12 @@ pub fn main() void {
         if (diff > 0) {
             c.fenster_sleep(diff);
         }
-        now = c.fenster_time();
+
+        // Quit
+        if (fui.button(fui.pivots[PIVOTS.TOP_RIGHT].x - 80, fui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_SECONDARY, mouse)) {
+            shouldClose = true;
+        }
+        // Version
+        fui.draw_version();
     }
 }

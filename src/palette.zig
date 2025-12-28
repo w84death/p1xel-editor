@@ -7,22 +7,22 @@ const Color = struct {
     a: u8,
 };
 pub const DB16 = struct {
-    pub const BLACK: u32 = 0xFF000000;
-    pub const DEEP_PURPLE: u32 = 0xFF342044;
-    pub const NAVY_BLUE: u32 = 0xFF6D3400;
-    pub const DARK_GRAY: u32 = 0xFF4E4A4E;
-    pub const BROWN: u32 = 0xFF304C85;
-    pub const DARK_GREEN: u32 = 0xFF246534;
-    pub const RED: u32 = 0xFF4846D0;
-    pub const LIGHT_GRAY: u32 = 0xFF617175;
-    pub const BLUE: u32 = 0xFFCE7D59;
-    pub const ORANGE: u32 = 0xFF2C7DD2;
-    pub const STEEL_BLUE: u32 = 0xFFA19585;
-    pub const GREEN: u32 = 0xFF2CAA6D;
-    pub const PINK_BEIGE: u32 = 0xFF99AAD2;
-    pub const CYAN: u32 = 0xFFCAC26D;
-    pub const YELLOW: u32 = 0xFF5ED4DA;
-    pub const WHITE: u32 = 0xFFD6EEDE;
+    pub const BLACK: u32 = 0xFF140C1C;
+    pub const DEEP_PURPLE: u32 = 0xFF442434;
+    pub const NAVY_BLUE: u32 = 0xFF30346D;
+    pub const DARK_GRAY: u32 = 0xFF4E4A4F;
+    pub const BROWN: u32 = 0xFF854C30;
+    pub const DARK_GREEN: u32 = 0xFF346524;
+    pub const RED: u32 = 0xFFD04648;
+    pub const LIGHT_GRAY: u32 = 0xFF757161;
+    pub const BLUE: u32 = 0xFF597DCE;
+    pub const ORANGE: u32 = 0xFFD27D2C;
+    pub const STEEL_BLUE: u32 = 0xFF8595A1;
+    pub const GREEN: u32 = 0xFF6DAA2C;
+    pub const PINK_BEIGE: u32 = 0xFFD2AA99;
+    pub const CYAN: u32 = 0xFF6DC2CA;
+    pub const YELLOW: u32 = 0xFFDAD45E;
+    pub const WHITE: u32 = 0xFFDEEED6;
 };
 
 pub const Palette = struct {

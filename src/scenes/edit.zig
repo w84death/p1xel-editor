@@ -214,7 +214,7 @@ pub const EditScene = struct {
                     const checker = (x + y) % 2 == 0;
                     color = if (checker) 0xFF111111 else 0xFF222222;
                 } else {
-                    color = self.palette.getColorFromIndex(db16_idx);
+                    color = self.palette.get_rgba_from_index(db16_idx);
                 }
                 self.fui.draw_rect(
                     self.canvas.x + xx,
@@ -269,7 +269,7 @@ pub const EditScene = struct {
             const index: u8 = @intCast(i);
             const db16_idx = self.palette.current[i];
 
-            if (self.fui.button(swa_x + x_shift, swa_y + 28, swa_size, swa_size, "", self.palette.getColorFromIndex(db16_idx), mouse) and !self.locked) {
+            if (self.fui.button(swa_x + x_shift, swa_y + 28, swa_size, swa_size, "", self.palette.get_rgba_from_index(db16_idx), mouse) and !self.locked) {
                 self.palette.swatch = index;
             }
 
@@ -337,7 +337,7 @@ pub const EditScene = struct {
         inline for (0..16) |i| {
             const x_shift: i32 = @intCast(@mod(i, colors_in_row) * (pal_size + 6));
             const iy: i32 = @divFloor(i, colors_in_row) * (pal_size + 6);
-            if (self.fui.button(pal_x + x_shift, pal_y + iy + 28, pal_size, pal_size, "", self.palette.getColorFromIndex(i), mouse) and !self.locked) {
+            if (self.fui.button(pal_x + x_shift, pal_y + iy + 28, pal_size, pal_size, "", self.palette.get_rgba_from_index(i), mouse) and !self.locked) {
                 self.palette.swapCurrentSwatch(i);
             }
         }
@@ -423,7 +423,7 @@ pub const EditScene = struct {
                         y + yy * scaled_grid_size,
                         scaled_grid_size,
                         scaled_grid_size,
-                        self.palette.getColorFromIndex(db16_idx),
+                        self.palette.get_rgba_from_index(db16_idx),
                     );
                 }
             }
@@ -447,7 +447,7 @@ pub const EditScene = struct {
             for (0..ppm.width) |x| {
                 const idx = self.canvas.data[y][x];
                 const db16_idx = self.palette.current[idx];
-                const color = self.palette.getColorFromIndex(db16_idx);
+                const color = self.palette.get_rgba_from_index(db16_idx);
                 const r: u8 = @truncate(color >> 16);
                 const g: u8 = @truncate(color >> 8);
                 const b: u8 = @truncate(color);

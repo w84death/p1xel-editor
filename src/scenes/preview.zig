@@ -163,8 +163,6 @@ pub const PreviewScene = struct {
         // Playground
         const px: i32 = self.tiles_area.x;
         const py: i32 = self.tiles_area.y;
-        const pw: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_W;
-        const ph: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_H;
         for (self.layers) |layer| {
             for (0..CONF.PREVIEW_H) |y| {
                 for (0..CONF.PREVIEW_W) |x| {
@@ -177,6 +175,8 @@ pub const PreviewScene = struct {
                 }
             }
         }
+        const pw: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_W;
+        const ph: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_H;
         self.fui.draw_rect_lines(px, py, pw, ph, DB16.STEEL_BLUE);
 
         // Popups

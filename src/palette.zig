@@ -35,7 +35,7 @@ pub const Palette = struct {
     pub fn init() Palette {
         return Palette{};
     }
-    pub fn getColorFromIndex(self: Palette, index: u8) u32 {
+    pub fn get_rgba_from_index(self: Palette, index: u8) u32 {
         _ = self;
         return switch (index) {
             0 => DB16.BLACK,

@@ -72,12 +72,11 @@ pub const TilesetScene = struct {
 
         const t_pos = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y + 64);
         const tiles_in_row: usize = 16;
-        const scale: i32 = 4;
         inline for (0..CONF.MAX_TILES) |i| {
-            const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
+            const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * (CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE + 12));
             const x: i32 = t_pos.x + x_shift;
-            const y: i32 = @divFloor(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12);
-            const size: i32 = CONF.SPRITE_SIZE * scale + 2;
+            const y: i32 = @divFloor(i, tiles_in_row) * (CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE + 12);
+            const size: i32 = CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE + 2;
             const fx: i32 = x;
             const fy: i32 = t_pos.y + y;
             if (i < self.tiles.count) {
@@ -86,7 +85,7 @@ pub const TilesetScene = struct {
 
                     self.edit.select();
                 }
-                self.tiles.draw(i, x + 1, t_pos.y + y + 1, scale);
+                self.tiles.draw(i, x + 1, t_pos.y + y + 1, CONF.PREVIEW_SCALE);
                 if (self.tiles.selected == i) {
                     self.fui.draw_rect_lines(x + 5, y + t_pos.y + 5, size - 8, size - 8, DB16.BLACK);
                     self.fui.draw_rect_lines(x + 4, y + t_pos.y + 4, size - 8, size - 8, DB16.WHITE);

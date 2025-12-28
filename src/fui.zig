@@ -35,16 +35,12 @@ pub const Fui = struct {
     }
     pub fn put_pixel(self: *Fui, x: i32, y: i32, color: u32) void {
         const index: usize = @intCast(y * CONF.SCREEN_W + x);
-        if (index > 0 and index < self.buf.len) {
-            self.buf[index] = color;
-        }
+        self.buf[index] = color;
     }
+
     pub fn get_pixel(self: *Fui, x: i32, y: i32) u32 {
         const index: u32 = @intCast(y * CONF.SCREEN_W + x);
-        if (index > 0 and index < self.buf.len) {
-            return self.buf[index];
-        }
-        return 0;
+        return self.buf[index];
     }
     pub fn clear_background(self: *Fui, color: u32) void {
         for (self.buf, 0..) |_, i| {

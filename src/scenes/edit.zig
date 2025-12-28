@@ -212,7 +212,7 @@ pub const EditScene = struct {
 
                 if (idx == 0 and self.palette.current[0] == 0) {
                     const checker = (x + y) % 2 == 0;
-                    color = if (checker) 0x11111170 else 0x22222270;
+                    color = if (checker) 0xFF111111 else 0xFF222222;
                 } else {
                     color = self.palette.getColorFromIndex(db16_idx);
                 }

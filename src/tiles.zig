@@ -12,12 +12,15 @@ pub const Tile = struct {
     h: f32,
     data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8,
     pal: u8,
+    pal32: [4]u32,
     pub fn init(data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8, pal: u8) Tile {
+        const p32: [4]u32 = .{ 0, 0, 0, 0 };
         return Tile{
             .w = CONF.SPRITE_SIZE,
             .h = CONF.SPRITE_SIZE,
             .data = data,
             .pal = pal,
+            .pal32 = p32,
         };
     }
 };
@@ -73,6 +76,7 @@ pub const Tiles = struct {
                 }
             }
             self.db[i] = Tile.init(tile_data, pal);
+            self.update_pal32(i);
         }
 
         self.updated = false;
@@ -96,24 +100,34 @@ pub const Tiles = struct {
         _ = try file.write(buf[0..total_bytes]);
         self.updated = false;
     }
+    pub fn update_pal32(self: *Tiles, index: usize) void {
+        const pal = self.db[index].pal;
+        self.db[index].pal32 = [_]u32{
+            self.palette.get_rgba_from_index(self.palette.db[pal][0]),
+            self.palette.get_rgba_from_index(self.palette.db[pal][1]),
+            self.palette.get_rgba_from_index(self.palette.db[pal][2]),
+            self.palette.get_rgba_from_index(self.palette.db[pal][3]),
+        };
+    }
+    pub fn draw(self: *Tiles, index: usize, x: i32, y: i322) void {
+        var base_index: usize = @intCast(y * CONF.SCREEN_W + x);
 
-    pub fn draw(self: *Tiles, index: usize, x: i32, y: i32, scale: i32) void {
         for (0..CONF.SPRITE_SIZE) |py| {
             for (0..CONF.SPRITE_SIZE) |px| {
-                const pal = self.db[index].pal;
                 const idx = self.db[index].data[py][px];
-                const db16_idx = self.palette.db[pal][idx];
-                const xx: i32 = @intCast(px);
-                const yy: i32 = @intCast(py);
-                if (db16_idx == 0 and idx == 0) continue;
-                self.fui.draw_rect(
-                    x + xx * scale,
-                    y + yy * scale,
-                    scale,
-                    scale,
-                    self.palette.get_rgba_from_index(db16_idx),
-                );
+                const color = self.db[index].pal32[idx];
+                if (idx == 0 and color == DB16.BLACK) {
+                    base_index += CONF.PREVIEW_SCALE;
+                    continue;
+                }
+                inline for (0..CONF.PREVIEW_SCALE) |dy| {
+                    inline for (0..CONF.PREVIEW_SCALE) |dx| {
+                        self.fui.buf[base_index + dy * CONF.SCREEN_W + dx] = color;
+                    }
+                }
+                base_index += CONF.PREVIEW_SCALE;
             }
+            base_index += CONF.SCREEN_W * CONF.PREVIEW_SCALE - CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE;
         }
     }
     pub fn newTile(self: *Tiles) !void {
@@ -123,13 +137,16 @@ pub const Tiles = struct {
                 data[y][x] = 0;
             }
         }
+
         self.db[self.count] = Tile.init(data, 0);
+        self.update_pal32(self.count);
         self.count += 1;
         self.updated = true;
     }
     pub fn duplicateTile(self: *Tiles, index: usize) void {
         const data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = self.db[index].data;
         self.db[self.count] = Tile.init(data, self.db[index].pal);
+        self.update_pal32(self.count);
         self.count += 1;
         self.updated = true;
     }
@@ -188,7 +205,7 @@ pub const Tiles = struct {
                     self.selected = i;
                     return true;
                 }
-                self.draw(i, x + 1, tiles_y + y + 1, scale);
+                self.draw(i, x + 1, tiles_y + y + 1);
                 if (self.selected == i) {
                     self.fui.draw_rect_lines(x + 5, y + tiles_y + 5, size - 8, size - 8, DB16.BLACK);
                     self.fui.draw_rect_lines(x + 4, y + tiles_y + 4, size - 8, size - 8, DB16.WHITE);

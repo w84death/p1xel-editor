@@ -107,7 +107,7 @@ pub fn main() void {
         // Version
         fui.draw_version();
 
-        const frame_time_target: f64 = 1000.0 / 60.0; // ~16.666 ms
+        const frame_time_target: f64 = 1000.0 / 30.0;
         const processing_time: f64 = @floatFromInt(c.fenster_time() - now);
         const sleep_ms: i64 = @intFromFloat(@max(0.0, frame_time_target - processing_time));
         if (sleep_ms > 0) {

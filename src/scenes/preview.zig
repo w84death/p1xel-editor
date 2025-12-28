@@ -142,7 +142,7 @@ pub const PreviewScene = struct {
             self.popup = Popup.select_tile;
             self.tiles.hot = true;
         }
-        self.tiles.draw(self.tiles.selected, tx + 1, ty + 1, 4);
+        self.tiles.draw(self.tiles.selected, tx + 1, ty + 1);
         self.fui.draw_rect_lines(tx, ty, CONF.SPRITE_SIZE * 4, CONF.SPRITE_SIZE * 4, DB16.STEEL_BLUE);
 
         // Layers
@@ -170,7 +170,7 @@ pub const PreviewScene = struct {
                     if (tile < 255) {
                         const xx: i32 = @intCast(x * CONF.PREVIEW_SIZE);
                         const yy: i32 = @intCast(y * CONF.PREVIEW_SIZE);
-                        self.tiles.draw(tile, px + xx, py + yy, CONF.PREVIEW_SCALE);
+                        self.tiles.draw(tile, px + xx, py + yy);
                     }
                 }
             }

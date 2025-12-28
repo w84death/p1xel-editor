@@ -2,7 +2,7 @@ const rl = @import("raylib");
 const DB16 = @import("palette.zig").DB16;
 
 pub const CONF = struct {
-    pub const VERSION = "alpha5";
+    pub const VERSION = "alpha6";
     pub const THE_NAME = "P1Xel Editor";
     pub const SCREEN_W = 1280;
     pub const SCREEN_H = 800;
@@ -38,7 +38,7 @@ pub const CONF = struct {
     pub const COLOR_POPUP_MSG = DB16.WHITE;
     pub const COLOR_SHADOW = DB16.BLACK;
     pub const COLOR_LIGHT = DB16.WHITE;
-    pub const COLOR_MENU_TEXT = DB16.BLACK;
+    pub const COLOR_MENU_TEXT = DB16.YELLOW;
     pub const COLOR_MENU_FRAME = DB16.LIGHT_GRAY;
     pub const COLOR_MENU_FRAME_HOVER = DB16.WHITE;
     pub const COLOR_MENU_NORMAL = DB16.LIGHT_GRAY;

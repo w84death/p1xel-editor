@@ -85,7 +85,7 @@ pub const TilesetScene = struct {
 
                     self.edit.select();
                 }
-                self.tiles.draw(i, x + 1, t_pos.y + y + 1, CONF.PREVIEW_SCALE);
+                self.tiles.draw(i, x + 1, t_pos.y + y + 1);
                 if (self.tiles.selected == i) {
                     self.fui.draw_rect_lines(x + 5, y + t_pos.y + 5, size - 8, size - 8, DB16.BLACK);
                     self.fui.draw_rect_lines(x + 4, y + t_pos.y + 4, size - 8, size - 8, DB16.WHITE);
@@ -101,7 +101,7 @@ pub const TilesetScene = struct {
             }
         }
 
-        const tools: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.BOTTOM_LEFT].x, self.fui.pivots[PIVOTS.BOTTOM_LEFT].y - 20);
+        const tools: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.BOTTOM_LEFT].x, self.fui.pivots[PIVOTS.BOTTOM_LEFT].y - 32);
         var tools_step = tools.x;
 
         if (self.fui.button(tools_step, tools.y, 160, 32, "Duplicate", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
@@ -113,15 +113,15 @@ pub const TilesetScene = struct {
                 self.tiles.shiftLeft(self.tiles.selected);
                 self.tiles.selected -= 1;
             }
-            tools_step += 168;
         }
+        tools_step += 168;
         if (self.tiles.selected < self.tiles.count - 1) {
             if (self.fui.button(tools_step, tools.y, 160, 32, "Shift right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
                 self.tiles.shiftRight(self.tiles.selected);
                 self.tiles.selected += 1;
             }
-            tools_step += 168;
         }
+        tools_step += 168;
         if (self.fui.button(tools_step, tools.y, 160, 32, "Delete tile", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.confirm_delete;

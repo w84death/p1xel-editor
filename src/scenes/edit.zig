@@ -50,8 +50,6 @@ pub const EditScene = struct {
     status_buffer: [256]u8 = undefined,
 
     pub fn init(fui: Fui, sm: *StateMachine, pal: *Palette, tiles: *Tiles) EditScene {
-        const ix: i32 = fui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X + 128;
-        const iy: i32 = fui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y;
         const p: *Palette = pal;
         p.index = tiles.db[0].pal;
         p.current = p.db[p.index];
@@ -61,8 +59,8 @@ pub const EditScene = struct {
             .canvas = Canvas{
                 .width = CONF.SPRITE_SIZE * CONF.GRID_SIZE,
                 .height = CONF.SPRITE_SIZE * CONF.GRID_SIZE,
-                .x = ix,
-                .y = iy,
+                .x = fui.pivots[PIVOTS.TOP_LEFT].x + CONF.CANVAS_X + 96,
+                .y = fui.pivots[PIVOTS.TOP_LEFT].y + CONF.CANVAS_Y,
                 .data = tiles.db[0].data,
             },
             .palette = p,
@@ -171,6 +169,7 @@ pub const EditScene = struct {
         if (self.fui.button(nav_step, nav.y, 160, 32, "Save tile", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.tiles.db[self.tiles.selected].data = self.canvas.data;
             self.tiles.db[self.tiles.selected].pal = self.palette.index;
+            self.tiles.update_pal32(self.tiles.selected);
             self.locked = true;
             self.tiles.saveTilesToFile() catch {
                 self.popup = Popup.info_save_fail;
@@ -248,15 +247,11 @@ pub const EditScene = struct {
         self.draw_preview(px, py, 4, DB16.BLACK, true);
         self.draw_preview(px + dw + 8, py, 4, DB16.WHITE, true);
         const till_x = px + dw + 16 + 8 * 16;
-        self.draw_preview(till_x, py, 8, DB16.BLACK, false);
-        self.draw_preview(till_x + 64, py, 8, DB16.BLACK, false);
-        self.draw_preview(till_x + 128, py, 8, DB16.BLACK, false);
-        self.draw_preview(till_x, py + 64, 8, DB16.BLACK, false);
-        self.draw_preview(till_x + 64, py + 64, 8, DB16.BLACK, false);
-        self.draw_preview(till_x + 128, py + 64, 8, DB16.BLACK, false);
-        self.draw_preview(till_x, py + 128, 8, DB16.BLACK, false);
-        self.draw_preview(till_x + 64, py + 128, 8, DB16.BLACK, false);
-        self.draw_preview(till_x + 128, py + 128, 8, DB16.BLACK, false);
+        inline for (0..3) |dx| {
+            inline for (0..3) |dy| {
+                self.draw_preview(till_x + @as(i32, dx) * 64, py + @as(i32, dy) * 64, 8, DB16.BLACK, false);
+            }
+        }
         self.fui.draw_rect_lines(till_x, py, 192, 192, DB16.STEEL_BLUE);
 
         // Swatches
@@ -290,20 +285,20 @@ pub const EditScene = struct {
         self.fui.draw_text(&status_buf, si_x, si_y, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
         si_x += 75;
         if (self.palette.count > 1) {
-            if (self.palette.swatch > 0) {
+            if (self.palette.index > 0) {
                 if (self.fui.button(si_x, si_y, 64, 24, "<", CONF.COLOR_OK, mouse) and !self.locked) {
                     self.palette.prevPalette();
                     self.needs_saving = true;
                 }
-                si_x += 64 + 8;
             }
-            if (self.palette.swatch < self.palette.count) {
-                if (self.palette.swatch < self.palette.count and self.fui.button(si_x, si_y, 64, 24, ">", CONF.COLOR_OK, mouse) and !self.locked) {
+            si_x += 64 + 8;
+            if (self.palette.index < self.palette.count - 1) {
+                if (self.fui.button(si_x, si_y, 64, 24, ">", CONF.COLOR_OK, mouse) and !self.locked) {
                     self.palette.nextPalette();
                     self.needs_saving = true;
                 }
-                si_x += 64 + 8;
             }
+            si_x += 64 + 8;
         }
 
         // Swatches options

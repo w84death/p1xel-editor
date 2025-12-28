@@ -94,7 +94,7 @@ pub const EditScene = struct {
     pub fn handleMouse(self: *EditScene, mouse: Mouse) void {
         if (self.locked) return;
 
-        if (self.sm.hot and mouse.click) {
+        if (self.sm.hot and !mouse.pressed) {
             self.sm.hot = false;
         } else if (self.sm.hot) {
             return;
@@ -105,7 +105,7 @@ pub const EditScene = struct {
         const mouse_cell_x: i32 = @divFloor(mx - self.canvas.x, CONF.GRID_SIZE);
         const mouse_cell_y: i32 = @divFloor(my - self.canvas.y, CONF.GRID_SIZE);
 
-        if (mouse.click) {
+        if (mouse.pressed) {
             const color: u8 = self.palette.swatch;
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.SPRITE_SIZE and
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.SPRITE_SIZE)

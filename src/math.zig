@@ -10,9 +10,9 @@ pub const Vec2 = struct {
 pub const Mouse = struct {
     x: i32,
     y: i32,
-    click: bool,
-    pub fn init(x: i32, y: i32, click: bool) Mouse {
-        return .{ .x = x, .y = y, .click = click };
+    pressed: bool,
+    pub fn init(x: i32, y: i32, pressed: bool) Mouse {
+        return .{ .x = x, .y = y, .pressed = pressed };
     }
 };
 pub const Rect = struct {

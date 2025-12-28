@@ -202,7 +202,7 @@ pub const Fui = struct {
         self.draw_rect_lines(x, y, w, h, hover_color);
         self.draw_text(label, text_x, text_y, CONF.FONT_DEFAULT_SIZE, if (hover) CONF.COLOR_MENU_FRAME_HOVER else CONF.COLOR_MENU_TEXT);
 
-        return mouse.click and hover;
+        return mouse.pressed and hover;
     }
     pub fn check_hover(self: *Fui, mouse: Mouse, target: Rect) bool {
         _ = self;

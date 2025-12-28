@@ -79,16 +79,16 @@ pub fn main() void {
             break;
         }
 
-        const diff: i64 = 1000 / 60 - (c.fenster_time() - now);
-        if (diff > 0) {
-            c.fenster_sleep(diff);
-        }
-
         // Quit
         if (fui.button(fui.pivots[PIVOTS.TOP_RIGHT].x - 80, fui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_SECONDARY, mouse)) {
             shouldClose = true;
         }
         // Version
         fui.draw_version();
+
+        const diff: i64 = 1000 / 60 - (c.fenster_time() - now);
+        if (diff > 0) {
+            c.fenster_sleep(diff);
+        }
     }
 }

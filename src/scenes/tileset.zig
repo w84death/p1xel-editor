@@ -58,7 +58,7 @@ pub const TilesetScene = struct {
         nav_step += 188 + 32;
         if (self.fui.button(nav_step, nav.y, 160, 32, "Save tiles", if (self.tiles.updated) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
-            self.tiles.saveTilesToFile() catch {
+            self.tiles.save_tileset_to_file() catch {
                 self.popup = Popup.info_save_fail;
                 return;
             };
@@ -93,7 +93,7 @@ pub const TilesetScene = struct {
             } else {
                 if (i == self.tiles.count) {
                     if (self.fui.button(x, t_pos.y + y, size, size, "+", CONF.COLOR_MENU_NORMAL, mouse)) {
-                        try self.tiles.newTile();
+                        try self.tiles.create_new();
                     }
                 } else {
                     self.fui.draw_rect_lines(x, t_pos.y + y, size, size, DB16.LIGHT_GRAY);
@@ -110,14 +110,14 @@ pub const TilesetScene = struct {
         tools_step += 168;
         if (self.tiles.selected > 0) {
             if (self.fui.button(tools_step, tools.y, 160, 32, "<< Shift left", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-                self.tiles.shiftLeft(self.tiles.selected);
+                self.tiles.shift_tile_left(self.tiles.selected);
                 self.tiles.selected -= 1;
             }
         }
         tools_step += 168;
         if (self.tiles.selected < self.tiles.count - 1) {
             if (self.fui.button(tools_step, tools.y, 160, 32, "Shift right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-                self.tiles.shiftRight(self.tiles.selected);
+                self.tiles.shift_tile_right(self.tiles.selected);
                 self.tiles.selected += 1;
             }
         }

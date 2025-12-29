@@ -37,7 +37,7 @@ pub fn main() void {
     var pal = Palette.init();
     pal.loadPalettesFromFile();
     var tiles = Tiles.init(fui, &pal);
-    tiles.loadTilesFromFile();
+    tiles.load_tileset_from_file();
     var vfx = Vfx.init(fui);
     var menu = MenuScene.init(fui, &sm);
     var about = AboutScene.init(fui, &sm);
@@ -82,19 +82,22 @@ pub fn main() void {
                 menu.draw(mouse);
             },
             State.editor => {
-                edit.handleKeyboard(&f.keys);
-                edit.handleMouse(mouse);
+                edit.handle_keyboard(&f.keys);
+                edit.handle_mouse(mouse);
                 try edit.draw(mouse);
             },
             State.tileset => {
                 try tileset.draw(mouse);
             },
             State.preview => {
-                preview.handleMouse(mouse);
+                preview.handle_mouse(mouse);
                 preview.draw(mouse);
             },
             State.about => {
                 about.draw(mouse);
+            },
+            State.quit => {
+                shouldClose = true;
             },
         }
 
@@ -103,8 +106,8 @@ pub fn main() void {
         }
 
         // Quit
-        if (fui.button(fui.pivots[PIVOTS.TOP_RIGHT].x - 80, fui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_NORMAL, mouse)) {
-            shouldClose = true;
+        if (!sm.is(State.main_menu) and fui.button(fui.pivots[PIVOTS.TOP_RIGHT].x - 80, fui.pivots[PIVOTS.TOP_RIGHT].y, 80, 32, "Quit", CONF.COLOR_MENU_NORMAL, mouse)) {
+            sm.goTo(State.quit);
         }
         // Version
         fui.draw_version();

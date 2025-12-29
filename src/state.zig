@@ -4,6 +4,7 @@ pub const State = enum {
     editor,
     preview,
     about,
+    quit,
 };
 pub const StateMachine = struct {
     current: State,

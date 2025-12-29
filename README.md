@@ -34,14 +34,14 @@ zig build run
 
 ## Build Small Binary
 
-Host Linux -> Linux.
+Host Linux -> **Linux 64**
 ```
 zig build \
   -Doptimize=ReleaseSmall \
   upx
 ```
 
-Host Linux -> Windows
+Host Linux -> **Windows 32**
 ``` 
 zig build \
   -Dtarget=x86-windows \

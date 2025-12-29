@@ -56,7 +56,7 @@ pub const PreviewScene = struct {
             .popup = Popup.none,
         };
     }
-    pub fn handleMouse(self: *PreviewScene, mouse: Mouse) void {
+    pub fn handle_mouse(self: *PreviewScene, mouse: Mouse) void {
         if (self.locked) return;
 
         if (self.sm.hot and !mouse.pressed) {
@@ -215,7 +215,7 @@ pub const PreviewScene = struct {
                     }
                 },
                 Popup.select_tile => {
-                    if (self.tiles.showTilesSelector(mouse)) |dismissed| {
+                    if (self.tiles.show_tiles_selector(mouse)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

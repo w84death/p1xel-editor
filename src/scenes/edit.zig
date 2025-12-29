@@ -73,7 +73,7 @@ pub const EditScene = struct {
             .tool = Tools.pixel,
         };
     }
-    pub fn handleKeyboard(self: *EditScene, keys: *[256]c_int) void {
+    pub fn handle_keyboard(self: *EditScene, keys: *[256]c_int) void {
         if (self.locked) return;
 
         for (0..256) |i| {
@@ -93,7 +93,7 @@ pub const EditScene = struct {
             }
         }
     }
-    pub fn handleMouse(self: *EditScene, mouse: Mouse) void {
+    pub fn handle_mouse(self: *EditScene, mouse: Mouse) void {
         if (self.locked) return;
 
         if (self.sm.hot and !mouse.pressed) {
@@ -172,7 +172,7 @@ pub const EditScene = struct {
             self.tiles.db[self.tiles.selected].pal = self.palette.index;
             self.tiles.update_pal32(self.tiles.selected);
             self.locked = true;
-            self.tiles.saveTilesToFile() catch {
+            self.tiles.save_tileset_to_file() catch {
                 self.popup = Popup.info_save_fail;
                 return;
             };
@@ -253,18 +253,17 @@ pub const EditScene = struct {
         }
 
         // Previews
+        // TODO: optimize previews
         const px = self.canvas.x + self.canvas.width + 24;
         const py = self.canvas.y;
-        const dw: i32 = @divFloor(self.canvas.height, 4);
-        self.draw_preview(px, py, 4, DB16.BLACK, true);
-        self.draw_preview(px + dw + 8, py, 4, DB16.WHITE, true);
-        const till_x = px + dw + 16 + 8 * 16;
+        self.draw_preview(px, py, 8, DB16.BLACK, true);
+        self.draw_preview(px, py + 8 + @divFloor(self.canvas.height, 8), 8, DB16.WHITE, true);
         inline for (0..3) |dx| {
             inline for (0..3) |dy| {
-                self.draw_preview(till_x + @as(i32, dx) * 64, py + @as(i32, dy) * 64, 8, DB16.BLACK, false);
+                self.draw_preview(px + 132 + @as(i32, dx) * 64, py + @as(i32, dy) * 64, 8, DB16.BLACK, false);
             }
         }
-        self.fui.draw_rect_lines(till_x, py, 192, 192, DB16.STEEL_BLUE);
+        self.fui.draw_rect_lines(px + 132, py, 192, 192, DB16.STEEL_BLUE);
 
         // Swatches
         const swa_x: i32 = px;
@@ -407,7 +406,7 @@ pub const EditScene = struct {
                     }
                 },
                 Popup.select_tile => {
-                    if (self.tiles.showTilesSelector(mouse)) |dismissed| {
+                    if (self.tiles.show_tiles_selector(mouse)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

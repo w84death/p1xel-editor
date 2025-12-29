@@ -43,7 +43,7 @@ pub const Tiles = struct {
             .updated = false,
         };
     }
-    pub fn loadTilesFromFile(self: *Tiles) void {
+    pub fn load_tileset_from_file(self: *Tiles) void {
         var example_data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = undefined;
         for (0..CONF.SPRITE_SIZE) |y| {
             for (0..CONF.SPRITE_SIZE) |x| {
@@ -81,7 +81,7 @@ pub const Tiles = struct {
 
         self.updated = false;
     }
-    pub fn saveTilesToFile(self: *Tiles) !void {
+    pub fn save_tileset_to_file(self: *Tiles) !void {
         const per_tile: usize = CONF.SPRITE_SIZE * CONF.SPRITE_SIZE + 1;
         const total_bytes = self.count * per_tile;
         var buf: [CONF.MAX_TILES * per_tile]u8 = undefined;
@@ -130,7 +130,7 @@ pub const Tiles = struct {
             base_index += CONF.SCREEN_W * CONF.PREVIEW_SCALE - CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE;
         }
     }
-    pub fn newTile(self: *Tiles) !void {
+    pub fn create_new(self: *Tiles) !void {
         var data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = undefined;
         for (0..CONF.SPRITE_SIZE) |y| {
             for (0..CONF.SPRITE_SIZE) |x| {
@@ -162,7 +162,7 @@ pub const Tiles = struct {
         self.updated = true;
         return;
     }
-    pub fn shiftLeft(self: *Tiles, index: usize) void {
+    pub fn shift_tile_left(self: *Tiles, index: usize) void {
         if (index > 0 and index < self.count) {
             const temp = self.db[index];
             self.db[index] = self.db[index - 1];
@@ -170,7 +170,7 @@ pub const Tiles = struct {
             self.updated = true;
         }
     }
-    pub fn shiftRight(self: *Tiles, index: usize) void {
+    pub fn shift_tile_right(self: *Tiles, index: usize) void {
         if (index >= 0 and index < self.count - 1) {
             const temp = self.db[index];
             self.db[index] = self.db[index + 1];
@@ -178,7 +178,7 @@ pub const Tiles = struct {
             self.updated = true;
         }
     }
-    pub fn showTilesSelector(self: *Tiles, mouse: Mouse) ?bool {
+    pub fn show_tiles_selector(self: *Tiles, mouse: Mouse) ?bool {
         if (self.hot and !mouse.pressed) {
             self.hot = false;
         } else if (self.hot) {

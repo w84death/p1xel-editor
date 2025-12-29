@@ -13,6 +13,7 @@ pub const Tile = struct {
     data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8,
     pal: u8,
     pal32: [4]u32,
+    page: u8,
     pub fn init(data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8, pal: u8) Tile {
         const p32: [4]u32 = .{ 0, 0, 0, 0 };
         return Tile{
@@ -21,6 +22,7 @@ pub const Tile = struct {
             .data = data,
             .pal = pal,
             .pal32 = p32,
+            .page = 0,
         };
     }
 };
@@ -109,9 +111,8 @@ pub const Tiles = struct {
             self.palette.get_rgba_from_index(self.palette.db[pal][3]),
         };
     }
-    pub fn draw(self: *Tiles, index: usize, x: i32, y: i322) void {
+    pub fn draw(self: *Tiles, index: usize, x: i32, y: i32) void {
         var base_index: usize = @intCast(y * CONF.SCREEN_W + x);
-
         for (0..CONF.SPRITE_SIZE) |py| {
             for (0..CONF.SPRITE_SIZE) |px| {
                 const idx = self.db[index].data[py][px];
@@ -137,13 +138,12 @@ pub const Tiles = struct {
                 data[y][x] = 0;
             }
         }
-
         self.db[self.count] = Tile.init(data, 0);
         self.update_pal32(self.count);
         self.count += 1;
         self.updated = true;
     }
-    pub fn duplicateTile(self: *Tiles, index: usize) void {
+    pub fn duplicate_tile(self: *Tiles, index: usize) void {
         const data: [CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8 = self.db[index].data;
         self.db[self.count] = Tile.init(data, self.db[index].pal);
         self.update_pal32(self.count);
@@ -184,37 +184,34 @@ pub const Tiles = struct {
         } else if (self.hot) {
             return null;
         }
-
-        const tiles_in_row: usize = 16;
-        const scale: i32 = 4;
-        const w: i32 = tiles_in_row * (CONF.SPRITE_SIZE * scale + 12);
-        const h: i32 = @divFloor(CONF.MAX_TILES, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12);
-        const t_pos = Vec2.init(self.fui.pivots[PIVOTS.CENTER].x - w / 2, self.fui.pivots[PIVOTS.CENTER].y - h / 2);
-        const tiles_x: i32 = t_pos.x;
-        const tiles_y: i32 = t_pos.y;
-
-        self.fui.draw_rect(t_pos.x - 12, t_pos.y - 12, w + 24, h + 24, CONF.COLOR_POPUP);
-
-        inline for (0..CONF.MAX_TILES) |i| {
-            const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12));
-            const x: i32 = tiles_x + x_shift;
-            const y: i32 = @divFloor(i, tiles_in_row) * (CONF.SPRITE_SIZE * scale + 12);
-            const size: i32 = CONF.SPRITE_SIZE * scale + 2;
+        const tiles_in_row: i32 = 8;
+        const size: i32 = CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE + 4;
+        const tiles_first: usize = 0;
+        const tiles_last: usize = CONF.MAX_TILES / 2;
+        const t_pos = Vec2.init(
+            self.fui.pivots[PIVOTS.CENTER].x - (tiles_in_row * size) / 2,
+            self.fui.pivots[PIVOTS.CENTER].y - (tiles_in_row * size) / 2,
+        );
+        self.fui.draw_rect(t_pos.x, t_pos.y, (tiles_in_row * size), (tiles_in_row * size), CONF.COLOR_POPUP);
+        for (tiles_first..tiles_last) |i| {
+            const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * size);
+            const x: i32 = t_pos.x + x_shift;
+            const ii: i32 = @intCast(i);
+            const y: i32 = @divFloor(ii, tiles_in_row) * size;
             if (i < self.count) {
-                if (self.fui.button(x, tiles_y + y, size, size, "", DB16.BLACK, mouse)) {
-                    self.selected = i;
+                if (self.fui.button(x, t_pos.y + y, size, size, "", DB16.BLACK, mouse)) {
+                    self.selected = @intCast(ii);
                     return true;
                 }
-                self.draw(i, x + 1, tiles_y + y + 1);
+                self.draw(i, x + 1, t_pos.y + y + 1);
                 if (self.selected == i) {
-                    self.fui.draw_rect_lines(x + 5, y + tiles_y + 5, size - 8, size - 8, DB16.BLACK);
-                    self.fui.draw_rect_lines(x + 4, y + tiles_y + 4, size - 8, size - 8, DB16.WHITE);
+                    self.fui.draw_rect_lines(x + 5, y + t_pos.y + 5, size - 8, size - 8, DB16.BLACK);
+                    self.fui.draw_rect_lines(x + 4, y + t_pos.y + 4, size - 8, size - 8, DB16.WHITE);
                 }
             } else {
-                self.fui.draw_rect_lines(x, tiles_y + y, size, size, DB16.LIGHT_GRAY);
+                self.fui.draw_rect_lines(x, t_pos.y + y, size, size, DB16.LIGHT_GRAY);
             }
         }
-
         if (self.fui.button(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y, 80, 32, "Close", CONF.COLOR_MENU_NORMAL, mouse)) {
             return true;
         }

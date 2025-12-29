@@ -187,7 +187,7 @@ pub const PreviewScene = struct {
 
         // Popups
         if (self.popup != Popup.none) {
-            self.fui.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, CONF.POPUP_BG_ALPHA);
+            self.fui.draw_rect_trans(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, CONF.POPUP_BG_ALPHA);
             switch (self.popup) {
                 Popup.info_not_implemented => {
                     if (self.fui.info_popup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {

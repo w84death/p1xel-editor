@@ -103,7 +103,7 @@ pub const TilesetScene = struct {
         var tools_step = tools.x;
 
         if (self.fui.button(tools_step, tools.y, 160, 32, "Duplicate", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.tiles.duplicateTile(self.tiles.selected);
+            self.tiles.duplicate_tile(self.tiles.selected);
         }
         tools_step += 168;
         if (self.tiles.selected > 0) {

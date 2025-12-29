@@ -211,29 +211,36 @@ pub const EditScene = struct {
         if (self.fui.button(tx, ty, 64, 64, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.tool = Tools.fill;
         }
+        ty += 72;
+        if (self.fui.button(tx, ty, 64, 64, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
+            self.locked = true;
+            self.popup = Popup.confirm_clear;
+        }
 
         // Canvas
-        for (0..CONF.SPRITE_SIZE) |y| {
-            for (0..CONF.SPRITE_SIZE) |x| {
-                const idx = self.canvas.data[y][x];
-                const db16_idx = self.palette.current[idx];
-                const xx: i32 = @intCast(x * CONF.GRID_SIZE);
-                const yy: i32 = @intCast(y * CONF.GRID_SIZE);
-                var color: u32 = undefined;
+        if (!self.locked) {
+            for (0..CONF.SPRITE_SIZE) |y| {
+                for (0..CONF.SPRITE_SIZE) |x| {
+                    const idx = self.canvas.data[y][x];
+                    const db16_idx = self.palette.current[idx];
+                    const xx: i32 = @intCast(x * CONF.GRID_SIZE);
+                    const yy: i32 = @intCast(y * CONF.GRID_SIZE);
+                    var color: u32 = undefined;
 
-                if (idx == 0 and self.palette.current[0] == 0) {
-                    const checker = (x + y) % 2 == 0;
-                    color = if (checker) 0xFF111111 else 0xFF222222;
-                } else {
-                    color = self.palette.get_rgba_from_index(db16_idx);
+                    if (idx == 0 and self.palette.current[0] == 0) {
+                        const checker = (x + y) % 2 == 0;
+                        color = if (checker) 0xFF111111 else 0xFF222222;
+                    } else {
+                        color = self.palette.get_rgba_from_index(db16_idx);
+                    }
+                    self.fui.draw_rect(
+                        self.canvas.x + xx,
+                        self.canvas.y + yy,
+                        CONF.GRID_SIZE,
+                        CONF.GRID_SIZE,
+                        color,
+                    );
                 }
-                self.fui.draw_rect(
-                    self.canvas.x + xx,
-                    self.canvas.y + yy,
-                    CONF.GRID_SIZE,
-                    CONF.GRID_SIZE,
-                    color,
-                );
             }
         }
         self.fui.draw_rect_lines(
@@ -243,31 +250,21 @@ pub const EditScene = struct {
             self.canvas.height,
             DB16.STEEL_BLUE,
         );
-        const clear_pos: Vec2 = Vec2.init(
-            self.canvas.x + CONF.SPRITE_SIZE * CONF.GRID_SIZE - 160,
-            self.canvas.y + CONF.SPRITE_SIZE * CONF.GRID_SIZE + 8,
-        );
-        if (self.fui.button(clear_pos.x, clear_pos.y, 160, 32, "Clear canvas", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.confirm_clear;
-        }
 
         // Previews
-        // TODO: optimize previews
         const px = self.canvas.x + self.canvas.width + 24;
         const py = self.canvas.y;
-        self.draw_preview(px, py, 8, DB16.BLACK, true);
-        self.draw_preview(px, py + 8 + @divFloor(self.canvas.height, 8), 8, DB16.WHITE, true);
-        inline for (0..3) |dx| {
-            inline for (0..3) |dy| {
-                self.draw_preview(px + 132 + @as(i32, dx) * 64, py + @as(i32, dy) * 64, 8, DB16.BLACK, false);
+        if (!self.locked) {
+            inline for (0..3) |dx| {
+                inline for (0..3) |dy| {
+                    self.draw_tiled_live(px + @as(i32, dx) * 64, py + @as(i32, dy) * 64);
+                }
             }
         }
-        self.fui.draw_rect_lines(px + 132, py, 192, 192, DB16.STEEL_BLUE);
-
+        self.fui.draw_rect_lines(px, py, 192, 192, DB16.STEEL_BLUE);
         // Swatches
         const swa_x: i32 = px;
-        const swa_y: i32 = py + 160;
+        const swa_y: i32 = py + 216;
         const swa_size: i32 = 48;
         self.fui.draw_text("ACTIVE SWATCHES", swa_x, swa_y, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
         inline for (0..4) |i| {
@@ -356,7 +353,7 @@ pub const EditScene = struct {
 
         // Popups
         if (self.popup != Popup.none) {
-            self.fui.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, CONF.POPUP_BG_ALPHA);
+            self.fui.draw_rect_trans(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, CONF.POPUP_BG_ALPHA);
             switch (self.popup) {
                 Popup.info_not_implemented => {
                     if (self.fui.info_popup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {
@@ -420,32 +417,30 @@ pub const EditScene = struct {
         }
     }
 
-    fn draw_preview(self: *EditScene, x: i32, y: i32, down_scale: i32, background: u32, frame: bool) void {
-        const w: i32 = @divFloor(self.canvas.width, down_scale);
-        const h: i32 = @divFloor(self.canvas.height, down_scale);
-        self.fui.draw_rect(x, y, w, h, background);
-
+    fn draw_tiled_live(self: *EditScene, x: i32, y: i32) void {
+        const scale = CONF.PREVIEW_SCALE;
         for (0..CONF.SPRITE_SIZE) |py| {
-            for (0..CONF.SPRITE_SIZE) |px| {
+            const yy: i32 = @intCast(py);
+            inline for (0..CONF.SPRITE_SIZE) |px| {
+                const xx: i32 = @intCast(px);
                 const idx = self.canvas.data[py][px];
                 const db16_idx = self.palette.current[idx];
-                const scaled_grid_size: i32 = @divFloor(CONF.GRID_SIZE, down_scale);
-                const xx: i32 = @intCast(px);
-                const yy: i32 = @intCast(py);
-
-                if (!(idx == 0 and self.palette.current[0] == 0)) {
-                    self.fui.draw_rect(
-                        x + xx * scaled_grid_size,
-                        y + yy * scaled_grid_size,
-                        scaled_grid_size,
-                        scaled_grid_size,
-                        self.palette.get_rgba_from_index(db16_idx),
-                    );
+                const color = self.palette.get_rgba_from_index(db16_idx);
+                inline for (0..2) |i| {
+                    const ii: i32 = @intCast(i);
+                    inline for (0..2) |j| {
+                        const jj: i32 = @intCast(j);
+                        self.fui.draw_rect(
+                            x + jj + xx * scale,
+                            y + ii + yy * scale,
+                            scale,
+                            scale,
+                            color,
+                        );
+                    }
                 }
             }
         }
-
-        if (frame) self.fui.draw_rect_lines(x, y, w, h, DB16.STEEL_BLUE);
     }
 
     fn export_to_ppm(self: *EditScene) !void {

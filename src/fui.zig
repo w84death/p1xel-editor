@@ -112,6 +112,50 @@ pub const Fui = struct {
             }
         }
     }
+    pub fn draw_rect_trans(self: *Fui, x: i32, y: i32, w: i32, h: i32, color: u32) void {
+        if (w <= 0 or h <= 0) return;
+
+        var rx = x;
+        var ry = y;
+        var rw = w;
+        var rh = h;
+
+        // Crop left
+        if (rx < 0) {
+            rw += rx;
+            rx = 0;
+        }
+        // Crop top
+        if (ry < 0) {
+            rh += ry;
+            ry = 0;
+        }
+        // Crop right
+        if (rx + rw > CONF.SCREEN_W) {
+            rw = CONF.SCREEN_W - rx;
+        }
+        // Crop bottom
+        if (ry + rh > CONF.SCREEN_H) {
+            rh = CONF.SCREEN_H - ry;
+        }
+
+        if (rw <= 0 or rh <= 0) return;
+
+        const ix: u32 = @intCast(rx);
+        const iy: u32 = @intCast(ry);
+        const iw: u32 = @intCast(rw);
+        const ih: u32 = @intCast(rh);
+
+        for (iy..(iy + ih)) |row| {
+            for (ix..(ix + iw)) |col| {
+                const local_row = row - iy;
+                const local_col = col - ix;
+                if (local_row % 2 == local_col % 2) {
+                    self.put_pixel(@intCast(col), @intCast(row), color);
+                }
+            }
+        }
+    }
     pub fn draw_rect_lines(self: *Fui, x: i32, y: i32, w: i32, h: i32, color: u32) void {
         if (w <= 0 or h <= 0) return;
         self.draw_line(x, y, x + w - 1, y, color);
@@ -194,7 +238,7 @@ pub const Fui = struct {
         const text_x: i32 = x + @divFloor(w, 2) - text_cener.x;
         const text_y: i32 = y + @divFloor(h, 2) - text_cener.y;
 
-        self.draw_rect(x + CONF.SHADOW, y + CONF.SHADOW, w, h, CONF.COLOR_SHADOW);
+        // self.draw_rect(x + CONF.SHADOW, y + CONF.SHADOW, w, h, CONF.COLOR_SHADOW);
         self.draw_rect(x, y, w, h, color);
         self.draw_rect_lines(x, y, w, h, hover_color);
         self.draw_text(label, text_x, text_y, CONF.FONT_DEFAULT_SIZE, if (hover) CONF.COLOR_MENU_FRAME_HOVER else CONF.COLOR_MENU_TEXT);

@@ -228,8 +228,8 @@ pub const EditScene = struct {
                     if (idx == 0 and self.palette.current[0] == 0) {
                         const checker = (x + y) % 2 == 0;
                         switch (self.bg_type) {
-                            BackgroundType.light => color = if (checker) 0xFF111111 else 0xFF222222,
-                            BackgroundType.dark => color = if (checker) 0xFFAAAAAA else 0xFFCCCCCC,
+                            BackgroundType.dark => color = if (checker) 0xFF111111 else 0xFF222222,
+                            BackgroundType.light => color = if (checker) 0xFFAAAAAA else 0xFFCCCCCC,
                         }
                     } else {
                         color = self.palette.get_rgba_from_index(db16_idx);
@@ -253,10 +253,10 @@ pub const EditScene = struct {
         );
         const yy: i32 = @intCast(CONF.SPRITE_SIZE * CONF.GRID_SIZE);
 
-        if (self.fui.button(self.canvas.x, self.canvas.y + yy + 24, 64, 64, "Light", DB16.WHITE, mouse)) {
+        if (self.fui.button(self.canvas.x, self.canvas.y + yy + 24, 160, 32, "Light", DB16.WHITE, mouse)) {
             self.bg_type = BackgroundType.light;
         }
-        if (self.fui.button(self.canvas.x + 70, self.canvas.y + yy + 24, 64, 64, "Dark", DB16.BLACK, mouse)) {
+        if (self.fui.button(self.canvas.x + 168, self.canvas.y + yy + 24, 160, 32, "Dark", DB16.BLACK, mouse)) {
             self.bg_type = BackgroundType.dark;
         }
 

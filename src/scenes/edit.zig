@@ -162,7 +162,7 @@ pub const EditScene = struct {
         // Navigation (top)
         self.draw_nav(mouse);
         // Tile
-        const tx: i32 = self.canvas.x - 88;
+        var tx: i32 = self.canvas.x - 88;
         var ty: i32 = self.canvas.y;
         if (self.fui.button(tx, ty, 64, 64, "", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
@@ -172,21 +172,31 @@ pub const EditScene = struct {
         self.tiles.draw(self.tiles.selected, tx + 1, ty + 1);
         self.fui.draw_rect_lines(tx, ty, CONF.SPRITE_SIZE * 4, CONF.SPRITE_SIZE * 4, DB16.STEEL_BLUE);
         ty += 64 + 32;
-
+        tx -= 64;
         // Tools
-        self.fui.draw_text("Tools", tx - 64, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+        self.fui.draw_text("Tools", tx, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
         ty += 28;
-        if (self.fui.button(tx - 64, ty, 128, 40, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+        if (self.fui.button(tx, ty, 128, 40, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.tool = Tools.pixel;
         }
         ty += 50;
-        if (self.fui.button(tx - 64, ty, 128, 40, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+        if (self.fui.button(tx, ty, 128, 40, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.tool = Tools.fill;
         }
         ty += 50;
-        if (self.fui.button(tx - 64, ty, 128, 40, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
+        if (self.fui.button(tx, ty, 128, 40, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.confirm_clear;
+        }
+        ty += 80;
+        self.fui.draw_text("Backplate", tx, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+        ty += 28;
+        if (self.fui.button(tx, ty, 128, 32, "Light", if (self.bg_type == BackgroundType.light) CONF.COLOR_MENU_SECONDARY else CONF.COLOR_MENU_NORMAL, mouse)) {
+            self.bg_type = BackgroundType.light;
+        }
+        ty += 50;
+        if (self.fui.button(tx, ty, 128, 32, "Dark", if (self.bg_type == BackgroundType.dark) CONF.COLOR_MENU_SECONDARY else CONF.COLOR_MENU_NORMAL, mouse)) {
+            self.bg_type = BackgroundType.dark;
         }
 
         // Canvas
@@ -225,14 +235,6 @@ pub const EditScene = struct {
             self.canvas.height,
             DB16.STEEL_BLUE,
         );
-        const yy: i32 = @intCast(CONF.SPRITE_SIZE * CONF.GRID_SIZE);
-
-        if (self.fui.button(self.canvas.x, self.canvas.y + yy + 24, 160, 32, "Light", if (self.bg_type == BackgroundType.light) CONF.COLOR_MENU_SECONDARY else CONF.COLOR_MENU_NORMAL, mouse)) {
-            self.bg_type = BackgroundType.light;
-        }
-        if (self.fui.button(self.canvas.x + 168, self.canvas.y + yy + 24, 160, 32, "Dark", if (self.bg_type == BackgroundType.dark) CONF.COLOR_MENU_SECONDARY else CONF.COLOR_MENU_NORMAL, mouse)) {
-            self.bg_type = BackgroundType.dark;
-        }
 
         // Previews
         const px = self.canvas.x + self.canvas.width + 24;

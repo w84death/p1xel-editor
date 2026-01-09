@@ -49,24 +49,6 @@ pub const TilesetScene = struct {
         // Navigation (top)
         self.nav.draw(mouse);
 
-        // options
-        const options_x: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].x;
-        var options_y: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 64;
-
-        if (self.fui.button(options_x - 180, options_y, 180, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
-            self.nav.locked = true;
-            self.tiles.save_tileset_to_file() catch {
-                self.popup = Popup.info_save_fail;
-                return;
-            };
-            self.popup = Popup.info_save_ok;
-        }
-        options_y += 40;
-        if (self.fui.button(options_x - 180, options_y, 180, 32, "Export ASM", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
-            self.nav.locked = true;
-            self.popup = Popup.info_not_implemented;
-        }
-
         const t_pos = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y + 64);
         const tiles_in_row: usize = 16;
         const size: i32 = CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE + 2;
@@ -105,16 +87,16 @@ pub const TilesetScene = struct {
         }
         tools_step += 188;
         self.fui.draw_text("Shift tile:", tools_step, tools.y - 20, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
-        if (self.tiles.selected > 0) {
-            if (self.fui.button(tools_step, tools.y, 160, 32, "<< Left", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+        if (self.fui.button(tools_step, tools.y, 160, 32, "<< Left", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            if (self.tiles.selected > 0) {
                 self.tiles.shift_tile_left(self.tiles.selected);
                 self.tiles.selected -= 1;
                 self.needs_saving = true;
             }
         }
         tools_step += 168;
-        if (self.tiles.selected < self.tiles.count - 1) {
-            if (self.fui.button(tools_step, tools.y, 160, 32, "Right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+        if (self.fui.button(tools_step, tools.y, 160, 32, "Right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            if (self.tiles.selected < self.tiles.count - 1) {
                 self.tiles.shift_tile_right(self.tiles.selected);
                 self.tiles.selected += 1;
                 self.needs_saving = true;
@@ -125,7 +107,20 @@ pub const TilesetScene = struct {
             self.nav.locked = true;
             self.popup = Popup.confirm_delete;
         }
-
+        tools_step += 188;
+        if (self.fui.button(tools_step, tools.y, 180, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
+            self.tiles.save_tileset_to_file() catch {
+                self.popup = Popup.info_save_fail;
+                return;
+            };
+            self.popup = Popup.info_save_ok;
+        }
+        tools_step += 188;
+        if (self.fui.button(tools_step, tools.y, 220, 32, "Export ASM", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
+            self.popup = Popup.info_not_implemented;
+        }
         // Popups
         if (self.popup != Popup.none) {
             self.fui.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, CONF.POPUP_BG_ALPHA);

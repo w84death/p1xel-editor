@@ -2,6 +2,7 @@ pub const State = enum {
     main_menu,
     tileset,
     editor,
+    palettes,
     preview,
     about,
     quit,

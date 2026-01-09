@@ -162,6 +162,10 @@ pub const Fui = struct {
         self.draw_line(x, y, x, y + h - 1, color);
         self.draw_line(x + w - 1, y, x + w - 1, y + h - 1, color);
     }
+    pub fn draw_hline(self: *Fui, x: i32, y: i32, w: i32, color: u32) void {
+        if (w <= 0) return;
+        self.draw_line(x, y, x + w - 1, y, color);
+    }
     pub fn draw_circle(self: *Fui, x: i32, y: i32, r: u32, color: u32) void {
         const rr = @as(i64, r) * r;
         const ir: i32 = @intCast(r);

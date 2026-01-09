@@ -160,33 +160,7 @@ pub const EditScene = struct {
     }
     pub fn draw(self: *EditScene, mouse: Mouse) !void {
         // Navigation (top)
-        const nav: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y);
-        var nav_step = nav.x;
-        if (self.fui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
-            self.sm.goTo(State.main_menu);
-        }
-        nav_step += 128 + 32;
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Tileset", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.sm.goTo(State.tileset);
-        }
-        nav_step += 188;
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Preview", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.sm.goTo(State.preview);
-        }
-        nav_step += 188 + 32;
-        if (self.fui.button(nav_step, nav.y, 160, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.save_tiles();
-        }
-        nav_step += 168;
-        if (self.fui.button(nav_step, nav.y, 240, 32, "Export PPM", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
-            self.export_to_ppm() catch {
-                self.popup = Popup.info_save_fail;
-                return;
-            };
-            self.popup = Popup.info_save_ok;
-        }
-
+        self.draw_nav(mouse);
         // Tile
         const tx: i32 = self.canvas.x - 88;
         var ty: i32 = self.canvas.y;
@@ -200,17 +174,17 @@ pub const EditScene = struct {
         ty += 64 + 32;
 
         // Tools
-        self.fui.draw_text("Tools", tx, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+        self.fui.draw_text("Tools", tx - 64, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
         ty += 28;
-        if (self.fui.button(tx, ty, 64, 64, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+        if (self.fui.button(tx - 64, ty, 128, 40, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.tool = Tools.pixel;
         }
-        ty += 72;
-        if (self.fui.button(tx, ty, 64, 64, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+        ty += 50;
+        if (self.fui.button(tx - 64, ty, 128, 40, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.tool = Tools.fill;
         }
-        ty += 72;
-        if (self.fui.button(tx, ty, 64, 64, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
+        ty += 50;
+        if (self.fui.button(tx - 64, ty, 128, 40, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
             self.locked = true;
             self.popup = Popup.confirm_clear;
         }
@@ -321,9 +295,9 @@ pub const EditScene = struct {
         // Swatches options
         var so_x: i32 = swa_x;
         const so_y: i32 = swa_y + 132;
-        if (self.palette.count > 1 and self.fui.button(so_x, so_y, 140, 32, "Delete", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
+        if (self.fui.button(so_x, so_y, 280, 32, "Manage swatches", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
-            self.popup = Popup.confirm_del;
+            self.popup = Popup.info_not_implemented;
         }
         so_x += 148;
 
@@ -346,13 +320,30 @@ pub const EditScene = struct {
         const pal_y: i32 = swa_y + 200;
         const pal_size: i32 = 32;
         self.fui.draw_text("DB16 Palette", pal_x, pal_y, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
-        const colors_in_row: usize = 4;
+        const colors_in_row: usize = 8;
         inline for (0..16) |i| {
             const x_shift: i32 = @intCast(@mod(i, colors_in_row) * (pal_size + 6));
             const iy: i32 = @divFloor(i, colors_in_row) * (pal_size + 6);
             if (self.fui.button(pal_x + x_shift, pal_y + iy + 28, pal_size, pal_size, "", self.palette.get_rgba_from_index(i), mouse) and !self.locked) {
                 self.palette.update_current_swatch(i);
             }
+        }
+
+        const options_x: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].x;
+        var options_y: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 48;
+
+
+        if (self.fui.button(options_x - 160, options_y, 160, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.save_tiles();
+        }
+        options_y += 40;
+        if (self.fui.button(options_x - 240, options_y, 240, 32, "Export PPM", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.locked = true;
+            self.export_to_ppm() catch {
+                self.popup = Popup.info_save_fail;
+                return;
+            };
+            self.popup = Popup.info_save_ok;
         }
 
         // Footer
@@ -424,6 +415,45 @@ pub const EditScene = struct {
                 },
                 else => {},
             }
+        }
+    }
+    fn draw_nav(self: *EditScene, mouse: Mouse) void {
+        const button_w: i32 = 180;
+        const button_h: i32 = 32;
+        const gap: i32 = 32;
+        const nav_w: i32 = CONF.SCREEN_W;
+        const nav_h: i32 = 64;
+        const nav: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y);
+        self.fui.draw_rect(0, 0, nav_w, nav_h, CONF.COLOR_NAV_BG);
+        self.fui.draw_hline(0, nav_h, nav_w, CONF.COLOR_NAV_FRAME);
+        const NavButton = struct {
+            label: [:0]const u8,
+            state: State,
+            width: i32,
+            special: bool,
+        };
+        const buttons = [_]NavButton{
+            .{ .label = "< Menu", .state = State.main_menu, .width = button_w - 32, .special = false },
+            .{ .label = "Editor", .state = State.editor, .width = button_w, .special = true },
+            .{ .label = "Tileset", .state = State.tileset, .width = button_w, .special = false },
+            .{ .label = "Palettes", .state = State.palettes, .width = button_w, .special = false },
+            .{ .label = "Preview", .state = State.preview, .width = button_w, .special = false },
+        };
+        var nav_step = nav.x;
+        for (buttons) |btn| {
+            if (btn.special and self.sm.is(btn.state)) {
+                self.fui.draw_rect(nav_step - 16, nav.y - 12, btn.width + 32, button_h + 24, CONF.COLOR_BG);
+            }
+            var color: u32 = undefined;
+            if (self.sm.is(btn.state)) {
+                color = CONF.COLOR_MENU_SECONDARY;
+            } else {
+                color = CONF.COLOR_MENU_NORMAL;
+            }
+            if (self.fui.button(nav_step, nav.y, btn.width, button_h, btn.label, color, mouse) and !self.locked) {
+                self.sm.goTo(btn.state);
+            }
+            nav_step += btn.width + gap;
         }
     }
     fn save_tiles(self: *EditScene) void {

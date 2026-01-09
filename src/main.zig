@@ -89,6 +89,9 @@ pub fn main() void {
             State.tileset => {
                 try tileset.draw(mouse);
             },
+            State.palettes => {
+                // try palettes.draw(mouse);
+            },
             State.preview => {
                 preview.handle_mouse(mouse);
                 preview.draw(mouse);

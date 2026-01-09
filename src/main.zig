@@ -18,7 +18,9 @@ const EditScene = @import("scenes/edit.zig").EditScene;
 const AboutScene = @import("scenes/about.zig").AboutScene;
 const TilesetScene = @import("scenes/tileset.zig").TilesetScene;
 const PreviewScene = @import("scenes/preview.zig").PreviewScene;
+const PalettesScene = @import("scenes/palettes.zig").PalettesScene;
 const Layer = @import("scenes/preview.zig").Layer;
+const NavPanel = @import("nav.zig").NavPanel;
 
 pub fn main() void {
     var buf: [CONF.SCREEN_W * CONF.SCREEN_H]u32 = undefined;
@@ -34,6 +36,7 @@ pub fn main() void {
     var mouse_lock = false;
     var fui = Fui.init(&buf);
     var sm = StateMachine.init(State.main_menu);
+    var nav = NavPanel.init(fui, &sm);
     var pal = Palette.init();
     pal.load_palettes_from_file();
     var tiles = Tiles.init(fui, &pal);
@@ -41,11 +44,12 @@ pub fn main() void {
     var vfx = Vfx.init(fui);
     var menu = MenuScene.init(fui, &sm);
     var about = AboutScene.init(fui, &sm);
-    var edit = EditScene.init(fui, &sm, &pal, &tiles);
-    var tileset = TilesetScene.init(fui, &sm, &pal, &tiles, &edit);
+    var edit = EditScene.init(fui, &sm, &nav, &pal, &tiles);
+    var tileset = TilesetScene.init(fui, &sm, &nav, &pal, &tiles, &edit);
     var layers: [CONF.PREVIEW_LAYERS]Layer = undefined;
-    var preview = PreviewScene.init(fui, &sm, &edit, &pal, &tiles, &layers);
+    var preview = PreviewScene.init(fui, &sm, &nav, &edit, &pal, &tiles, &layers);
     preview.loadPreviewFromFile();
+    var palettes = PalettesScene.init(fui, &sm, &nav, &pal);
 
     var shouldClose = false;
     var dt: f32 = 0.0;
@@ -90,7 +94,7 @@ pub fn main() void {
                 try tileset.draw(mouse);
             },
             State.palettes => {
-                // try palettes.draw(mouse);
+                palettes.draw(mouse);
             },
             State.preview => {
                 preview.handle_mouse(mouse);

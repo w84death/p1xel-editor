@@ -13,6 +13,7 @@ const RGB = @import("../ppm.zig").RGB;
 const Color = @import("../ppm.zig").Color;
 const Vec2 = @import("../math.zig").Vec2;
 const Mouse = @import("../math.zig").Mouse;
+const NavPanel = @import("../nav.zig").NavPanel;
 
 const Canvas = struct {
     width: i32,
@@ -45,24 +46,25 @@ const BackgroundType = enum {
 pub const EditScene = struct {
     fui: Fui,
     sm: *StateMachine,
+    nav: *NavPanel,
     canvas: Canvas,
     palette: *Palette,
     tiles: *Tiles,
     tile_id: u8,
-    locked: bool,
     popup: Popup,
     needs_saving: bool,
     tool: Tools = Tools.pixel,
     status_buffer: [256]u8 = undefined,
     bg_type: BackgroundType = BackgroundType.dark,
 
-    pub fn init(fui: Fui, sm: *StateMachine, pal: *Palette, tiles: *Tiles) EditScene {
+    pub fn init(fui: Fui, sm: *StateMachine, nav: *NavPanel, pal: *Palette, tiles: *Tiles) EditScene {
         const p: *Palette = pal;
         p.index = tiles.db[0].pal;
         p.current = p.db[p.index];
         return EditScene{
             .fui = fui,
             .sm = sm,
+            .nav = nav,
             .canvas = Canvas{
                 .width = CONF.SPRITE_SIZE * CONF.GRID_SIZE,
                 .height = CONF.SPRITE_SIZE * CONF.GRID_SIZE,
@@ -73,7 +75,6 @@ pub const EditScene = struct {
             .palette = p,
             .tiles = tiles,
             .tile_id = 0,
-            .locked = false,
             .popup = Popup.none,
             .needs_saving = false,
             .tool = Tools.pixel,
@@ -81,7 +82,7 @@ pub const EditScene = struct {
         };
     }
     pub fn handle_keyboard(self: *EditScene, keys: *[256]c_int) void {
-        if (self.locked) return;
+        if (self.nav.locked) return;
 
         for (0..256) |i| {
             if (keys[i] != 0) {
@@ -101,7 +102,7 @@ pub const EditScene = struct {
         }
     }
     pub fn handle_mouse(self: *EditScene, mouse: Mouse) void {
-        if (self.locked) return;
+        if (self.nav.locked) return;
 
         if (self.sm.hot and !mouse.pressed) {
             self.sm.hot = false;
@@ -160,12 +161,30 @@ pub const EditScene = struct {
     }
     pub fn draw(self: *EditScene, mouse: Mouse) !void {
         // Navigation (top)
-        self.draw_nav(mouse);
+        self.nav.draw(mouse);
+
+        // options
+        const options_x: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].x;
+        var options_y: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 64;
+
+        if (self.fui.button(options_x - 160, options_y, 160, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.save_tiles();
+        }
+        options_y += 40;
+        if (self.fui.button(options_x - 240, options_y, 240, 32, "Export PPM", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
+            self.export_to_ppm() catch {
+                self.popup = Popup.info_save_fail;
+                return;
+            };
+            self.popup = Popup.info_save_ok;
+        }
+
         // Tile
         var tx: i32 = self.canvas.x - 88;
         var ty: i32 = self.canvas.y;
-        if (self.fui.button(tx, ty, 64, 64, "", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
+        if (self.fui.button(tx, ty, 64, 64, "", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
             self.popup = Popup.select_tile;
             self.tiles.hot = true;
         }
@@ -176,16 +195,16 @@ pub const EditScene = struct {
         // Tools
         self.fui.draw_text("Tools", tx, ty, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
         ty += 28;
-        if (self.fui.button(tx, ty, 128, 40, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+        if (self.fui.button(tx, ty, 128, 40, "Pixel", if (self.tool == Tools.pixel) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.nav.locked) {
             self.tool = Tools.pixel;
         }
         ty += 50;
-        if (self.fui.button(tx, ty, 128, 40, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
+        if (self.fui.button(tx, ty, 128, 40, "Fill", if (self.tool == Tools.fill) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.nav.locked) {
             self.tool = Tools.fill;
         }
         ty += 50;
-        if (self.fui.button(tx, ty, 128, 40, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
-            self.locked = true;
+        if (self.fui.button(tx, ty, 128, 40, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
             self.popup = Popup.confirm_clear;
         }
         ty += 80;
@@ -200,7 +219,7 @@ pub const EditScene = struct {
         }
 
         // Canvas
-        if (!self.locked) {
+        if (!self.nav.locked) {
             for (0..CONF.SPRITE_SIZE) |y| {
                 for (0..CONF.SPRITE_SIZE) |x| {
                     const idx = self.canvas.data[y][x];
@@ -239,7 +258,7 @@ pub const EditScene = struct {
         // Previews
         const px = self.canvas.x + self.canvas.width + 24;
         const py = self.canvas.y;
-        if (!self.locked) {
+        if (!self.nav.locked) {
             inline for (0..3) |dx| {
                 inline for (0..3) |dy| {
                     self.draw_tiled_live(px + @as(i32, dx) * 64, py + @as(i32, dy) * 64);
@@ -257,7 +276,7 @@ pub const EditScene = struct {
             const index: u8 = @intCast(i);
             const db16_idx = self.palette.current[i];
 
-            if (self.fui.button(swa_x + x_shift, swa_y + 28, swa_size, swa_size, "", self.palette.get_rgba_from_index(db16_idx), mouse) and !self.locked) {
+            if (self.fui.button(swa_x + x_shift, swa_y + 28, swa_size, swa_size, "", self.palette.get_rgba_from_index(db16_idx), mouse) and !self.nav.locked) {
                 self.palette.swatch = index;
             }
 
@@ -279,14 +298,14 @@ pub const EditScene = struct {
         si_x += 120;
         if (self.palette.count > 1) {
             if (self.palette.index > 0) {
-                if (self.fui.button(si_x, si_y, 64, 24, "<", CONF.COLOR_OK, mouse) and !self.locked) {
+                if (self.fui.button(si_x, si_y, 64, 24, "<", CONF.COLOR_OK, mouse) and !self.nav.locked) {
                     self.palette.change_palette_prev();
                     self.needs_saving = true;
                 }
             }
             si_x += 64 + 8;
             if (self.palette.index < self.palette.count - 1) {
-                if (self.fui.button(si_x, si_y, 64, 24, ">", CONF.COLOR_OK, mouse) and !self.locked) {
+                if (self.fui.button(si_x, si_y, 64, 24, ">", CONF.COLOR_OK, mouse) and !self.nav.locked) {
                     self.palette.change_palette_next();
                     self.needs_saving = true;
                 }
@@ -297,20 +316,14 @@ pub const EditScene = struct {
         // Swatches options
         var so_x: i32 = swa_x;
         const so_y: i32 = swa_y + 132;
-        if (self.fui.button(so_x, so_y, 280, 32, "Manage swatches", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
-            self.popup = Popup.info_not_implemented;
-        }
-        so_x += 148;
-
         if (self.palette.updated) {
-            if (self.fui.button(so_x, so_y, 160, 32, "Update", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            if (self.fui.button(so_x, so_y, 160, 32, "Update", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
                 self.palette.update_palette();
                 // self.needs_saving = true;
                 self.save_tiles();
             }
             so_x += 168;
-            if (self.fui.button(so_x, so_y, 160, 32, "Save new", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            if (self.fui.button(so_x, so_y, 220, 32, "Save as new", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
                 self.palette.new_palette();
                 // self.needs_saving = true;
                 self.save_tiles();
@@ -326,25 +339,9 @@ pub const EditScene = struct {
         inline for (0..16) |i| {
             const x_shift: i32 = @intCast(@mod(i, colors_in_row) * (pal_size + 6));
             const iy: i32 = @divFloor(i, colors_in_row) * (pal_size + 6);
-            if (self.fui.button(pal_x + x_shift, pal_y + iy + 28, pal_size, pal_size, "", self.palette.get_rgba_from_index(i), mouse) and !self.locked) {
+            if (self.fui.button(pal_x + x_shift, pal_y + iy + 28, pal_size, pal_size, "", self.palette.get_rgba_from_index(i), mouse) and !self.nav.locked) {
                 self.palette.update_current_swatch(i);
             }
-        }
-
-        const options_x: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].x;
-        var options_y: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 48;
-
-        if (self.fui.button(options_x - 160, options_y, 160, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.save_tiles();
-        }
-        options_y += 40;
-        if (self.fui.button(options_x - 240, options_y, 240, 32, "Export PPM", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
-            self.export_to_ppm() catch {
-                self.popup = Popup.info_save_fail;
-                return;
-            };
-            self.popup = Popup.info_save_ok;
         }
 
         // Footer
@@ -361,7 +358,7 @@ pub const EditScene = struct {
                     if (self.fui.info_popup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                         }
                     }
@@ -372,7 +369,7 @@ pub const EditScene = struct {
                             self.clearCanvas();
                         }
                         self.popup = Popup.none;
-                        self.locked = false;
+                        self.nav.locked = false;
                         self.sm.hot = true;
                     }
                 },
@@ -382,7 +379,7 @@ pub const EditScene = struct {
                             self.palette.delete_palette();
                         }
                         self.popup = Popup.none;
-                        self.locked = false;
+                        self.nav.locked = false;
                         self.sm.hot = true;
                     }
                 },
@@ -390,7 +387,7 @@ pub const EditScene = struct {
                     if (self.fui.info_popup("File saved!", mouse, CONF.COLOR_OK)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                         }
                     }
@@ -399,7 +396,7 @@ pub const EditScene = struct {
                     if (self.fui.info_popup("File saving failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                         }
                     }
@@ -408,7 +405,7 @@ pub const EditScene = struct {
                     if (self.tiles.show_tiles_selector(mouse)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                             self.select();
                         }
@@ -418,50 +415,11 @@ pub const EditScene = struct {
             }
         }
     }
-    fn draw_nav(self: *EditScene, mouse: Mouse) void {
-        const button_w: i32 = 180;
-        const button_h: i32 = 32;
-        const gap: i32 = 32;
-        const nav_w: i32 = CONF.SCREEN_W;
-        const nav_h: i32 = 64;
-        const nav: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y);
-        self.fui.draw_rect(0, 0, nav_w, nav_h, CONF.COLOR_NAV_BG);
-        self.fui.draw_hline(0, nav_h, nav_w, CONF.COLOR_NAV_FRAME);
-        const NavButton = struct {
-            label: [:0]const u8,
-            state: State,
-            width: i32,
-            special: bool,
-        };
-        const buttons = [_]NavButton{
-            .{ .label = "< Menu", .state = State.main_menu, .width = button_w - 32, .special = false },
-            .{ .label = "Editor", .state = State.editor, .width = button_w, .special = true },
-            .{ .label = "Tileset", .state = State.tileset, .width = button_w, .special = false },
-            .{ .label = "Palettes", .state = State.palettes, .width = button_w, .special = false },
-            .{ .label = "Preview", .state = State.preview, .width = button_w, .special = false },
-        };
-        var nav_step = nav.x;
-        for (buttons) |btn| {
-            if (btn.special and self.sm.is(btn.state)) {
-                self.fui.draw_rect(nav_step - 16, nav.y - 12, btn.width + 32, button_h + 24, CONF.COLOR_BG);
-            }
-            var color: u32 = undefined;
-            if (self.sm.is(btn.state)) {
-                color = CONF.COLOR_MENU_SECONDARY;
-            } else {
-                color = CONF.COLOR_MENU_NORMAL;
-            }
-            if (self.fui.button(nav_step, nav.y, btn.width, button_h, btn.label, color, mouse) and !self.locked) {
-                self.sm.goTo(btn.state);
-            }
-            nav_step += btn.width + gap;
-        }
-    }
     fn save_tiles(self: *EditScene) void {
         self.tiles.db[self.tiles.selected].data = self.canvas.data;
         self.tiles.db[self.tiles.selected].pal = self.palette.index;
         self.tiles.update_pal32(self.tiles.selected);
-        self.locked = true;
+        self.nav.locked = true;
         self.tiles.save_tileset_to_file() catch {
             self.popup = Popup.info_save_fail;
             return;
@@ -497,7 +455,6 @@ pub const EditScene = struct {
             }
         }
     }
-
     fn export_to_ppm(self: *EditScene) !void {
         var gpa = std.heap.GeneralPurposeAllocator(.{}){};
         defer _ = gpa.deinit();

@@ -10,7 +10,7 @@ const State = @import("../state.zig").State;
 const StateMachine = @import("../state.zig").StateMachine;
 const Tiles = @import("../tiles.zig").Tiles;
 const Edit = @import("edit.zig").EditScene;
-
+const NavPanel = @import("../nav.zig").NavPanel;
 const Popup = enum {
     none,
     info_not_implemented,
@@ -26,6 +26,7 @@ pub const Layer = struct {
 pub const PreviewScene = struct {
     fui: Fui,
     sm: *StateMachine,
+    nav: *NavPanel,
     edit: *Edit,
     palette: *Palette,
     tiles: *Tiles,
@@ -34,7 +35,7 @@ pub const PreviewScene = struct {
     selected: u8,
     locked: bool,
     popup: Popup,
-    pub fn init(fui: Fui, sm: *StateMachine, edit: *Edit, pal: *Palette, tiles: *Tiles, layers: *[CONF.PREVIEW_LAYERS]Layer) PreviewScene {
+    pub fn init(fui: Fui, sm: *StateMachine, nav: *NavPanel, edit: *Edit, pal: *Palette, tiles: *Tiles, layers: *[CONF.PREVIEW_LAYERS]Layer) PreviewScene {
         for (0..CONF.PREVIEW_LAYERS) |i| {
             var data: [CONF.PREVIEW_H][CONF.PREVIEW_W]u8 = undefined;
             for (0..CONF.PREVIEW_H) |y| {
@@ -48,6 +49,7 @@ pub const PreviewScene = struct {
         return PreviewScene{
             .fui = fui,
             .sm = sm,
+            .nav = nav,
             .edit = edit,
             .tiles = tiles,
             .tiles_area = Vec2.init(fui.pivots[PIVOTS.TOP_LEFT].x + 72, fui.pivots[PIVOTS.TOP_LEFT].y + 64),
@@ -114,21 +116,14 @@ pub const PreviewScene = struct {
         }
     }
     pub fn draw(self: *PreviewScene, mouse: Mouse) void {
-        const nav: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y);
-        var nav_step = nav.x;
-        if (self.fui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
-            self.sm.goTo(State.main_menu);
-        }
-        nav_step += 128 + 32;
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Tileset", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.sm.goTo(State.tileset);
-        }
-        nav_step += 188;
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Editor", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.sm.goTo(State.editor);
-        }
-        nav_step += 188 + 32;
-        if (self.fui.button(nav_step, nav.y, 160, 32, "Save", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+        // Navigation (top)
+        self.nav.draw(mouse);
+
+        // options
+        const options_x: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].x;
+        const options_y: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 64;
+
+        if (self.fui.button(options_x - 160, options_y, 160, 32, "Save", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.locked = true;
             self.savePreviewToFile() catch {
                 self.popup = Popup.info_save_fail;

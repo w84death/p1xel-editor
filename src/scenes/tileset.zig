@@ -10,6 +10,7 @@ const State = @import("../state.zig").State;
 const StateMachine = @import("../state.zig").StateMachine;
 const Tiles = @import("../tiles.zig").Tiles;
 const Edit = @import("edit.zig").EditScene;
+const NavPanel = @import("../nav.zig").NavPanel;
 const Popup = enum {
     none,
     info_not_implemented,
@@ -21,6 +22,7 @@ const Popup = enum {
 pub const TilesetScene = struct {
     fui: Fui,
     sm: *StateMachine,
+    nav: *NavPanel,
     palette: *Palette,
     tiles: *Tiles,
     edit: *Edit,
@@ -28,10 +30,11 @@ pub const TilesetScene = struct {
     needs_saving: bool,
     locked: bool,
     popup: Popup,
-    pub fn init(fui: Fui, sm: *StateMachine, pal: *Palette, tiles: *Tiles, edit: *Edit) TilesetScene {
+    pub fn init(fui: Fui, sm: *StateMachine, nav: *NavPanel, pal: *Palette, tiles: *Tiles, edit: *Edit) TilesetScene {
         return TilesetScene{
             .fui = fui,
             .sm = sm,
+            .nav = nav,
             .tiles = tiles,
             .edit = edit,
             .selected = 0,
@@ -42,33 +45,25 @@ pub const TilesetScene = struct {
         };
     }
     pub fn draw(self: *TilesetScene, mouse: Mouse) !void {
-        const nav: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.TOP_LEFT].x, self.fui.pivots[PIVOTS.TOP_LEFT].y);
-        var nav_step = nav.x;
-        if (self.fui.button(nav_step, nav.y, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
-            self.sm.goTo(State.main_menu);
-        }
-        nav_step += 128 + 32;
 
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Editor", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.sm.goTo(State.editor);
-        }
-        nav_step += 188;
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Preview", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.sm.goTo(State.preview);
-        }
+        // Navigation (top)
+        self.nav.draw(mouse);
 
-        nav_step += 188 + 32;
-        if (self.fui.button(nav_step, nav.y, 180, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
+        // options
+        const options_x: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].x;
+        var options_y: i32 = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 64;
+
+        if (self.fui.button(options_x - 180, options_y, 180, 32, "Save", if (self.needs_saving) CONF.COLOR_MENU_HIGHLIGHT else CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
             self.tiles.save_tileset_to_file() catch {
                 self.popup = Popup.info_save_fail;
                 return;
             };
             self.popup = Popup.info_save_ok;
         }
-        nav_step += 188;
-        if (self.fui.button(nav_step, nav.y, 200, 32, "Export ASM", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            self.locked = true;
+        options_y += 40;
+        if (self.fui.button(options_x - 180, options_y, 180, 32, "Export ASM", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
             self.popup = Popup.info_not_implemented;
         }
 
@@ -105,13 +100,13 @@ pub const TilesetScene = struct {
         const tools: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.BOTTOM_LEFT].x, self.fui.pivots[PIVOTS.BOTTOM_LEFT].y - 32);
         var tools_step = tools.x;
 
-        if (self.fui.button(tools_step, tools.y, 180, 32, "Duplicate", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+        if (self.fui.button(tools_step, tools.y, 180, 32, "Duplicate", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
             self.tiles.duplicate_tile(self.tiles.selected);
         }
         tools_step += 188;
         self.fui.draw_text("Shift tile:", tools_step, tools.y - 20, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
         if (self.tiles.selected > 0) {
-            if (self.fui.button(tools_step, tools.y, 160, 32, "<< Left", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            if (self.fui.button(tools_step, tools.y, 160, 32, "<< Left", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
                 self.tiles.shift_tile_left(self.tiles.selected);
                 self.tiles.selected -= 1;
                 self.needs_saving = true;
@@ -119,15 +114,15 @@ pub const TilesetScene = struct {
         }
         tools_step += 168;
         if (self.tiles.selected < self.tiles.count - 1) {
-            if (self.fui.button(tools_step, tools.y, 160, 32, "Right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            if (self.fui.button(tools_step, tools.y, 160, 32, "Right >>", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
                 self.tiles.shift_tile_right(self.tiles.selected);
                 self.tiles.selected += 1;
                 self.needs_saving = true;
             }
         }
         tools_step += 168;
-        if (self.fui.button(tools_step, tools.y, 180, 32, "Delete", CONF.COLOR_MENU_DANGER, mouse) and !self.locked) {
-            self.locked = true;
+        if (self.fui.button(tools_step, tools.y, 180, 32, "Delete", CONF.COLOR_MENU_DANGER, mouse) and !self.nav.locked) {
+            self.nav.locked = true;
             self.popup = Popup.confirm_delete;
         }
 
@@ -139,7 +134,7 @@ pub const TilesetScene = struct {
                     if (self.fui.info_popup("Not implemented yet...", mouse, CONF.COLOR_SECONDARY)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                         }
                     }
@@ -148,7 +143,7 @@ pub const TilesetScene = struct {
                     if (self.fui.info_popup("File saved!", mouse, CONF.COLOR_OK)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                         }
                     }
@@ -157,7 +152,7 @@ pub const TilesetScene = struct {
                     if (self.fui.info_popup("File saving failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
-                            self.locked = false;
+                            self.nav.locked = false;
                             self.sm.hot = true;
                         }
                     }
@@ -170,7 +165,7 @@ pub const TilesetScene = struct {
                             self.needs_saving = true;
                         }
                         self.popup = Popup.none;
-                        self.locked = false;
+                        self.nav.locked = false;
                         self.sm.hot = true;
                     }
                 },

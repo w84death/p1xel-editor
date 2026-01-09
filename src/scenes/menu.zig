@@ -24,6 +24,7 @@ pub const MenuScene = struct {
             .menu_items = &[_]MenuItem{
                 .{ .text = "Editor", .color = CONF.COLOR_MENU_NORMAL, .target_state = State.editor },
                 .{ .text = "Tileset", .color = CONF.COLOR_MENU_NORMAL, .target_state = State.tileset },
+                .{ .text = "Palettes", .color = CONF.COLOR_MENU_NORMAL, .target_state = State.palettes },
                 .{ .text = "Preview", .color = CONF.COLOR_MENU_NORMAL, .target_state = State.preview },
                 .{ .text = "About", .color = CONF.COLOR_MENU_SECONDARY, .target_state = State.about },
                 .{ .text = "Quit", .color = CONF.COLOR_MENU_SECONDARY, .target_state = State.quit },

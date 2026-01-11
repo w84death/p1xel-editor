@@ -34,6 +34,7 @@ pub const PreviewScene = struct {
     layers: *[CONF.PREVIEW_LAYERS]Layer,
     selected: u8,
     locked: bool,
+    iso_mode: bool = false,
     popup: Popup,
     pub fn init(fui: Fui, sm: *StateMachine, nav: *NavPanel, edit: *Edit, pal: *Palette, tiles: *Tiles, layers: *[CONF.PREVIEW_LAYERS]Layer) PreviewScene {
         for (0..CONF.PREVIEW_LAYERS) |i| {
@@ -57,6 +58,7 @@ pub const PreviewScene = struct {
             .selected = 0,
             .palette = pal,
             .locked = false,
+            .iso_mode = false,
             .popup = Popup.none,
         };
     }
@@ -69,8 +71,8 @@ pub const PreviewScene = struct {
             return;
         }
 
-        const mouse_cell_x: i32 = @divFloor(mouse.x - self.tiles_area.x, CONF.PREVIEW_SIZE);
-        const mouse_cell_y: i32 = @divFloor(mouse.y - self.tiles_area.y, CONF.PREVIEW_SIZE);
+        const mouse_cell_y: i32 = @divFloor(mouse.y - self.tiles_area.y, if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE);
+        const mouse_cell_x: i32 = if (self.iso_mode and @rem(mouse_cell_y, 2) == 1) @divFloor(mouse.x - self.tiles_area.x - @as(i32, CONF.PREVIEW_SIZE / 2), CONF.PREVIEW_SIZE) else @divFloor(mouse.x - self.tiles_area.x, CONF.PREVIEW_SIZE);
         if (mouse.pressed) {
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.PREVIEW_W and
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.PREVIEW_H)
@@ -132,6 +134,10 @@ pub const PreviewScene = struct {
             self.popup = Popup.info_save_ok;
         }
 
+        if (self.fui.button(options_x - 160, options_y + 40, 160, 32, if (self.iso_mode) "ISO: ON" else "ISO: OFF", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.iso_mode = !self.iso_mode;
+        }
+
         // Tile
 
         const tx: i32 = self.tiles_area.x - 72;
@@ -180,8 +186,12 @@ pub const PreviewScene = struct {
                         for (0..CONF.PREVIEW_W) |x| {
                             const tile = layer.data[y][x];
                             if (tile < 255) {
-                                const xx: i32 = @intCast(x * CONF.PREVIEW_SIZE);
-                                const yy: i32 = @intCast(y * CONF.PREVIEW_SIZE);
+                                const y_step = if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE;
+                                var xx: i32 = @intCast(@as(u64, x) * @as(u64, @intCast(CONF.PREVIEW_SIZE)));
+                                const yy: i32 = @intCast(@as(u64, y) * @as(u64, @intCast(y_step)));
+                                if (self.iso_mode and @rem(y, 2) == 1) {
+                                    xx += @as(i32, CONF.PREVIEW_SIZE / 2);
+                                }
                                 self.tiles.draw(tile, px + xx, py + yy);
                             }
                         }
@@ -189,8 +199,8 @@ pub const PreviewScene = struct {
                 }
             }
         }
-        const pw: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_W;
-        const ph: i32 = CONF.PREVIEW_SIZE * CONF.PREVIEW_H;
+        const pw: i32 = if (self.iso_mode) CONF.PREVIEW_SIZE * CONF.PREVIEW_W + @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE * CONF.PREVIEW_W;
+        const ph: i32 = if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE * CONF.PREVIEW_H / 2) + @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE * CONF.PREVIEW_H;
         self.fui.draw_rect_lines(px, py, pw, ph, DB16.STEEL_BLUE);
 
         const tools: Vec2 = Vec2.init(self.fui.pivots[PIVOTS.BOTTOM_LEFT].x, self.fui.pivots[PIVOTS.BOTTOM_LEFT].y - 32);

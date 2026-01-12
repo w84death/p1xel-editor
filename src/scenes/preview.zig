@@ -53,7 +53,7 @@ pub const PreviewScene = struct {
             .nav = nav,
             .edit = edit,
             .tiles = tiles,
-            .tiles_area = Vec2.init(fui.pivots[PIVOTS.TOP_LEFT].x + 72, fui.pivots[PIVOTS.TOP_LEFT].y + 64),
+            .tiles_area = Vec2.init(fui.pivots[PIVOTS.TOP_LEFT].x + 180, fui.pivots[PIVOTS.TOP_LEFT].y + 64),
             .layers = layers,
             .selected = 0,
             .palette = pal,
@@ -151,7 +151,7 @@ pub const PreviewScene = struct {
         self.fui.draw_rect_lines(tx, ty, CONF.SPRITE_SIZE * 4, CONF.SPRITE_SIZE * 4, DB16.STEEL_BLUE);
 
         // Layers
-        const lx: i32 = self.tiles_area.x - 72;
+        var lx: i32 = self.tiles_area.x - 180;
         var ly: i32 = ty + 128;
         self.fui.draw_text("LAYERS:", lx, ly, CONF.FONT_SMOL, CONF.COLOR_PRIMARY);
         ly += 24;
@@ -166,7 +166,8 @@ pub const PreviewScene = struct {
         if (self.fui.button(lx, ly, 64, 32, "3", if (self.selected == 2) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.locked) {
             self.selected = 2;
         }
-        ly += 40 + 24;
+        ly = ty + 128;
+        lx += 80;
         self.fui.draw_text("VISIBLE:", lx, ly, CONF.FONT_SMOL, CONF.COLOR_PRIMARY);
         ly += 24;
         inline for (0..self.layers.len) |i| {

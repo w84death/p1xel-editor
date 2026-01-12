@@ -199,6 +199,21 @@ pub const PreviewScene = struct {
                     }
                 }
             }
+            // Preview tile under cursor
+            const mouse_cell_y: i32 = @divFloor(mouse.y - py, if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE);
+            const mouse_cell_x: i32 = if (self.iso_mode and @rem(mouse_cell_y, 2) == 1) @divFloor(mouse.x - px - @as(i32, CONF.PREVIEW_SIZE / 2), CONF.PREVIEW_SIZE) else @divFloor(mouse.x - px, CONF.PREVIEW_SIZE);
+            if (mouse_cell_x >= 0 and mouse_cell_x < CONF.PREVIEW_W and mouse_cell_y >= 0 and mouse_cell_y < CONF.PREVIEW_H and self.layers[self.selected].visible) {
+                const y_step = if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE;
+                const mouse_cell_x_u: usize = @intCast(mouse_cell_x);
+                const mouse_cell_y_u: usize = @intCast(mouse_cell_y);
+                var xx: i32 = @intCast(@as(u64, mouse_cell_x_u) * @as(u64, @intCast(CONF.PREVIEW_SIZE)));
+                const yy: i32 = @intCast(@as(u64, mouse_cell_y_u) * @as(u64, @intCast(y_step)));
+                if (self.iso_mode and @rem(mouse_cell_y, 2) == 1) {
+                    xx += @as(i32, CONF.PREVIEW_SIZE / 2);
+                }
+                self.tiles.draw(self.tiles.selected, px + xx, py + yy);
+                self.fui.draw_rect_lines(px + xx, py + yy, CONF.PREVIEW_SIZE, CONF.PREVIEW_SIZE, DB16.WHITE);
+            }
         }
         const pw: i32 = if (self.iso_mode) CONF.PREVIEW_SIZE * CONF.PREVIEW_W + @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE * CONF.PREVIEW_W;
         const ph: i32 = if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE * CONF.PREVIEW_H / 2) + @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE * CONF.PREVIEW_H;

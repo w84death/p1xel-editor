@@ -112,23 +112,28 @@ pub const Tiles = struct {
         };
     }
     pub fn draw(self: *Tiles, index: usize, x: i32, y: i32) void {
-        var base_index: usize = @intCast(y * CONF.SCREEN_W + x);
         for (0..CONF.SPRITE_SIZE) |py| {
             for (0..CONF.SPRITE_SIZE) |px| {
                 const idx = self.db[index].data[py][px];
                 const color = self.db[index].pal32[idx];
                 if (idx == 0 and color == DB16.BLACK) {
-                    base_index += CONF.PREVIEW_SCALE;
                     continue;
                 }
+                const px_i32: i32 = @intCast(px);
+                const py_i32: i32 = @intCast(py);
                 inline for (0..CONF.PREVIEW_SCALE) |dy| {
                     inline for (0..CONF.PREVIEW_SCALE) |dx| {
-                        self.fui.buf[base_index + dy * CONF.SCREEN_W + dx] = color;
+                        const dx_i32: i32 = @intCast(dx);
+                        const dy_i32: i32 = @intCast(dy);
+                        const sx: i32 = x + px_i32 * CONF.PREVIEW_SCALE + dx_i32;
+                        const sy: i32 = y + py_i32 * CONF.PREVIEW_SCALE + dy_i32;
+                        if (sx >= 0 and sx < CONF.SCREEN_W and sy >= 0 and sy < CONF.SCREEN_H) {
+                            const index_buf: usize = @intCast(sy * CONF.SCREEN_W + sx);
+                            self.fui.buf[index_buf] = color;
+                        }
                     }
                 }
-                base_index += CONF.PREVIEW_SCALE;
             }
-            base_index += CONF.SCREEN_W * CONF.PREVIEW_SCALE - CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE;
         }
     }
     pub fn create_new(self: *Tiles) !void {

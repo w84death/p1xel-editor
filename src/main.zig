@@ -58,7 +58,7 @@ pub fn main() void {
         const d: f32 = @floatFromInt(c.fenster_time() - now);
         dt = @as(f32, d / 1000.0);
         now = c.fenster_time();
-
+        nav.update_fps(dt);
         sm.update();
         fui.clear_background(CONF.COLOR_BG);
         switch (sm.current) {

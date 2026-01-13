@@ -16,12 +16,18 @@ pub const NavPanel = struct {
     fui: Fui,
     sm: *StateMachine,
     locked: bool = false,
+    fps: f32 = 0.0,
+    fps_buf: [16]u8 = undefined,
     pub fn init(fui: Fui, sm: *StateMachine) NavPanel {
         return NavPanel{
             .fui = fui,
             .sm = sm,
             .locked = false,
+            .fps = 0.0,
         };
+    }
+    pub fn update_fps(self: *NavPanel, dt: f32) void {
+        self.fps = if (dt > 0) 1.0 / dt else 0.0;
     }
     pub fn draw(self: *NavPanel, mouse: Mouse) void {
         const button_w: i32 = 180;
@@ -55,5 +61,10 @@ pub const NavPanel = struct {
             }
             nav_step += btn.width + gap;
         }
+        // FPS counter
+        const fps_str = std.fmt.bufPrint(&self.fps_buf, "FPS: {d:.1}", .{self.fps}) catch "FPS: ?";
+        const fps_x: i32 = 2;
+        const fps_y: i32 = 2;
+        self.fui.draw_text(fps_str, fps_x, fps_y, CONF.FONT_SMOL, CONF.COLOR_PRIMARY);
     }
 };

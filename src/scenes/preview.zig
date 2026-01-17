@@ -64,6 +64,16 @@ pub const PreviewScene = struct {
             .popup = Popup.none,
         };
     }
+    pub fn move_camera(self: *PreviewScene, dx: i32, dy: i32) void {
+        const new_x = @as(i32, @intCast(self.cam_x)) + dx;
+        const new_y = @as(i32, @intCast(self.cam_y)) + dy;
+        if (new_x >= 0 and new_x <= @as(i32, CONF.MAX_PREVIEW_W - CONF.PREVIEW_W)) {
+            self.cam_x = @intCast(new_x);
+        }
+        if (new_y >= 0 and new_y <= @as(i32, CONF.MAX_PREVIEW_H - CONF.PREVIEW_H)) {
+            self.cam_y = @intCast(new_y);
+        }
+    }
     pub fn handle_mouse(self: *PreviewScene, mouse: Mouse) void {
         if (self.locked or !self.layers[self.selected].visible) return;
 
@@ -74,17 +84,37 @@ pub const PreviewScene = struct {
         }
 
         const mouse_cell_y: i32 = @divFloor(mouse.y - self.tiles_area.y, if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE);
-        const mouse_cell_x: i32 = if (self.iso_mode and @rem(mouse_cell_y, 2) == 1) @divFloor(mouse.x - self.tiles_area.x - @as(i32, CONF.PREVIEW_SIZE / 2), CONF.PREVIEW_SIZE) else @divFloor(mouse.x - self.tiles_area.x, CONF.PREVIEW_SIZE);
+        const tentative_data_y: i32 = mouse_cell_y + @as(i32, @intCast(self.cam_y));
+        const mouse_cell_x: i32 = if (self.iso_mode and @rem(tentative_data_y, 2) == 1) @divFloor(mouse.x - self.tiles_area.x - @as(i32, CONF.PREVIEW_SIZE / 2), CONF.PREVIEW_SIZE) else @divFloor(mouse.x - self.tiles_area.x, CONF.PREVIEW_SIZE);
         if (mouse.pressed) {
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.PREVIEW_W and
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.PREVIEW_H)
             {
-                const data_y: i32 = mouse_cell_y + @as(i32, @intCast(self.cam_y));
+                const data_y: i32 = tentative_data_y;
                 const data_x: i32 = mouse_cell_x + @as(i32, @intCast(self.cam_x));
                 if (data_y >= 0 and data_y < CONF.MAX_PREVIEW_H and data_x >= 0 and data_x < CONF.MAX_PREVIEW_W) {
                     var data = self.layers[self.selected].data[@intCast(data_y)][@intCast(data_x)];
                     data = if (data == self.tiles.selected) 255 else self.tiles.selected;
                     self.layers[self.selected].data[@intCast(data_y)][@intCast(data_x)] = data;
+                }
+            }
+        }
+    }
+    pub fn handle_keyboard(self: *PreviewScene, keys: *[256]c_int) void {
+        if (self.locked) return;
+        for (0..256) |i| {
+            if (keys[i] != 0) {
+                switch (i) {
+                    49 => self.selected = 0, // '1'
+                    50 => self.selected = 1, // '2'
+                    51 => self.selected = 2, // '3'
+                    0x11 => self.move_camera(0, -1), // up
+                    0x12 => self.move_camera(0, 1), // down
+                    0x14 => self.move_camera(-1, 0), // left
+                    0x13 => self.move_camera(1, 0), // right
+                    else => {
+                        std.debug.print("Debug key pressed: {x}\n", .{i});
+                    },
                 }
             }
         }
@@ -150,16 +180,16 @@ pub const PreviewScene = struct {
         self.fui.draw_text("Move:", tools_x - 40, tools_y - 24, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
 
         if (self.fui.button(tools_x - 60, tools_y, 120, 32, "North", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            if (self.cam_y > 0) self.cam_y -= 1;
+            self.move_camera(0, -1);
         }
         if (self.fui.button(tools_x - 60, tools_y + 80, 120, 32, "Shouth", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            if (self.cam_y < 48 - CONF.PREVIEW_H) self.cam_y += 1;
+            self.move_camera(0, 1);
         }
         if (self.fui.button(tools_x - 60 - 65, tools_y + 40, 120, 32, "Left", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            if (self.cam_x > 0) self.cam_x -= 1;
+            self.move_camera(-1, 0);
         }
         if (self.fui.button(tools_x - 60 + 65, tools_y + 40, 120, 32, "Right", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
-            if (self.cam_x < 32 - CONF.PREVIEW_W) self.cam_x += 1;
+            self.move_camera(1, 0);
         }
 
         // tools_step += 88;
@@ -224,7 +254,7 @@ pub const PreviewScene = struct {
                                 const y_step = if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE;
                                 var xx: i32 = @intCast(@as(u64, view_x) * @as(u64, @intCast(CONF.PREVIEW_SIZE)));
                                 const yy: i32 = @intCast(@as(u64, view_y) * @as(u64, @intCast(y_step)));
-                                if (self.iso_mode and @rem(view_y, 2) == 1) {
+                                if (self.iso_mode and @rem(data_y, 2) == 1) {
                                     xx += @as(i32, CONF.PREVIEW_SIZE / 2);
                                 }
                                 self.tiles.draw(tile, px + xx, py + yy);
@@ -237,12 +267,13 @@ pub const PreviewScene = struct {
             const mouse_cell_y: i32 = @divFloor(mouse.y - py, if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE);
             const mouse_cell_x: i32 = if (self.iso_mode and @rem(mouse_cell_y, 2) == 1) @divFloor(mouse.x - px - @as(i32, CONF.PREVIEW_SIZE / 2), CONF.PREVIEW_SIZE) else @divFloor(mouse.x - px, CONF.PREVIEW_SIZE);
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.PREVIEW_W and mouse_cell_y >= 0 and mouse_cell_y < CONF.PREVIEW_H and self.layers[self.selected].visible) {
+                const data_mouse_y: i32 = mouse_cell_y + @as(i32, @intCast(self.cam_y));
                 const y_step = if (self.iso_mode) @as(i32, CONF.PREVIEW_SIZE / 2) else CONF.PREVIEW_SIZE;
                 const mouse_cell_x_u: usize = @intCast(mouse_cell_x);
                 const mouse_cell_y_u: usize = @intCast(mouse_cell_y);
                 var xx: i32 = @intCast(@as(u64, mouse_cell_x_u) * @as(u64, @intCast(CONF.PREVIEW_SIZE)));
                 const yy: i32 = @intCast(@as(u64, mouse_cell_y_u) * @as(u64, @intCast(y_step)));
-                if (self.iso_mode and @rem(mouse_cell_y, 2) == 1) {
+                if (self.iso_mode and @rem(data_mouse_y, 2) == 1) {
                     xx += @as(i32, CONF.PREVIEW_SIZE / 2);
                 }
                 self.tiles.draw(self.tiles.selected, px + xx, py + yy);

@@ -97,6 +97,7 @@ pub fn main() void {
                 palettes.draw(mouse);
             },
             State.preview => {
+                preview.handle_keyboard(&f.keys);
                 preview.handle_mouse(mouse);
                 preview.draw(mouse);
             },

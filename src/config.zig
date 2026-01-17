@@ -59,4 +59,5 @@ pub const CONF = struct {
     pub const PREVIEW_LAYERS = 3;
     pub const PREVIEW_SCALE = 4;
     pub const PREVIEW_SIZE = SPRITE_SIZE * 4;
+    pub const PALETTES_PER_PAGE = 32;
 };

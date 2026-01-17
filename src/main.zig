@@ -49,7 +49,7 @@ pub fn main() void {
     var layers: [CONF.PREVIEW_LAYERS]Layer = undefined;
     var preview = PreviewScene.init(fui, &sm, &nav, &edit, &pal, &tiles, &layers);
     preview.loadPreviewFromFile();
-    var palettes = PalettesScene.init(fui, &sm, &nav, &pal);
+    var palettes = PalettesScene.init(fui, &sm, &nav, &pal, &tiles);
 
     var shouldClose = false;
     var dt: f32 = 0.0;

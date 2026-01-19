@@ -1,5 +1,8 @@
 const std = @import("std");
 const CONF = @import("config.zig").CONF;
+
+// Forward declaration for Tiles
+const Tiles = @import("tiles.zig").Tiles;
 const Color = struct {
     r: u8,
     g: u8,
@@ -156,5 +159,84 @@ pub const Palette = struct {
             self.current = self.db[self.index];
             self.updated = false;
         }
+    }
+
+    pub fn delete_palette_safe(self: *Palette, tiles: *Tiles) void {
+        if (self.count <= 1) {
+            return; // Cannot delete the last palette
+        }
+
+        const deleted_index = self.index;
+
+        // Update all tiles that reference the deleted or shifted palettes
+        tiles.update_palette_indices(deleted_index, 0, -1);
+
+        // Shift all palettes after the deleted one left
+        var i = deleted_index;
+        while (i < self.count - 1) : (i += 1) {
+            self.db[i] = self.db[i + 1];
+        }
+
+        self.count -= 1;
+
+        // Adjust current index if needed
+        if (self.index >= self.count) {
+            self.index = self.count - 1;
+        }
+        self.current = self.db[self.index];
+
+        self.save_palettes_to_file();
+        tiles.save_tileset_to_file() catch {};
+        self.updated = false;
+    }
+
+    pub fn shift_palette_left(self: *Palette, tiles: *Tiles) void {
+        if (self.count <= 1 or self.index == 0) {
+            return; // Cannot shift first palette or only one palette
+        }
+
+        const current_index = self.index;
+        const target_index = current_index - 1;
+
+        // Swap palettes in the database
+        const temp = self.db[current_index];
+        self.db[current_index] = self.db[target_index];
+        self.db[target_index] = temp;
+
+        // Update tiles that reference either of the swapped palettes
+        tiles.update_palette_indices_swap(current_index, target_index);
+
+        // Update current index to follow the palette
+        self.index = target_index;
+        self.current = self.db[self.index];
+
+        self.save_palettes_to_file();
+        tiles.save_tileset_to_file() catch {};
+        self.updated = false;
+    }
+
+    pub fn shift_palette_right(self: *Palette, tiles: *Tiles) void {
+        if (self.count <= 1 or self.index >= self.count - 1) {
+            return; // Cannot shift last palette or only one palette
+        }
+
+        const current_index = self.index;
+        const target_index = current_index + 1;
+
+        // Swap palettes in the database
+        const temp = self.db[current_index];
+        self.db[current_index] = self.db[target_index];
+        self.db[target_index] = temp;
+
+        // Update tiles that reference either of the swapped palettes
+        tiles.update_palette_indices_swap(current_index, target_index);
+
+        // Update current index to follow the palette
+        self.index = target_index;
+        self.current = self.db[self.index];
+
+        self.save_palettes_to_file();
+        tiles.save_tileset_to_file() catch {};
+        self.updated = false;
     }
 };

@@ -90,6 +90,30 @@ pub const PalettesScene = struct {
             }
         }
 
+        // Action buttons for palette management
+        const action_y = self.fui.pivots[PIVOTS.BOTTOM_LEFT].y - 80;
+        const action_button_width = 120;
+        const action_button_spacing = 140;
+        const action_start_x = self.fui.pivots[PIVOTS.BOTTOM_LEFT].x + 60;
+
+        // Shift Left button
+        const shift_left_x = action_start_x;
+        if (self.fui.button(shift_left_x, action_y, action_button_width, 32, "← Shift", CONF.COLOR_MENU_NORMAL, mouse)) {
+            self.pal.shift_palette_left(self.tiles);
+        }
+
+        // Delete button
+        const delete_x = shift_left_x + action_button_spacing;
+        if (self.fui.button(delete_x, action_y, action_button_width, 32, "Delete", CONF.COLOR_MENU_DANGER, mouse)) {
+            self.pal.delete_palette_safe(self.tiles);
+        }
+
+        // Shift Right button
+        const shift_right_x = delete_x + action_button_spacing;
+        if (self.fui.button(shift_right_x, action_y, action_button_width, 32, "Shift →", CONF.COLOR_MENU_NORMAL, mouse)) {
+            self.pal.shift_palette_right(self.tiles);
+        }
+
         // Stats panel
         const stats_x = self.fui.pivots[PIVOTS.TOP_RIGHT].x - 256;
         const stats_y = self.fui.pivots[PIVOTS.TOP_RIGHT].y + 128;

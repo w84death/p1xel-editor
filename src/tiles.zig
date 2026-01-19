@@ -111,6 +111,55 @@ pub const Tiles = struct {
             self.palette.get_rgba_from_index(self.palette.db[pal][3]),
         };
     }
+
+    // Updates tile palette indices after palette deletion/insertion
+    // old_index: the palette index that was removed/inserted
+    // new_index: unused for shift operations, kept for API consistency
+    // shift: -1 for deletion (shift left), +1 for insertion (shift right)
+    pub fn update_palette_indices(self: *Tiles, old_index: u8, new_index: u8, shift: i8) void {
+        _ = new_index; // Unused in shift operations
+
+        for (0..self.count) |i| {
+            const tile_pal = self.db[i].pal;
+
+            if (shift == -1) {
+                // Deletion: shift all palettes after old_index left
+                if (tile_pal > old_index) {
+                    self.db[i].pal = tile_pal - 1;
+                    self.update_pal32(i);
+                } else if (tile_pal == old_index) {
+                    // Tile referenced deleted palette, assign to first palette
+                    self.db[i].pal = 0;
+                    self.update_pal32(i);
+                }
+            } else if (shift == 1) {
+                // Insertion: shift all palettes at/after old_index right
+                if (tile_pal >= old_index) {
+                    self.db[i].pal = tile_pal + 1;
+                    self.update_pal32(i);
+                }
+            }
+        }
+
+        self.updated = true;
+    }
+
+    // Updates tile palette indices after palette swap
+    pub fn update_palette_indices_swap(self: *Tiles, index1: u8, index2: u8) void {
+        for (0..self.count) |i| {
+            const tile_pal = self.db[i].pal;
+
+            if (tile_pal == index1) {
+                self.db[i].pal = index2;
+                self.update_pal32(i);
+            } else if (tile_pal == index2) {
+                self.db[i].pal = index1;
+                self.update_pal32(i);
+            }
+        }
+
+        self.updated = true;
+    }
     pub fn draw(self: *Tiles, index: usize, x: i32, y: i32) void {
         for (0..CONF.SPRITE_SIZE) |py| {
             for (0..CONF.SPRITE_SIZE) |px| {

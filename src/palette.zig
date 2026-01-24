@@ -161,9 +161,13 @@ pub const Palette = struct {
         }
     }
 
-    pub fn delete_palette_safe(self: *Palette, tiles: *Tiles) void {
+    pub fn delete_palette_safe(self: *Palette, tiles: *Tiles, tiles_using_palette: usize) void {
         if (self.count <= 1) {
             return; // Cannot delete the last palette
+        }
+
+        if (tiles_using_palette > 0) {
+            return; // Cannot delete palette that is in use
         }
 
         const deleted_index = self.index;

@@ -65,7 +65,6 @@ pub fn main() void {
             State.main_menu, State.about => vfx.draw(CONF.VFX_SNOW_COLOR, dt),
             else => {},
         }
-        fui.draw_cursor_lines(Vec2.init(f.x, f.y));
 
         if (mouse_lock and mouse_pressed and f.mouse == 0) {
             mouse_pressed = false;
@@ -119,6 +118,8 @@ pub fn main() void {
         }
         // Version
         fui.draw_version();
+
+        fui.draw_cursor_lines(Vec2.init(f.x, f.y));
 
         const frame_time_target: f64 = 1000.0 / 30.0;
         const processing_time: f64 = @floatFromInt(c.fenster_time() - now);

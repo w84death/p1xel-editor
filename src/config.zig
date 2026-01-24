@@ -3,7 +3,8 @@ const DB16 = @import("palette.zig").DB16;
 
 pub const CONF = struct {
     pub const VERSION = "alpha8";
-    pub const THE_NAME = "P1Xel Editor";
+    pub const THE_NAME = "P1Xel Tool";
+    pub const WELCOME = "Create retro art for P1X x86 assembly engine.";
     pub const SCREEN_W = 1440;
     pub const SCREEN_H = 960;
     pub const PALETTES_FILE = "palettes.dat";

@@ -45,12 +45,19 @@ fn getNoteName(id: usize) [:0]const u8 {
     return "???";
 }
 
+const ComposerMode = enum {
+    Insert,
+    Preview,
+};
+
 pub const ComposerScene = struct {
     fui: Fui,
     sm: *StateMachine,
     audio: Audio,
     melody: [MAX_NOTES]Note,
     melody_len: usize,
+    mode: ComposerMode,
+    preview_buf: [1]Note,
 
     pub fn init(fui: Fui, sm: *StateMachine) ComposerScene {
         return ComposerScene{
@@ -59,6 +66,8 @@ pub const ComposerScene = struct {
             .audio = Audio.init(),
             .melody = undefined,
             .melody_len = 0,
+            .mode = .Insert,
+            .preview_buf = undefined,
         };
     }
 
@@ -86,6 +95,14 @@ pub const ComposerScene = struct {
             self.melody_len = 0;
         }
 
+        const mode_str = switch (self.mode) {
+            .Insert => "Mode: INS",
+            .Preview => "Mode: PRE",
+        };
+        if (self.fui.button(px + 460, py, 100, 32, mode_str, CONF.COLOR_MENU_HIGHLIGHT, mouse)) {
+            self.mode = if (self.mode == .Insert) .Preview else .Insert;
+        }
+
         // Note Palette (Left Column)
         const start_y = py + 48;
         var btn_y: i32 = start_y;
@@ -96,9 +113,16 @@ pub const ComposerScene = struct {
         for (AVAILABLE_NOTES) |note_def| {
             if (self.fui.button(px, btn_y, 80, 24, note_def.name, CONF.COLOR_MENU_NORMAL, mouse)) {
                 self.audio.stop_tune();
-                if (self.melody_len < MAX_NOTES) {
-                    self.melody[self.melody_len] = .{ .id = note_def.id, .dur = 0.25 };
-                    self.melody_len += 1;
+
+                // Play preview
+                self.preview_buf[0] = .{ .id = note_def.id, .dur = 0.25 };
+                self.audio.play_tune(&self.preview_buf);
+
+                if (self.mode == .Insert) {
+                    if (self.melody_len < MAX_NOTES) {
+                        self.melody[self.melody_len] = .{ .id = note_def.id, .dur = 0.25 };
+                        self.melody_len += 1;
+                    }
                 }
             }
             btn_y += 28;
@@ -107,9 +131,16 @@ pub const ComposerScene = struct {
         // Add a generic Rest button
         if (self.fui.button(px, btn_y, 80, 24, "REST", CONF.COLOR_MENU_SECONDARY, mouse)) {
             self.audio.stop_tune();
-            if (self.melody_len < MAX_NOTES) {
-                self.melody[self.melody_len] = .{ .id = AudioMod.NOTE_REST, .dur = 0.25 };
-                self.melody_len += 1;
+
+            // Play silent preview (rest)
+            self.preview_buf[0] = .{ .id = AudioMod.NOTE_REST, .dur = 0.25 };
+            self.audio.play_tune(&self.preview_buf);
+
+            if (self.mode == .Insert) {
+                if (self.melody_len < MAX_NOTES) {
+                    self.melody[self.melody_len] = .{ .id = AudioMod.NOTE_REST, .dur = 0.25 };
+                    self.melody_len += 1;
+                }
             }
         }
 

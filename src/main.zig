@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @cImport({
     @cInclude("fenster.h");
+    @cInclude("fenster_audio.h");
 });
 const CONF = @import("config.zig").CONF;
 const PIVOTS = @import("fui.zig").PIVOTS;
@@ -108,7 +109,7 @@ pub fn main() void {
             },
             State.composer => {
                 composer.draw(mouse);
-                composer.update_audio();
+                composer.update_audio(dt);
             },
             State.quit => {
                 shouldClose = true;

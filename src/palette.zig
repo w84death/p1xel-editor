@@ -135,6 +135,28 @@ pub const Palette = struct {
         self.updated = false;
         self.save_palettes_to_file();
     }
+
+    pub fn delete_palette_with_tiles(self: *Palette, tiles: *Tiles) void {
+        if (self.count <= 1) {
+            return;
+        }
+
+        const deleted_index = self.index;
+
+        // Update all tiles that reference the deleted or shifted palettes
+        tiles.update_tile_palette_ids(deleted_index, 0, .delete);
+
+        var i = deleted_index;
+        while (i < self.count - 1) : (i += 1) {
+            self.db[i] = self.db[i + 1];
+        }
+        self.count -= 1;
+        self.index = if (self.index > 0) self.index - 1 else 0;
+        self.current = self.db[self.index];
+        self.updated = false;
+        self.save_palettes_to_file();
+        tiles.save_tileset_to_file() catch {};
+    }
     pub fn update_current_swatch(self: *Palette, new: u8) void {
         self.current[self.swatch] = new;
         self.updated = true;
@@ -172,13 +194,11 @@ pub const Palette = struct {
 
         const deleted_index = self.index;
 
-        // Update all tiles that reference the deleted or shifted palettes
-        tiles.update_palette_indices(deleted_index, 0, -1);
-
         // Shift all palettes after the deleted one left
         var i = deleted_index;
         while (i < self.count - 1) : (i += 1) {
             self.db[i] = self.db[i + 1];
+            tiles.update_tile_palette_ids(i, i + 1, .swap);
         }
 
         self.count -= 1;
@@ -208,7 +228,7 @@ pub const Palette = struct {
         self.db[target_index] = temp;
 
         // Update tiles that reference either of the swapped palettes
-        tiles.update_palette_indices_swap(current_index, target_index);
+        tiles.update_tile_palette_ids(current_index, target_index, .swap);
 
         // Update current index to follow the palette
         self.index = target_index;
@@ -233,7 +253,7 @@ pub const Palette = struct {
         self.db[target_index] = temp;
 
         // Update tiles that reference either of the swapped palettes
-        tiles.update_palette_indices_swap(current_index, target_index);
+        tiles.update_tile_palette_ids(current_index, target_index, .swap);
 
         // Update current index to follow the palette
         self.index = target_index;

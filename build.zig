@@ -20,7 +20,10 @@ pub fn build(b: *std.Build) void {
     exe.addCSourceFile(.{ .file = b.path("src/fenster_audio.c"), .flags = &[_][]const u8{} });
     switch (target.result.os.tag) {
         .macos => exe.linkFramework("Cocoa"),
-        .windows => exe.linkSystemLibrary("gdi32"),
+        .windows => {
+            exe.linkSystemLibrary("gdi32");
+            exe.linkSystemLibrary("winmm");
+        },
         .linux => {
             exe.linkSystemLibrary("X11");
             exe.linkSystemLibrary("asound");

@@ -22,8 +22,8 @@ struct fenster_audio {
   dispatch_semaphore_t full;
 };
 #elif defined(_WIN32)
-#include <mmsystem.h>
 #include <windows.h>
+#include <mmsystem.h>
 struct fenster_audio {
   WAVEHDR header;
   HWAVEOUT wo;

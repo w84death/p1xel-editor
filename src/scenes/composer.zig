@@ -96,8 +96,8 @@ pub const ComposerScene = struct {
         }
 
         const mode_str = switch (self.mode) {
-            .Insert => "Mode: INS",
-            .Preview => "Mode: PRE",
+            .Insert => "Insert",
+            .Preview => "Preview",
         };
         if (self.fui.button(px + 460, py, 100, 32, mode_str, CONF.COLOR_MENU_HIGHLIGHT, mouse)) {
             self.mode = if (self.mode == .Insert) .Preview else .Insert;

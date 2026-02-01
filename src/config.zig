@@ -2,7 +2,7 @@ const rl = @import("raylib");
 const DB16 = @import("palette.zig").DB16;
 
 pub const CONF = struct {
-    pub const VERSION = "alpha8";
+    pub const VERSION = "alpha9";
     pub const THE_NAME = "P1Xel Tool";
     pub const WELCOME = "Create retro art for P1X x86 assembly engine.";
     pub const SCREEN_W = 1440;

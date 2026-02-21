@@ -41,6 +41,7 @@ pub const Tiles = struct {
     layers: ?*[CONF.PREVIEW_LAYERS]Layer = null,
     updated: bool = false,
     hot: bool = false,
+    page: usize = 0,
     pub fn init(fui: Fui, palette: *Palette, layers: ?*[CONF.PREVIEW_LAYERS]Layer) Tiles {
         return Tiles{
             .db = undefined,
@@ -50,6 +51,7 @@ pub const Tiles = struct {
             .layers = layers,
             .count = 1,
             .updated = false,
+            .page = 0,
         };
     }
     pub fn load_tileset_from_file(self: *Tiles) void {
@@ -293,26 +295,36 @@ pub const Tiles = struct {
             return null;
         }
         const tiles_in_row: i32 = 8;
+        const tiles_rows: i32 = 8;
+        const tiles_per_page: usize = @intCast(tiles_in_row * tiles_rows);
+        const max_pages: usize = (CONF.MAX_TILES + tiles_per_page - 1) / tiles_per_page;
+
         const size: i32 = CONF.SPRITE_SIZE * CONF.PREVIEW_SCALE + 4;
-        const tiles_first: usize = 0;
-        const tiles_last: usize = CONF.MAX_TILES / 2;
+        const start_index = self.page * tiles_per_page;
+
         const t_pos = Vec2.init(
             self.fui.pivots[PIVOTS.CENTER].x - (tiles_in_row * size) / 2,
             self.fui.pivots[PIVOTS.CENTER].y - (tiles_in_row * size) / 2,
         );
-        self.fui.draw_rect(t_pos.x, t_pos.y, (tiles_in_row * size), (tiles_in_row * size), CONF.COLOR_POPUP);
-        for (tiles_first..tiles_last) |i| {
-            const x_shift: i32 = @intCast(@mod(i, tiles_in_row) * size);
+
+        self.fui.draw_rect(t_pos.x, t_pos.y, (tiles_in_row * size), (tiles_rows * size), CONF.COLOR_POPUP);
+
+        for (0..tiles_per_page) |i| {
+            const index = start_index + i;
+            if (index >= CONF.MAX_TILES) break;
+
+            const x_shift: i32 = @intCast(@mod(i, @as(usize, @intCast(tiles_in_row))) * @as(usize, @intCast(size)));
             const x: i32 = t_pos.x + x_shift;
-            const ii: i32 = @intCast(i);
-            const y: i32 = @divFloor(ii, tiles_in_row) * size;
-            if (i < self.count) {
+            const row: i32 = @intCast(i / @as(usize, @intCast(tiles_in_row)));
+            const y: i32 = row * size;
+
+            if (index < self.count) {
                 if (self.fui.button(x, t_pos.y + y, size, size, "", DB16.BLACK, mouse)) {
-                    self.selected = @intCast(ii);
+                    self.selected = @intCast(index);
                     return true;
                 }
-                self.draw(i, x + 1, t_pos.y + y + 1);
-                if (self.selected == i) {
+                self.draw(index, x + 1, t_pos.y + y + 1);
+                if (self.selected == index) {
                     self.fui.draw_rect_lines(x + 5, y + t_pos.y + 5, size - 8, size - 8, DB16.BLACK);
                     self.fui.draw_rect_lines(x + 4, y + t_pos.y + 4, size - 8, size - 8, DB16.WHITE);
                 }
@@ -320,10 +332,34 @@ pub const Tiles = struct {
                 self.fui.draw_rect_lines(x, t_pos.y + y, size, size, DB16.LIGHT_GRAY);
             }
         }
-        self.fui.draw_rect(t_pos.x - 148, t_pos.y, 140, 80, CONF.COLOR_MENU_NORMAL);
-        if (self.fui.button(t_pos.x - 138, t_pos.y + 8, 120, 64, "Close", CONF.COLOR_MENU_NORMAL, mouse)) {
+
+        // Controls
+        const control_panel_x = t_pos.x - 148;
+        self.fui.draw_rect(control_panel_x, t_pos.y, 140, 260, CONF.COLOR_MENU_NORMAL);
+
+        var btn_y = t_pos.y + 8;
+        if (self.fui.button(control_panel_x + 10, btn_y, 120, 64, "Close", CONF.COLOR_MENU_NORMAL, mouse)) {
             return true;
         }
+
+        btn_y += 72;
+        if (self.page > 0) {
+            if (self.fui.button(control_panel_x + 10, btn_y, 120, 64, "Prev", CONF.COLOR_MENU_NORMAL, mouse)) {
+                self.page -= 1;
+            }
+        }
+
+        btn_y += 72;
+        if (self.page < max_pages - 1) {
+            if (self.fui.button(control_panel_x + 10, btn_y, 120, 64, "Next", CONF.COLOR_MENU_NORMAL, mouse)) {
+                self.page += 1;
+            }
+        }
+
+        var status_buf: [32:0]u8 = undefined;
+        _ = std.fmt.bufPrintZ(&status_buf, "{d}/{d}", .{ self.page + 1, max_pages }) catch {};
+        self.fui.draw_text(&status_buf, control_panel_x + 40, btn_y + 80, CONF.FONT_DEFAULT_SIZE, CONF.COLOR_PRIMARY);
+
         return null;
     }
 };

@@ -36,6 +36,7 @@ const Popup = enum {
 const Tools = enum {
     pixel,
     fill,
+    line,
 };
 
 const BackgroundType = enum {
@@ -54,6 +55,8 @@ pub const EditScene = struct {
     popup: Popup,
     needs_saving: bool,
     tool: Tools = Tools.pixel,
+    line_start: ?Vec2 = null,
+    prev_mouse_pressed: bool = false,
     status_buffer: [256]u8 = undefined,
     bg_type: BackgroundType = BackgroundType.dark,
 
@@ -78,6 +81,8 @@ pub const EditScene = struct {
             .popup = Popup.none,
             .needs_saving = false,
             .tool = Tools.pixel,
+            .line_start = null,
+            .prev_mouse_pressed = false,
             .bg_type = BackgroundType.dark,
         };
     }
@@ -116,6 +121,7 @@ pub const EditScene = struct {
         const mouse_cell_y: i32 = @divFloor(my - self.canvas.y, CONF.GRID_SIZE);
 
         if (mouse.pressed) {
+            const just_pressed = !self.prev_mouse_pressed;
             const color: u8 = self.palette.swatch;
             if (mouse_cell_x >= 0 and mouse_cell_x < CONF.SPRITE_SIZE and
                 mouse_cell_y >= 0 and mouse_cell_y < CONF.SPRITE_SIZE)
@@ -123,27 +129,42 @@ pub const EditScene = struct {
                 switch (self.tool) {
                     Tools.pixel => {
                         self.canvas.data[@intCast(mouse_cell_y)][@intCast(mouse_cell_x)] = color;
+                        self.needs_saving = true;
+                    },
+                    Tools.line => {
+                        if (just_pressed) {
+                            if (self.line_start == null) {
+                                self.line_start = Vec2.init(mouse_cell_x, mouse_cell_y);
+                            } else {
+                                const start = self.line_start.?;
+                                const end = Vec2.init(mouse_cell_x, mouse_cell_y);
+                                self.draw_line_on_canvas(start, end, self.palette.swatch);
+                                self.needs_saving = true;
+                                self.line_start = null;
+                            }
+                        }
                     },
                     Tools.fill => {
                         const start_x: usize = @intCast(mouse_cell_x);
                         const start_y: usize = @intCast(mouse_cell_y);
                         const old_color = self.canvas.data[start_y][start_x];
-                        if (old_color == color) return; // No change needed
-                        const floodFill = struct {
-                            fn flood(data: *[CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8, x: usize, y: usize, old: u8, new: u8) void {
-                                if (x >= CONF.SPRITE_SIZE or y >= CONF.SPRITE_SIZE) return;
-                                if (data[y][x] != old) return;
-                                data[y][x] = new;
-                                if (x > 0) flood(data, x - 1, y, old, new);
-                                if (x < CONF.SPRITE_SIZE - 1) flood(data, x + 1, y, old, new);
-                                if (y > 0) flood(data, x, y - 1, old, new);
-                                if (y < CONF.SPRITE_SIZE - 1) flood(data, x, y + 1, old, new);
-                            }
-                        }.flood;
-                        floodFill(&self.canvas.data, start_x, start_y, old_color, color);
+                        if (old_color != color) {
+                            const floodFill = struct {
+                                fn flood(data: *[CONF.SPRITE_SIZE][CONF.SPRITE_SIZE]u8, x: usize, y: usize, old: u8, new: u8) void {
+                                    if (x >= CONF.SPRITE_SIZE or y >= CONF.SPRITE_SIZE) return;
+                                    if (data[y][x] != old) return;
+                                    data[y][x] = new;
+                                    if (x > 0) flood(data, x - 1, y, old, new);
+                                    if (x < CONF.SPRITE_SIZE - 1) flood(data, x + 1, y, old, new);
+                                    if (y > 0) flood(data, x, y - 1, old, new);
+                                    if (y < CONF.SPRITE_SIZE - 1) flood(data, x, y + 1, old, new);
+                                }
+                            }.flood;
+                            floodFill(&self.canvas.data, start_x, start_y, old_color, color);
+                            self.needs_saving = true;
+                        }
                     },
                 }
-                self.needs_saving = true;
             }
         }
 
@@ -153,6 +174,36 @@ pub const EditScene = struct {
         {
             _ = std.fmt.bufPrintZ(&status_buf, "Pos: {d}, {d}", .{ mouse_cell_x, mouse_cell_y }) catch {};
             self.fui.draw_text(&status_buf, self.canvas.x, self.canvas.y + CONF.SPRITE_SIZE * CONF.GRID_SIZE + 8, CONF.FONT_DEFAULT_SIZE, DB16.WHITE);
+        }
+        self.prev_mouse_pressed = mouse.pressed;
+    }
+
+    fn draw_line_on_canvas(self: *EditScene, start: Vec2, end: Vec2, color: u8) void {
+        var x0 = start.x;
+        var y0 = start.y;
+        const x1 = end.x;
+        const y1 = end.y;
+
+        const dx: i32 = @intCast(@abs(x1 - x0));
+        const dy: i32 = -@as(i32, @intCast(@abs(y1 - y0)));
+        const sx: i32 = if (x0 < x1) 1 else -1;
+        const sy: i32 = if (y0 < y1) 1 else -1;
+        var err = dx + dy;
+
+        while (true) {
+            if (x0 >= 0 and x0 < CONF.SPRITE_SIZE and y0 >= 0 and y0 < CONF.SPRITE_SIZE) {
+                self.canvas.data[@intCast(y0)][@intCast(x0)] = color;
+            }
+            if (x0 == x1 and y0 == y1) break;
+            const e2 = 2 * err;
+            if (e2 >= dy) {
+                err += dy;
+                x0 += sx;
+            }
+            if (e2 <= dx) {
+                err += dx;
+                y0 += sy;
+            }
         }
     }
 
@@ -203,6 +254,10 @@ pub const EditScene = struct {
             self.tool = Tools.fill;
         }
         ty += 50;
+        if (self.fui.button(tx, ty, 128, 40, "Line", if (self.tool == Tools.line) CONF.COLOR_MENU_NORMAL else CONF.COLOR_MENU_SECONDARY, mouse) and !self.nav.locked) {
+            self.tool = Tools.line;
+        }
+        ty += 50;
         if (self.fui.button(tx, ty, 128, 40, "Clear", CONF.COLOR_MENU_DANGER, mouse) and !self.nav.locked) {
             self.nav.locked = true;
             self.popup = Popup.confirm_clear;
@@ -244,6 +299,39 @@ pub const EditScene = struct {
                         CONF.GRID_SIZE,
                         color,
                     );
+                }
+            }
+        }
+        // Line Tool Preview
+        if (self.tool == Tools.line and self.line_start != null) {
+            const mx: i32 = mouse.x;
+            const my: i32 = mouse.y;
+            const end_x: i32 = @divFloor(mx - self.canvas.x, CONF.GRID_SIZE);
+            const end_y: i32 = @divFloor(my - self.canvas.y, CONF.GRID_SIZE);
+            // Draw preview line
+            var x0 = self.line_start.?.x;
+            var y0 = self.line_start.?.y;
+            const x1 = end_x;
+            const y1 = end_y;
+            const dx: i32 = @intCast(@abs(x1 - x0));
+            const dy: i32 = -@as(i32, @intCast(@abs(y1 - y0)));
+            const sx: i32 = if (x0 < x1) 1 else -1;
+            const sy: i32 = if (y0 < y1) 1 else -1;
+            var err = dx + dy;
+            const color = self.palette.get_rgba_from_index(self.palette.swatch);
+            while (true) {
+                if (x0 >= 0 and x0 < CONF.SPRITE_SIZE and y0 >= 0 and y0 < CONF.SPRITE_SIZE) {
+                    self.fui.draw_rect(self.canvas.x + x0 * CONF.GRID_SIZE, self.canvas.y + y0 * CONF.GRID_SIZE, CONF.GRID_SIZE, CONF.GRID_SIZE, color);
+                }
+                if (x0 == x1 and y0 == y1) break;
+                const e2 = 2 * err;
+                if (e2 >= dy) {
+                    err += dy;
+                    x0 += sx;
+                }
+                if (e2 <= dx) {
+                    err += dx;
+                    y0 += sy;
                 }
             }
         }

@@ -218,6 +218,22 @@ pub const Tiles = struct {
         self.count += 1;
         self.updated = true;
     }
+    pub fn save_layers_to_file(self: *Tiles) void {
+        if (self.layers) |layers| {
+            var buf: [CONF.PREVIEW_LAYERS * CONF.MAX_PREVIEW_H * CONF.MAX_PREVIEW_W]u8 = undefined;
+            const per_layer = CONF.MAX_PREVIEW_H * CONF.MAX_PREVIEW_W;
+            for (0..CONF.PREVIEW_LAYERS) |l| {
+                for (0..CONF.MAX_PREVIEW_H) |y| {
+                    for (0..CONF.MAX_PREVIEW_W) |x| {
+                        buf[l * per_layer + y * CONF.MAX_PREVIEW_W + x] = layers[l].data[y][x];
+                    }
+                }
+            }
+            const file = std.fs.cwd().createFile(CONF.PREVIEW_FILE, .{}) catch return;
+            defer file.close();
+            _ = file.write(&buf) catch return;
+        }
+    }
     pub fn delete(self: *Tiles, index: usize) void {
         if (self.count <= 1) {
             return;
@@ -242,6 +258,8 @@ pub const Tiles = struct {
         }
         self.count -= 1;
         self.updated = true;
+        self.save_layers_to_file();
+        self.save_tileset_to_file() catch {};
         return;
     }
     pub fn shift_tile_left(self: *Tiles, index: usize) void {
@@ -264,6 +282,8 @@ pub const Tiles = struct {
                 }
             }
             self.updated = true;
+            self.save_layers_to_file();
+            self.save_tileset_to_file() catch {};
         }
     }
     pub fn shift_tile_right(self: *Tiles, index: usize) void {
@@ -286,6 +306,8 @@ pub const Tiles = struct {
                 }
             }
             self.updated = true;
+            self.save_layers_to_file();
+            self.save_tileset_to_file() catch {};
         }
     }
     pub fn show_tiles_selector(self: *Tiles, mouse: Mouse) ?bool {

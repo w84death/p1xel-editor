@@ -407,6 +407,11 @@ pub const EditScene = struct {
         if (self.palette.updated) {
             if (self.fui.button(so_x, so_y, 160, 32, "Update", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
                 self.palette.update_palette();
+                for (0..self.tiles.count) |i| {
+                    if (self.tiles.db[i].pal == self.palette.index) {
+                        self.tiles.update_pal32(i);
+                    }
+                }
                 // self.needs_saving = true;
                 self.save_tiles();
             }

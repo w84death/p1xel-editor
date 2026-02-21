@@ -58,6 +58,7 @@ pub const ComposerScene = struct {
     melody_len: usize,
     mode: ComposerMode,
     preview_buf: [1]Note,
+    prev_mouse_pressed: bool = false,
 
     pub fn init(fui: Fui, sm: *StateMachine) ComposerScene {
         return ComposerScene{
@@ -68,29 +69,33 @@ pub const ComposerScene = struct {
             .melody_len = 0,
             .mode = .Insert,
             .preview_buf = undefined,
+            .prev_mouse_pressed = false,
         };
     }
 
     pub fn draw(self: *ComposerScene, mouse: Mouse) void {
+        var click_mouse = mouse;
+        click_mouse.pressed = mouse.pressed and !self.prev_mouse_pressed;
+        self.prev_mouse_pressed = mouse.pressed;
         const px = self.fui.pivots[PIVOTS.TOP_LEFT].x;
         const py = self.fui.pivots[PIVOTS.TOP_LEFT].y;
 
         // Navigation
-        if (self.fui.button(px, py, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, mouse)) {
+        if (self.fui.button(px, py, 120, 32, "< Menu", CONF.COLOR_MENU_SECONDARY, click_mouse)) {
             self.audio.stop_tune();
             self.sm.goTo(State.main_menu);
         }
 
         // Playback Controls
-        if (self.fui.button(px + 130, py, 100, 32, "Play", CONF.COLOR_MENU_NORMAL, mouse)) {
+        if (self.fui.button(px + 130, py, 100, 32, "Play", CONF.COLOR_MENU_NORMAL, click_mouse)) {
             if (self.melody_len > 0) {
                 self.audio.play_tune(self.melody[0..self.melody_len]);
             }
         }
-        if (self.fui.button(px + 240, py, 100, 32, "Stop", CONF.COLOR_MENU_NORMAL, mouse)) {
+        if (self.fui.button(px + 240, py, 100, 32, "Stop", CONF.COLOR_MENU_NORMAL, click_mouse)) {
             self.audio.stop_tune();
         }
-        if (self.fui.button(px + 350, py, 100, 32, "Clear", CONF.COLOR_MENU_DANGER, mouse)) {
+        if (self.fui.button(px + 350, py, 100, 32, "Clear", CONF.COLOR_MENU_DANGER, click_mouse)) {
             self.audio.stop_tune();
             self.melody_len = 0;
         }
@@ -99,7 +104,7 @@ pub const ComposerScene = struct {
             .Insert => "Insert",
             .Preview => "Preview",
         };
-        if (self.fui.button(px + 460, py, 100, 32, mode_str, CONF.COLOR_MENU_HIGHLIGHT, mouse)) {
+        if (self.fui.button(px + 460, py, 100, 32, mode_str, CONF.COLOR_MENU_HIGHLIGHT, click_mouse)) {
             self.mode = if (self.mode == .Insert) .Preview else .Insert;
         }
 
@@ -111,7 +116,7 @@ pub const ComposerScene = struct {
         btn_y += 32;
 
         for (AVAILABLE_NOTES) |note_def| {
-            if (self.fui.button(px, btn_y, 80, 24, note_def.name, CONF.COLOR_MENU_NORMAL, mouse)) {
+            if (self.fui.button(px, btn_y, 80, 24, note_def.name, CONF.COLOR_MENU_NORMAL, click_mouse)) {
                 self.audio.stop_tune();
 
                 // Play preview
@@ -129,7 +134,7 @@ pub const ComposerScene = struct {
         }
 
         // Add a generic Rest button
-        if (self.fui.button(px, btn_y, 80, 24, "REST", CONF.COLOR_MENU_SECONDARY, mouse)) {
+        if (self.fui.button(px, btn_y, 80, 24, "REST", CONF.COLOR_MENU_SECONDARY, click_mouse)) {
             self.audio.stop_tune();
 
             // Play silent preview (rest)
@@ -167,7 +172,7 @@ pub const ComposerScene = struct {
             const name = if (note.id == AudioMod.NOTE_REST) "..." else getNoteName(note.id);
             const text = std.fmt.bufPrintZ(&buf, "{d:0>2} | {s}", .{ i, name }) catch "ERR";
 
-            if (self.fui.button(track_x, track_y, 160, 20, text, color, mouse)) {
+            if (self.fui.button(track_x, track_y, 160, 20, text, color, click_mouse)) {
                 // Remove note if clicked
                 self.audio.stop_tune();
                 var k = i;

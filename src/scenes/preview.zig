@@ -16,6 +16,8 @@ const Popup = enum {
     info_not_implemented,
     info_save_ok,
     info_save_fail,
+    info_export_ok,
+    info_export_fail,
     confirm_delete,
     select_tile,
 };
@@ -150,6 +152,59 @@ pub const PreviewScene = struct {
             }
         }
     }
+    pub fn exportPreviewToPPM(self: *const PreviewScene) !void {
+        const width = CONF.MAX_PREVIEW_W * CONF.SPRITE_SIZE;
+        const height = CONF.MAX_PREVIEW_H * CONF.SPRITE_SIZE;
+
+        const file = try std.fs.cwd().createFile("preview.ppm", .{});
+        defer file.close();
+
+        var buffer: [8192]u8 = undefined;
+        var fwrite = file.writer(&buffer);
+        const writer = &fwrite.interface;
+
+        try writer.print("P6\n{d} {d}\n255\n", .{ width, height });
+
+        for (0..height) |py| {
+            for (0..width) |px| {
+                const tile_x = px / CONF.SPRITE_SIZE;
+                const tile_y = py / CONF.SPRITE_SIZE;
+                const pixel_x = px % CONF.SPRITE_SIZE;
+                const pixel_y = py % CONF.SPRITE_SIZE;
+
+                var color: u32 = 0xFF000000;
+
+                var i: usize = 0;
+                while (i < CONF.PREVIEW_LAYERS) : (i += 1) {
+                    const layer = self.layers[i];
+                    if (!layer.visible) continue;
+
+                    const tile_idx = layer.data[tile_y][tile_x];
+                    if (tile_idx == 255) continue;
+
+                    if (tile_idx >= self.tiles.count) continue;
+
+                    const tile = self.tiles.db[tile_idx];
+                    const palette_idx = tile.data[pixel_y][pixel_x];
+                    if (palette_idx >= 4) continue;
+                    const pixel_color = tile.pal32[palette_idx];
+
+                    if (palette_idx == 0 and pixel_color == DB16.BLACK) continue;
+
+                    color = pixel_color;
+                }
+
+                const r: u8 = @intCast((color >> 16) & 0xFF);
+                const g: u8 = @intCast((color >> 8) & 0xFF);
+                const b: u8 = @intCast(color & 0xFF);
+
+                try writer.writeByte(r);
+                try writer.writeByte(g);
+                try writer.writeByte(b);
+            }
+        }
+        try writer.flush();
+    }
     pub fn draw(self: *PreviewScene, mouse: Mouse) void {
         // Navigation (top)
         self.nav.draw(mouse);
@@ -167,7 +222,16 @@ pub const PreviewScene = struct {
             self.popup = Popup.info_save_ok;
         }
 
-        if (self.fui.button(options_x - 160, options_y + 40, 160, 32, if (self.iso_mode) "ISO: ON" else "ISO: OFF", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+        if (self.fui.button(options_x - 160, options_y + 40, 160, 32, "Export PPM", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
+            self.locked = true;
+            self.exportPreviewToPPM() catch {
+                self.popup = Popup.info_export_fail;
+                return;
+            };
+            self.popup = Popup.info_export_ok;
+        }
+
+        if (self.fui.button(options_x - 160, options_y + 80, 160, 32, if (self.iso_mode) "ISO: ON" else "ISO: OFF", CONF.COLOR_MENU_NORMAL, mouse) and !self.locked) {
             self.iso_mode = !self.iso_mode;
         }
 
@@ -305,6 +369,24 @@ pub const PreviewScene = struct {
                 },
                 Popup.info_save_fail => {
                     if (self.fui.info_popup("File saving failed...", mouse, CONF.COLOR_NO)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.info_export_ok => {
+                    if (self.fui.info_popup("Exported preview.ppm!", mouse, CONF.COLOR_OK)) |dismissed| {
+                        if (dismissed) {
+                            self.popup = Popup.none;
+                            self.locked = false;
+                            self.sm.hot = true;
+                        }
+                    }
+                },
+                Popup.info_export_fail => {
+                    if (self.fui.info_popup("Export failed...", mouse, CONF.COLOR_NO)) |dismissed| {
                         if (dismissed) {
                             self.popup = Popup.none;
                             self.locked = false;

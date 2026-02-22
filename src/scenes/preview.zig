@@ -153,8 +153,16 @@ pub const PreviewScene = struct {
         }
     }
     pub fn exportPreviewToPPM(self: *const PreviewScene) !void {
-        const width = CONF.MAX_PREVIEW_W * CONF.SPRITE_SIZE;
-        const height = CONF.MAX_PREVIEW_H * CONF.SPRITE_SIZE;
+        const sprite_size = CONF.SPRITE_SIZE;
+        const width: usize = if (self.iso_mode)
+            CONF.MAX_PREVIEW_W * sprite_size + sprite_size / 2
+        else
+            CONF.MAX_PREVIEW_W * sprite_size;
+
+        const height: usize = if (self.iso_mode)
+            CONF.MAX_PREVIEW_H * (sprite_size / 2) + sprite_size / 2
+        else
+            CONF.MAX_PREVIEW_H * sprite_size;
 
         const file = try std.fs.cwd().createFile("preview.ppm", .{});
         defer file.close();
@@ -167,11 +175,6 @@ pub const PreviewScene = struct {
 
         for (0..height) |py| {
             for (0..width) |px| {
-                const tile_x = px / CONF.SPRITE_SIZE;
-                const tile_y = py / CONF.SPRITE_SIZE;
-                const pixel_x = px % CONF.SPRITE_SIZE;
-                const pixel_y = py % CONF.SPRITE_SIZE;
-
                 var color: u32 = 0xFF000000;
 
                 var i: usize = 0;
@@ -179,19 +182,58 @@ pub const PreviewScene = struct {
                     const layer = self.layers[i];
                     if (!layer.visible) continue;
 
-                    const tile_idx = layer.data[tile_y][tile_x];
-                    if (tile_idx == 255) continue;
+                    if (!self.iso_mode) {
+                        const tile_x = px / sprite_size;
+                        const tile_y = py / sprite_size;
+                        if (tile_x >= CONF.MAX_PREVIEW_W or tile_y >= CONF.MAX_PREVIEW_H) continue;
 
-                    if (tile_idx >= self.tiles.count) continue;
+                        const tile_idx = layer.data[tile_y][tile_x];
+                        if (tile_idx == 255 or tile_idx >= self.tiles.count) continue;
 
-                    const tile = self.tiles.db[tile_idx];
-                    const palette_idx = tile.data[pixel_y][pixel_x];
-                    if (palette_idx >= 4) continue;
-                    const pixel_color = tile.pal32[palette_idx];
+                        const pixel_x = px % sprite_size;
+                        const pixel_y = py % sprite_size;
 
-                    if (palette_idx == 0 and pixel_color == DB16.BLACK) continue;
+                        const tile = self.tiles.db[tile_idx];
+                        const palette_idx = tile.data[pixel_y][pixel_x];
+                        if (palette_idx >= 4) continue;
+                        const pixel_color = tile.pal32[palette_idx];
 
-                    color = pixel_color;
+                        if (palette_idx == 0 and pixel_color == DB16.BLACK) continue;
+                        color = pixel_color;
+                    } else {
+                        const y_step = sprite_size / 2;
+                        const r_max_ideal = py / y_step;
+
+                        var r_iter: usize = 0;
+                        while (r_iter < 2) : (r_iter += 1) {
+                            if (r_max_ideal == 0 and r_iter == 0) continue;
+                            const r = if (r_iter == 0) r_max_ideal - 1 else r_max_ideal;
+                            if (r >= CONF.MAX_PREVIEW_H) continue;
+
+                            const row_y_start = r * y_step;
+                            if (py < row_y_start or py >= row_y_start + sprite_size) continue;
+
+                            const x_shift: usize = if (r % 2 == 1) sprite_size / 2 else 0;
+                            if (px < x_shift) continue;
+
+                            const c = (px - x_shift) / sprite_size;
+                            if (c >= CONF.MAX_PREVIEW_W) continue;
+
+                            const tile_idx = layer.data[r][c];
+                            if (tile_idx == 255 or tile_idx >= self.tiles.count) continue;
+
+                            const pixel_x = (px - x_shift) % sprite_size;
+                            const pixel_y = py - row_y_start;
+
+                            const tile = self.tiles.db[tile_idx];
+                            const palette_idx = tile.data[pixel_y][pixel_x];
+                            if (palette_idx >= 4) continue;
+                            const pixel_color = tile.pal32[palette_idx];
+
+                            if (palette_idx == 0 and pixel_color == DB16.BLACK) continue;
+                            color = pixel_color;
+                        }
+                    }
                 }
 
                 const r: u8 = @intCast((color >> 16) & 0xFF);

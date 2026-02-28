@@ -117,7 +117,7 @@ pub const Tiles = struct {
         var buf: [256]u8 = undefined;
 
         var issues: usize = 0;
-        for (1..self.count) |i| {
+        for (0..self.count) |i| {
             if (self.db[i].pal >= self.palette.count) {
                 issues += 1;
             }
@@ -125,7 +125,7 @@ pub const Tiles = struct {
 
         try file.writeAll("; Generated from P1Xel Editor\n");
         if (self.count > 0) {
-            const s = try std.fmt.bufPrint(&buf, "; Total tiles: {d} (first tile omitted)\n", .{self.count - 1});
+            const s = try std.fmt.bufPrint(&buf, "; Total tiles: {d}\n", .{self.count});
             try file.writeAll(s);
         } else {
             try file.writeAll("; Total tiles: 0\n");
@@ -144,9 +144,9 @@ pub const Tiles = struct {
 
         try file.writeAll("\nTiles:\n");
 
-        if (self.count <= 1) return;
+        if (self.count == 0) return;
 
-        for (1..self.count) |i| {
+        for (0..self.count) |i| {
             const tile = self.db[i];
             const s_tile = try std.fmt.bufPrint(&buf, "; Tile {d}\n", .{i});
             try file.writeAll(s_tile);

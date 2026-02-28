@@ -111,6 +111,68 @@ pub const Tiles = struct {
         _ = try file.write(buf[0..total_bytes]);
         self.updated = false;
     }
+    pub fn export_asm(self: *Tiles) !void {
+        const file = try std.fs.cwd().createFile("tiles.asm", .{});
+        defer file.close();
+        var buf: [256]u8 = undefined;
+
+        var issues: usize = 0;
+        for (1..self.count) |i| {
+            if (self.db[i].pal >= self.palette.count) {
+                issues += 1;
+            }
+        }
+
+        try file.writeAll("; Generated from P1Xel Editor\n");
+        if (self.count > 0) {
+            const s = try std.fmt.bufPrint(&buf, "; Total tiles: {d} (first tile omitted)\n", .{self.count - 1});
+            try file.writeAll(s);
+        } else {
+            try file.writeAll("; Total tiles: 0\n");
+        }
+        const s_issues = try std.fmt.bufPrint(&buf, "; Tiles with palette issues: {d}\n\n", .{issues});
+        try file.writeAll(s_issues);
+
+        try file.writeAll("; Palette definitions (mapped to DawnBringer 16 indices)\n");
+        try file.writeAll("Palettes:\n");
+
+        for (0..self.palette.count) |i| {
+            const p = self.palette.db[i];
+            const s = try std.fmt.bufPrint(&buf, "db 0x{X}, 0x{X}, 0x{X}, 0x{X} ; Palette {d}\n", .{ p[0], p[1], p[2], p[3], i });
+            try file.writeAll(s);
+        }
+
+        try file.writeAll("\nTiles:\n");
+
+        if (self.count <= 1) return;
+
+        for (1..self.count) |i| {
+            const tile = self.db[i];
+            const s_tile = try std.fmt.bufPrint(&buf, "; Tile {d}\n", .{i});
+            try file.writeAll(s_tile);
+            const s_pal = try std.fmt.bufPrint(&buf, "db 0x{X:0>2}\n", .{tile.pal});
+            try file.writeAll(s_pal);
+
+            for (0..CONF.SPRITE_SIZE) |y| {
+                var w1: u16 = 0;
+                var w2: u16 = 0;
+
+                for (0..8) |x| {
+                    const val: u16 = @intCast(tile.data[y][x] & 3);
+                    w1 |= (val << @intCast((7 - x) * 2));
+                }
+
+                for (0..8) |x| {
+                    const val: u16 = @intCast(tile.data[y][x + 8] & 3);
+                    w2 |= (val << @intCast((7 - x) * 2));
+                }
+
+                const s_data = try std.fmt.bufPrint(&buf, "dw {b:0>16}b, {b:0>16}b\n", .{ w1, w2 });
+                try file.writeAll(s_data);
+            }
+            try file.writeAll("\n");
+        }
+    }
     pub fn update_pal32(self: *Tiles, index: usize) void {
         const pal = self.db[index].pal;
         self.db[index].pal32 = [_]u32{

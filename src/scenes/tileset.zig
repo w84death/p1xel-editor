@@ -119,7 +119,11 @@ pub const TilesetScene = struct {
         tools_step += 188;
         if (self.fui.button(tools_step, tools.y, 220, 32, "Export ASM", CONF.COLOR_MENU_NORMAL, mouse) and !self.nav.locked) {
             self.nav.locked = true;
-            self.popup = Popup.info_not_implemented;
+            if (self.tiles.export_asm()) |_| {
+                self.popup = Popup.info_save_ok;
+            } else |_| {
+                self.popup = Popup.info_save_fail;
+            }
         }
 
         // Stats panel

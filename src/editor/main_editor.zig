@@ -6,6 +6,7 @@ const Mouse = @import("../engine/mouse.zig").Mouse;
 const Project = @import("project.zig").Project;
 const Tool = @import("project.zig").Tool;
 const ColorChannel = @import("project.zig").ColorChannel;
+const exporter = @import("exporter.zig");
 const views = @import("views.zig");
 
 pub const State = enum { splash, editor, tile_library, map_editor, quit };
@@ -183,8 +184,13 @@ pub const MainEditor = struct {
             self.setInfo("File saved", UI.accent);
         }
         if (pillButton(fui, renderer, mouse, x + 142, UI.file_y + 34, 112, 36, "EXPORT", false)) {
-            self.export_notice = true;
-            self.setInfo("Export not implemented", 0xDAD45E);
+            exporter.exportGameBoyEngine(project) catch {
+                self.export_notice = true;
+                self.setInfo("Export failed", UI.danger);
+                return;
+            };
+            self.export_notice = false;
+            self.setInfo("Engine data exported", UI.accent);
         }
     }
 

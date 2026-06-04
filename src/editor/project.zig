@@ -86,7 +86,7 @@ const ImageBank = struct {
 
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 6;
+    const VERSION: u8 = 7;
     const LEGACY_VERSION: u8 = 5;
     const OLDEST_SUPPORTED_VERSION: u8 = 4;
     pub const IMAGE_BANK_COUNT = 2;
@@ -94,7 +94,8 @@ pub const Project = struct {
     pub const MAP_BANK_COUNT = 4;
     const PALETTE_COLOR_BYTES = 3;
     const PALETTE_BANK_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
-    const PALETTE_BYTES = PALETTE_BANK_COUNT * PALETTE_BANK_BYTES;
+    const PALETTE_SET_BYTES = PALETTE_BANK_COUNT * PALETTE_BANK_BYTES;
+    const PALETTE_BYTES = IMAGE_BANK_COUNT * PALETTE_SET_BYTES;
     const IMAGE_BYTES = 1 + CONF.TILE_SIDE * CONF.TILE_SIDE;
     const IMAGE_BANK_STATE_BYTES = 2 + 2 + 1 + 1 + 1 + 1 + 9 * 2;
     const HEADER_BYTES = 4 + 1 + 1 + 1;
@@ -103,7 +104,7 @@ pub const Project = struct {
     const MAP_BYTES = MAP_HEADER_BYTES + MAX_MAP_CELLS * 2 + MAX_MAP_SPRITES * MAP_SPRITE_BYTES;
     const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
 
-    palette_banks: [PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPaletteBanks(),
+    palette_banks: [IMAGE_BANK_COUNT][PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPaletteSets(),
     active_palette_bank: u8 = 0,
     image_banks: [IMAGE_BANK_COUNT]ImageBank = .{ ImageBank{}, ImageBank{} },
     maps: [MAP_BANK_COUNT]Map = [_]Map{.{}} ** MAP_BANK_COUNT,
@@ -171,8 +172,23 @@ pub const Project = struct {
         return &self.maps[self.activeMapBankIndex()];
     }
 
+    pub fn mapAtBank(self: *const Project, bank_id: u8) *const Map {
+        return &self.maps[@min(bank_id, MAP_BANK_COUNT - 1)];
+    }
+
+    pub fn paletteColorAtBank(self: *const Project, bank_id: u8, palette_id: u8, color_id: u8) PaletteColor {
+        return self.paletteColorAtBankMode(self.mode, bank_id, palette_id, color_id);
+    }
+
+    pub fn paletteColorAtBankMode(self: *const Project, mode: ProjectMode, bank_id: u8, palette_id: u8, color_id: u8) PaletteColor {
+        const safe_bank = @min(bank_id, PALETTE_BANK_COUNT - 1);
+        const safe_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
+        const safe_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
+        return self.palette_banks[@intFromEnum(mode)][safe_bank][safe_palette][safe_color];
+    }
+
     pub fn activePalette(self: *const Project) [CONF.COLORS_PER_PALETTE]PaletteColor {
-        return self.palette_banks[self.activePaletteBankIndex()][self.selectedPalette()];
+        return self.palette_banks[self.modeIndex()][self.activePaletteBankIndex()][self.selectedPalette()];
     }
 
     pub fn color32(self: *const Project, palette_id: u8, color_id: u8) u32 {
@@ -182,8 +198,7 @@ pub const Project = struct {
     pub fn color32Mode(self: *const Project, mode: ProjectMode, palette_id: u8, color_id: u8) u32 {
         const safe_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
         const safe_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
-        _ = mode;
-        return rgbToU32(self.palette_banks[self.activePaletteBankIndex()][safe_palette][safe_color]);
+        return rgbToU32(self.palette_banks[@intFromEnum(mode)][self.activePaletteBankIndex()][safe_palette][safe_color]);
     }
 
     pub fn currentColor32(self: *const Project, color_id: u8) u32 {
@@ -191,7 +206,7 @@ pub const Project = struct {
     }
 
     pub fn selectedRgb(self: *const Project) PaletteColor {
-        return self.palette_banks[self.activePaletteBankIndex()][self.selectedPalette()][self.selectedColor()];
+        return self.palette_banks[self.modeIndex()][self.activePaletteBankIndex()][self.selectedPalette()][self.selectedColor()];
     }
 
     pub fn imageCount(self: *const Project) u16 {
@@ -436,7 +451,7 @@ pub const Project = struct {
     }
 
     pub fn adjustSelectedRgb(self: *Project, channel: ColorChannel, delta: i16) void {
-        const color = &self.palette_banks[self.activePaletteBankIndex()][self.selectedPalette()][self.selectedColor()];
+        const color = &self.palette_banks[self.modeIndex()][self.activePaletteBankIndex()][self.selectedPalette()][self.selectedColor()];
         const channel_index: usize = switch (channel) {
             .r => 0,
             .g => 1,
@@ -605,20 +620,36 @@ pub const Project = struct {
         };
 
         var offset: usize = HEADER_BYTES;
-        if (file_version >= VERSION) {
+        if (file_version >= 6) {
             if (offset + 2 > len) return error.InvalidProject;
             self.active_palette_bank = @min(data[offset], PALETTE_BANK_COUNT - 1);
             offset += 1;
             self.active_map_bank = @min(data[offset], MAP_BANK_COUNT - 1);
             offset += 1;
-            for (0..PALETTE_BANK_COUNT) |bank| {
-                for (0..CONF.PALETTE_COUNT) |p| {
-                    for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
-                        if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
-                        self.palette_banks[bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
-                        offset += PALETTE_COLOR_BYTES;
+            if (file_version >= VERSION) {
+                for (0..IMAGE_BANK_COUNT) |mode_index| {
+                    for (0..PALETTE_BANK_COUNT) |bank| {
+                        for (0..CONF.PALETTE_COUNT) |p| {
+                            for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
+                                if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                                self.palette_banks[mode_index][bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
+                                offset += PALETTE_COLOR_BYTES;
+                            }
+                        }
                     }
                 }
+            } else {
+                var shared_palettes = defaultPaletteBanks();
+                for (0..PALETTE_BANK_COUNT) |bank| {
+                    for (0..CONF.PALETTE_COUNT) |p| {
+                        for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
+                            if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                            shared_palettes[bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
+                            offset += PALETTE_COLOR_BYTES;
+                        }
+                    }
+                }
+                self.palette_banks = duplicatePaletteSets(shared_palettes);
             }
         } else {
             var legacy_palettes = defaultPaletteBanks();
@@ -631,7 +662,7 @@ pub const Project = struct {
                     }
                 }
             }
-            self.palette_banks = legacy_palettes;
+            self.palette_banks = duplicatePaletteSets(legacy_palettes);
             self.active_palette_bank = 0;
             self.active_map_bank = 0;
         }
@@ -669,7 +700,7 @@ pub const Project = struct {
         }
 
         self.maps = [_]Map{.{}} ** MAP_BANK_COUNT;
-        const maps_to_read: usize = if (file_version >= VERSION) MAP_BANK_COUNT else 1;
+        const maps_to_read: usize = if (file_version >= 6) MAP_BANK_COUNT else 1;
         for (0..maps_to_read) |map_bank| {
             if (offset + MAP_HEADER_BYTES > len) return error.InvalidProject;
             const width = readU16(data[offset .. offset + 2]);
@@ -722,10 +753,12 @@ pub const Project = struct {
         var active_state = [_]u8{ self.active_palette_bank, self.active_map_bank };
         if (c.fwrite(&active_state, 1, active_state.len, file) != active_state.len) return error.InvalidProject;
 
-        for (self.palette_banks) |bank| {
-            for (bank) |palette| {
-                for (palette) |color| {
-                    if (c.fwrite(&color, 1, color.len, file) != color.len) return error.InvalidProject;
+        for (self.palette_banks) |palette_set| {
+            for (palette_set) |bank| {
+                for (bank) |palette| {
+                    for (palette) |color| {
+                        if (c.fwrite(&color, 1, color.len, file) != color.len) return error.InvalidProject;
+                    }
                 }
             }
         }
@@ -797,7 +830,7 @@ pub const Project = struct {
     }
 
     fn applyDefaultTileset(self: *Project) void {
-        self.palette_banks = defaultPaletteBanks();
+        self.palette_banks = defaultPaletteSets();
         self.active_palette_bank = 0;
         self.active_map_bank = 0;
 
@@ -970,6 +1003,16 @@ const DEFAULT_DESERT_PIXELS = [_][CONF.TILE_SIDE * CONF.TILE_SIDE]u8{
 
 fn defaultPaletteBanks() [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
     return .{ defaultGrasslandPalettes(), defaultDesertPalettes(), defaultGrasslandPalettes(), defaultDesertPalettes() };
+}
+
+fn defaultPaletteSets() [Project.IMAGE_BANK_COUNT][Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+    return duplicatePaletteSets(defaultPaletteBanks());
+}
+
+fn duplicatePaletteSets(shared: [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor) [Project.IMAGE_BANK_COUNT][Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+    var sets: [Project.IMAGE_BANK_COUNT][Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = undefined;
+    for (&sets) |*set| set.* = shared;
+    return sets;
 }
 
 fn defaultTilePalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {

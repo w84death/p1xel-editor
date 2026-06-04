@@ -7,6 +7,7 @@ const Project = project_mod.Project;
 const ProjectMode = project_mod.ProjectMode;
 const MapTileAttr = project_mod.MapTileAttr;
 const MainEditor = @import("main_editor.zig").MainEditor;
+const exporter = @import("exporter.zig");
 const views = @import("views.zig");
 
 const UI = struct {
@@ -204,7 +205,11 @@ pub const MapEditor = struct {
             self.setInfo("File saved", UI.accent);
         }
         if (button(fui, renderer, mouse, x + 102, y + 34, 86, 36, "EXPORT", false)) {
-            self.setInfo("Export not implemented", UI.warn);
+            exporter.exportGameBoyEngine(project) catch {
+                self.setInfo("Export failed", UI.danger);
+                return;
+            };
+            self.setInfo("Engine data exported", UI.accent);
         }
     }
 

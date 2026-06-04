@@ -126,6 +126,19 @@ pub const MapEditor = struct {
         const x = UI.right_x + 16;
         var y = UI.canvas_y + 18;
 
+        drawText(fui, renderer, "MAP BANK", x, y, 2, UI.text);
+        for (0..Project.MAP_BANK_COUNT) |bank| {
+            const bx = x + @as(i32, @intCast(bank)) * 48;
+            var label_buf: [2]u8 = undefined;
+            const label = std.fmt.bufPrint(&label_buf, "{d}", .{bank + 1}) catch "?";
+            if (button(fui, renderer, mouse, bx, y + 34, 38, 34, label, project.activeMapBank() == bank)) {
+                project.setMapBank(@intCast(bank));
+                self.cached_map_revision = std.math.maxInt(u64);
+                self.setInfo("Map bank selected", UI.accent);
+            }
+        }
+
+        y += 90;
         drawText(fui, renderer, "MAP SIZE", x, y, 2, UI.text);
         drawText(fui, renderer, "DOUBLE CLICK TO CROP", x, y + 30, 1, UI.muted);
         self.sizeButton(fui, renderer, project, mouse, x, y + 52, 86, 34, "32x32", .s32x32, 32, 32);
@@ -243,7 +256,8 @@ pub const MapEditor = struct {
     }
 
     fn sizeButton(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: []const u8, pending: PendingSize, width: u16, height: u16) void {
-        const active = project.map.width == width and project.map.height == height;
+        const map = project.activeMap();
+        const active = map.width == width and map.height == height;
         const confirm = self.pending_size == pending;
         if (button(fui, renderer, mouse, x, y, w, h, label, active or confirm)) {
             if (active) {
@@ -291,8 +305,9 @@ pub const MapEditor = struct {
         const scale = self.canvasScale(project);
         const cell_px = @as(i32, CONF.TILE_SIDE) * scale;
         const origin = self.canvasOrigin(project);
-        const map_w = @as(i32, project.map.width) * cell_px;
-        const map_h = @as(i32, project.map.height) * cell_px;
+        const map = project.activeMap();
+        const map_w = @as(i32, map.width) * cell_px;
+        const map_h = @as(i32, map.height) * cell_px;
 
         self.ensureMapCache(renderer, project, origin, scale, cell_px, map_w, map_h);
         copyTerrainRectToFrame(renderer, origin[0], origin[1], map_w, map_h, UI.canvas_x + 1, UI.canvas_y + 1, UI.canvas_w - 2, UI.canvas_h - 2);
@@ -311,37 +326,38 @@ pub const MapEditor = struct {
 
     fn ensureMapCache(self: *MapEditor, renderer: *Render, project: *Project, origin: [2]i32, scale: i32, cell_px: i32, map_w: i32, map_h: i32) void {
         const revision = project.visualRevision();
-        if (self.cached_map_revision == revision and self.cached_map_scale == scale and self.cached_map_width == project.map.width and self.cached_map_height == project.map.height and self.cached_origin_x == origin[0] and self.cached_origin_y == origin[1]) return;
+        const map = project.activeMap();
+        if (self.cached_map_revision == revision and self.cached_map_scale == scale and self.cached_map_width == map.width and self.cached_map_height == map.height and self.cached_origin_x == origin[0] and self.cached_origin_y == origin[1]) return;
 
         const previous_target = renderer.target;
         renderer.set_target(.terrain);
         renderer.draw_rect(origin[0], origin[1], map_w, map_h, 0x101418);
 
         var y: u16 = 0;
-        while (y < project.map.height) : (y += 1) {
+        while (y < map.height) : (y += 1) {
             var x: u16 = 0;
-            while (x < project.map.width) : (x += 1) {
-                const idx = @as(usize, y) * @as(usize, project.map.width) + x;
-                const attr = MapTileAttr.decode(project.map.tile_attrs[idx]);
-                views.drawImageWithAttrs(renderer, project, .tiles, project.map.tile_ids[idx], attr.palette, attr.hflip, attr.vflip, origin[0] + @as(i32, x) * cell_px, origin[1] + @as(i32, y) * cell_px, scale);
+            while (x < map.width) : (x += 1) {
+                const idx = @as(usize, y) * @as(usize, map.width) + x;
+                const attr = MapTileAttr.decode(map.tile_attrs[idx]);
+                views.drawImageWithAttrs(renderer, project, .tiles, map.tile_ids[idx], attr.palette, attr.hflip, attr.vflip, origin[0] + @as(i32, x) * cell_px, origin[1] + @as(i32, y) * cell_px, scale);
             }
         }
 
         var si: usize = 0;
-        while (si < project.map.sprite_count) : (si += 1) {
-            const sprite = project.map.sprites[si];
-            if (sprite.x < project.map.width and sprite.y < project.map.height) {
+        while (si < map.sprite_count) : (si += 1) {
+            const sprite = map.sprites[si];
+            if (sprite.x < map.width and sprite.y < map.height) {
                 views.drawImageWithAttrs(renderer, project, .sprites, sprite.sprite_id, sprite.palette, sprite.hflip, sprite.vflip, origin[0] + @as(i32, sprite.x) * cell_px, origin[1] + @as(i32, sprite.y) * cell_px, scale);
             }
         }
 
         var gx: u16 = 0;
-        while (gx <= project.map.width) : (gx += 1) {
+        while (gx <= map.width) : (gx += 1) {
             const x = origin[0] + @as(i32, gx) * cell_px;
             renderer.draw_line(x, origin[1], x, origin[1] + map_h, 0x2B323A);
         }
         var gy: u16 = 0;
-        while (gy <= project.map.height) : (gy += 1) {
+        while (gy <= map.height) : (gy += 1) {
             const yline = origin[1] + @as(i32, gy) * cell_px;
             renderer.draw_line(origin[0], yline, origin[0] + map_w, yline, 0x2B323A);
         }
@@ -349,8 +365,8 @@ pub const MapEditor = struct {
         renderer.set_target(previous_target);
         self.cached_map_revision = revision;
         self.cached_map_scale = scale;
-        self.cached_map_width = project.map.width;
-        self.cached_map_height = project.map.height;
+        self.cached_map_width = map.width;
+        self.cached_map_height = map.height;
         self.cached_origin_x = origin[0];
         self.cached_origin_y = origin[1];
     }
@@ -358,24 +374,27 @@ pub const MapEditor = struct {
     fn drawCanvasHeader(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
         _ = self;
         _ = mouse;
+        const map = project.activeMap();
         var buf: [80]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, "MAP CANVAS  {d} x {d}   L: DRAW   R: PICK", .{ project.map.width, project.map.height }) catch "MAP CANVAS";
+        const text = std.fmt.bufPrint(&buf, "MAP {d}  {d} x {d}   L: DRAW   R: PICK", .{ project.activeMapBank() + 1, map.width, map.height }) catch "MAP CANVAS";
         drawText(fui, renderer, text, UI.canvas_x + 18, UI.canvas_y + 18, 2, UI.text);
     }
 
     fn canvasScale(self: *MapEditor, project: *const Project) i32 {
+        const map = project.activeMap();
         const available_w = UI.canvas_w - 40;
         const available_h = UI.canvas_h - 86;
-        const map_px_w = @as(i32, project.map.width) * CONF.TILE_SIDE;
-        const map_px_h = @as(i32, project.map.height) * CONF.TILE_SIDE;
+        const map_px_w = @as(i32, map.width) * CONF.TILE_SIDE;
+        const map_px_h = @as(i32, map.height) * CONF.TILE_SIDE;
         const fit = @max(1, @min(@divFloor(available_w, map_px_w), @divFloor(available_h, map_px_h)));
         return fit + self.zoom_extra;
     }
 
     fn canvasOrigin(self: *MapEditor, project: *const Project) [2]i32 {
+        const map = project.activeMap();
         const scale = self.canvasScale(project);
-        const map_w = @as(i32, project.map.width) * CONF.TILE_SIDE * scale;
-        const map_h = @as(i32, project.map.height) * CONF.TILE_SIDE * scale;
+        const map_w = @as(i32, map.width) * CONF.TILE_SIDE * scale;
+        const map_h = @as(i32, map.height) * CONF.TILE_SIDE * scale;
         return .{ UI.canvas_x + @divFloor(UI.canvas_w - map_w, 2) + self.pan_x, UI.canvas_y + 64 + @divFloor(UI.canvas_h - 78 - map_h, 2) + self.pan_y };
     }
 
@@ -383,8 +402,9 @@ pub const MapEditor = struct {
         const scale = self.canvasScale(project);
         const cell_px = @as(i32, CONF.TILE_SIDE) * scale;
         const origin = self.canvasOrigin(project);
-        const map_w = @as(i32, project.map.width) * cell_px;
-        const map_h = @as(i32, project.map.height) * cell_px;
+        const map = project.activeMap();
+        const map_w = @as(i32, map.width) * cell_px;
+        const map_h = @as(i32, map.height) * cell_px;
         if (mx < UI.canvas_x + 1 or my < UI.canvas_y + 1 or mx >= UI.canvas_x + UI.canvas_w - 1 or my >= UI.canvas_y + UI.canvas_h - 1) return null;
         if (mx < origin[0] or my < origin[1] or mx >= origin[0] + map_w or my >= origin[1] + map_h) return null;
         return .{ @intCast(@divFloor(mx - origin[0], cell_px)), @intCast(@divFloor(my - origin[1], cell_px)) };

@@ -208,10 +208,25 @@ pub const MainEditor = struct {
 
     fn drawRightPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
         const x = UI.rightX() + 16;
-        drawPixelText(fui, renderer, "PALETTES", x, UI.content_y + 18, 2, UI.text);
-        drawPalettes(fui, renderer, project, mouse, x + 48, UI.content_y + 52, self);
-        drawPixelText(fui, renderer, "EDIT COLOUR", x, UI.content_y + 492, 2, UI.text);
-        drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 530, self);
+        drawPixelText(fui, renderer, "PALETTE BANK", x, UI.content_y + 18, 2, UI.text);
+        for (0..Project.PALETTE_BANK_COUNT) |bank| {
+            const bx = x + @as(i32, @intCast(bank)) * 48;
+            const label: [:0]const u8 = switch (bank) {
+                0 => "1",
+                1 => "2",
+                2 => "3",
+                else => "4",
+            };
+            if (pillButton(fui, renderer, mouse, bx, UI.content_y + 52, 38, 34, label, project.activePaletteBank() == bank)) {
+                project.setPaletteBank(@intCast(bank));
+                self.setInfo("Palette bank selected", UI.accent);
+            }
+        }
+
+        drawPixelText(fui, renderer, "PALETTES", x, UI.content_y + 100, 2, UI.text);
+        drawPalettes(fui, renderer, project, mouse, x + 48, UI.content_y + 134, self);
+        drawPixelText(fui, renderer, "EDIT COLOUR", x, UI.content_y + 548, 2, UI.text);
+        drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 586, self);
     }
 
     fn setInfo(self: *MainEditor, text: []const u8, color: u32) void {

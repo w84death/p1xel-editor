@@ -86,23 +86,28 @@ const ImageBank = struct {
 
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 5;
-    const LEGACY_VERSION: u8 = 4;
-    const BANK_COUNT = 2;
+    const VERSION: u8 = 6;
+    const LEGACY_VERSION: u8 = 5;
+    const OLDEST_SUPPORTED_VERSION: u8 = 4;
+    pub const IMAGE_BANK_COUNT = 2;
+    pub const PALETTE_BANK_COUNT = 4;
+    pub const MAP_BANK_COUNT = 4;
     const PALETTE_COLOR_BYTES = 3;
     const PALETTE_BANK_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
-    const PALETTE_BYTES = BANK_COUNT * PALETTE_BANK_BYTES;
+    const PALETTE_BYTES = PALETTE_BANK_COUNT * PALETTE_BANK_BYTES;
     const IMAGE_BYTES = 1 + CONF.TILE_SIDE * CONF.TILE_SIDE;
     const IMAGE_BANK_STATE_BYTES = 2 + 2 + 1 + 1 + 1 + 1 + 9 * 2;
     const HEADER_BYTES = 4 + 1 + 1 + 1;
     const MAP_HEADER_BYTES = 2 + 2 + 2;
     const MAP_SPRITE_BYTES = 2 + 2 + 2 + 1;
     const MAP_BYTES = MAP_HEADER_BYTES + MAX_MAP_CELLS * 2 + MAX_MAP_SPRITES * MAP_SPRITE_BYTES;
-    const MAX_FILE_BYTES = HEADER_BYTES + PALETTE_BYTES + BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BYTES;
+    const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
 
-    palette_banks: [BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPaletteBanks(),
-    image_banks: [BANK_COUNT]ImageBank = .{ ImageBank{}, ImageBank{} },
-    map: Map = .{},
+    palette_banks: [PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPaletteBanks(),
+    active_palette_bank: u8 = 0,
+    image_banks: [IMAGE_BANK_COUNT]ImageBank = .{ ImageBank{}, ImageBank{} },
+    maps: [MAP_BANK_COUNT]Map = [_]Map{.{}} ** MAP_BANK_COUNT,
+    active_map_bank: u8 = 0,
     mode: ProjectMode = .tiles,
     dirty: bool = false,
     visual_revision: u64 = 0,
@@ -137,8 +142,37 @@ pub const Project = struct {
         return self.isSpriteMode() and color_id == 0;
     }
 
+    pub fn activePaletteBank(self: *const Project) u8 {
+        return self.active_palette_bank;
+    }
+
+    pub fn activeMapBank(self: *const Project) u8 {
+        return self.active_map_bank;
+    }
+
+    pub fn setPaletteBank(self: *Project, bank_id: u8) void {
+        const next = @min(bank_id, PALETTE_BANK_COUNT - 1);
+        if (self.active_palette_bank == next) return;
+        self.active_palette_bank = next;
+        self.dirty = true;
+        self.bumpVisualRevision();
+    }
+
+    pub fn setMapBank(self: *Project, bank_id: u8) void {
+        const next = @min(bank_id, MAP_BANK_COUNT - 1);
+        if (self.active_map_bank == next and self.active_palette_bank == next) return;
+        self.active_map_bank = next;
+        self.active_palette_bank = next;
+        self.dirty = true;
+        self.bumpVisualRevision();
+    }
+
+    pub fn activeMap(self: anytype) if (@TypeOf(self) == *const Project) *const Map else *Map {
+        return &self.maps[self.activeMapBankIndex()];
+    }
+
     pub fn activePalette(self: *const Project) [CONF.COLORS_PER_PALETTE]PaletteColor {
-        return self.palette_banks[self.modeIndex()][self.selectedPalette()];
+        return self.palette_banks[self.activePaletteBankIndex()][self.selectedPalette()];
     }
 
     pub fn color32(self: *const Project, palette_id: u8, color_id: u8) u32 {
@@ -148,7 +182,8 @@ pub const Project = struct {
     pub fn color32Mode(self: *const Project, mode: ProjectMode, palette_id: u8, color_id: u8) u32 {
         const safe_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
         const safe_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
-        return rgbToU32(self.palette_banks[@intFromEnum(mode)][safe_palette][safe_color]);
+        _ = mode;
+        return rgbToU32(self.palette_banks[self.activePaletteBankIndex()][safe_palette][safe_color]);
     }
 
     pub fn currentColor32(self: *const Project, color_id: u8) u32 {
@@ -156,7 +191,7 @@ pub const Project = struct {
     }
 
     pub fn selectedRgb(self: *const Project) PaletteColor {
-        return self.palette_banks[self.modeIndex()][self.selectedPalette()][self.selectedColor()];
+        return self.palette_banks[self.activePaletteBankIndex()][self.selectedPalette()][self.selectedColor()];
     }
 
     pub fn imageCount(self: *const Project) u16 {
@@ -401,7 +436,7 @@ pub const Project = struct {
     }
 
     pub fn adjustSelectedRgb(self: *Project, channel: ColorChannel, delta: i16) void {
-        const color = &self.palette_banks[self.modeIndex()][self.selectedPalette()][self.selectedColor()];
+        const color = &self.palette_banks[self.activePaletteBankIndex()][self.selectedPalette()][self.selectedColor()];
         const channel_index: usize = switch (channel) {
             .r => 0,
             .g => 1,
@@ -416,21 +451,21 @@ pub const Project = struct {
     }
 
     pub fn mapIndex(self: *const Project, x: u16, y: u16) ?usize {
-        if (x >= self.map.width or y >= self.map.height) return null;
-        return @as(usize, y) * @as(usize, self.map.width) + x;
+        if (x >= self.activeMap().width or y >= self.activeMap().height) return null;
+        return @as(usize, y) * @as(usize, self.activeMap().width) + x;
     }
 
     pub fn mapCellAt(self: *const Project, x: u16, y: u16) ?MapCell {
         const idx = self.mapIndex(x, y) orelse return null;
-        return .{ .tile_id = self.map.tile_ids[idx], .attr = MapTileAttr.decode(self.map.tile_attrs[idx]) };
+        return .{ .tile_id = self.activeMap().tile_ids[idx], .attr = MapTileAttr.decode(self.activeMap().tile_attrs[idx]) };
     }
 
     pub fn paintMapTile(self: *Project, x: u16, y: u16, tile_id: u8, attr: MapTileAttr) bool {
         const idx = self.mapIndex(x, y) orelse return false;
         const encoded = attr.encode();
-        if (self.map.tile_ids[idx] == tile_id and self.map.tile_attrs[idx] == encoded) return false;
-        self.map.tile_ids[idx] = tile_id;
-        self.map.tile_attrs[idx] = encoded;
+        if (self.activeMap().tile_ids[idx] == tile_id and self.activeMap().tile_attrs[idx] == encoded) return false;
+        self.activeMap().tile_ids[idx] = tile_id;
+        self.activeMap().tile_attrs[idx] = encoded;
         self.dirty = true;
         self.bumpVisualRevision();
         return true;
@@ -438,8 +473,8 @@ pub const Project = struct {
 
     pub fn fillMapTile(self: *Project, x: u16, y: u16, tile_id: u8, attr: MapTileAttr) bool {
         const start = self.mapIndex(x, y) orelse return false;
-        const old_id = self.map.tile_ids[start];
-        const old_attr = self.map.tile_attrs[start];
+        const old_id = self.activeMap().tile_ids[start];
+        const old_attr = self.activeMap().tile_attrs[start];
         const new_attr = attr.encode();
         if (old_id == tile_id and old_attr == new_attr) return false;
 
@@ -451,27 +486,27 @@ pub const Project = struct {
         while (top > 0) {
             top -= 1;
             const idx = stack[top];
-            if (self.map.tile_ids[idx] != old_id or self.map.tile_attrs[idx] != old_attr) continue;
-            self.map.tile_ids[idx] = tile_id;
-            self.map.tile_attrs[idx] = new_attr;
+            if (self.activeMap().tile_ids[idx] != old_id or self.activeMap().tile_attrs[idx] != old_attr) continue;
+            self.activeMap().tile_ids[idx] = tile_id;
+            self.activeMap().tile_attrs[idx] = new_attr;
             changed = true;
 
-            const cx = idx % self.map.width;
-            const cy = idx / self.map.width;
+            const cx = idx % self.activeMap().width;
+            const cy = idx / self.activeMap().width;
             if (cx > 0 and top < stack.len) {
                 stack[top] = idx - 1;
                 top += 1;
             }
-            if (cx + 1 < self.map.width and top < stack.len) {
+            if (cx + 1 < self.activeMap().width and top < stack.len) {
                 stack[top] = idx + 1;
                 top += 1;
             }
             if (cy > 0 and top < stack.len) {
-                stack[top] = idx - self.map.width;
+                stack[top] = idx - self.activeMap().width;
                 top += 1;
             }
-            if (cy + 1 < self.map.height and top < stack.len) {
-                stack[top] = idx + self.map.width;
+            if (cy + 1 < self.activeMap().height and top < stack.len) {
+                stack[top] = idx + self.activeMap().width;
                 top += 1;
             }
         }
@@ -482,31 +517,31 @@ pub const Project = struct {
     }
 
     pub fn resizeMap(self: *Project, width: u16, height: u16) bool {
-        if (width == self.map.width and height == self.map.height) return false;
+        if (width == self.activeMap().width and height == self.activeMap().height) return false;
         if (width == 0 or height == 0 or width > MAX_MAP_W or height > MAX_MAP_H) return false;
         var next_ids = [_]u8{0} ** MAX_MAP_CELLS;
         var next_attrs = [_]u8{0} ** MAX_MAP_CELLS;
-        const copy_w = @min(width, self.map.width);
-        const copy_h = @min(height, self.map.height);
+        const copy_w = @min(width, self.activeMap().width);
+        const copy_h = @min(height, self.activeMap().height);
         var y: u16 = 0;
         while (y < copy_h) : (y += 1) {
             var x: u16 = 0;
             while (x < copy_w) : (x += 1) {
-                const old_idx = @as(usize, y) * @as(usize, self.map.width) + x;
+                const old_idx = @as(usize, y) * @as(usize, self.activeMap().width) + x;
                 const new_idx = @as(usize, y) * @as(usize, width) + x;
-                next_ids[new_idx] = self.map.tile_ids[old_idx];
-                next_attrs[new_idx] = self.map.tile_attrs[old_idx];
+                next_ids[new_idx] = self.activeMap().tile_ids[old_idx];
+                next_attrs[new_idx] = self.activeMap().tile_attrs[old_idx];
             }
         }
-        self.map.width = width;
-        self.map.height = height;
-        self.map.tile_ids = next_ids;
-        self.map.tile_attrs = next_attrs;
+        self.activeMap().width = width;
+        self.activeMap().height = height;
+        self.activeMap().tile_ids = next_ids;
+        self.activeMap().tile_attrs = next_attrs;
         var i: usize = 0;
-        while (i < self.map.sprite_count) {
-            if (self.map.sprites[i].x >= width or self.map.sprites[i].y >= height) {
-                self.map.sprite_count -= 1;
-                self.map.sprites[i] = self.map.sprites[self.map.sprite_count];
+        while (i < self.activeMap().sprite_count) {
+            if (self.activeMap().sprites[i].x >= width or self.activeMap().sprites[i].y >= height) {
+                self.activeMap().sprite_count -= 1;
+                self.activeMap().sprites[i] = self.activeMap().sprites[self.activeMap().sprite_count];
             } else {
                 i += 1;
             }
@@ -517,19 +552,19 @@ pub const Project = struct {
     }
 
     pub fn addOrUpdateMapSprite(self: *Project, x: u16, y: u16, sprite_id: u16, attr: MapTileAttr) bool {
-        if (x >= self.map.width or y >= self.map.height or sprite_id >= self.imageCountMode(.sprites)) return false;
+        if (x >= self.activeMap().width or y >= self.activeMap().height or sprite_id >= self.imageCountMode(.sprites)) return false;
         var i: usize = 0;
-        while (i < self.map.sprite_count) : (i += 1) {
-            if (self.map.sprites[i].x == x and self.map.sprites[i].y == y) {
-                self.map.sprites[i] = .{ .x = x, .y = y, .sprite_id = sprite_id, .palette = attr.palette, .hflip = attr.hflip, .vflip = attr.vflip };
+        while (i < self.activeMap().sprite_count) : (i += 1) {
+            if (self.activeMap().sprites[i].x == x and self.activeMap().sprites[i].y == y) {
+                self.activeMap().sprites[i] = .{ .x = x, .y = y, .sprite_id = sprite_id, .palette = attr.palette, .hflip = attr.hflip, .vflip = attr.vflip };
                 self.dirty = true;
                 self.bumpVisualRevision();
                 return true;
             }
         }
-        if (self.map.sprite_count >= MAX_MAP_SPRITES) return false;
-        self.map.sprites[self.map.sprite_count] = .{ .x = x, .y = y, .sprite_id = sprite_id, .palette = attr.palette, .hflip = attr.hflip, .vflip = attr.vflip };
-        self.map.sprite_count += 1;
+        if (self.activeMap().sprite_count >= MAX_MAP_SPRITES) return false;
+        self.activeMap().sprites[self.activeMap().sprite_count] = .{ .x = x, .y = y, .sprite_id = sprite_id, .palette = attr.palette, .hflip = attr.hflip, .vflip = attr.vflip };
+        self.activeMap().sprite_count += 1;
         self.dirty = true;
         self.bumpVisualRevision();
         return true;
@@ -537,10 +572,10 @@ pub const Project = struct {
 
     pub fn removeMapSpriteAt(self: *Project, x: u16, y: u16) bool {
         var i: usize = 0;
-        while (i < self.map.sprite_count) : (i += 1) {
-            if (self.map.sprites[i].x == x and self.map.sprites[i].y == y) {
-                self.map.sprite_count -= 1;
-                self.map.sprites[i] = self.map.sprites[self.map.sprite_count];
+        while (i < self.activeMap().sprite_count) : (i += 1) {
+            if (self.activeMap().sprites[i].x == x and self.activeMap().sprites[i].y == y) {
+                self.activeMap().sprite_count -= 1;
+                self.activeMap().sprites[i] = self.activeMap().sprites[self.activeMap().sprite_count];
                 self.dirty = true;
                 self.bumpVisualRevision();
                 return true;
@@ -561,7 +596,7 @@ pub const Project = struct {
         if (len < HEADER_BYTES) return error.InvalidProject;
         if (!std.mem.eql(u8, data[0..4], MAGIC)) return error.InvalidProject;
         const file_version = data[4];
-        if (file_version != VERSION and file_version != LEGACY_VERSION) return error.InvalidProject;
+        if (file_version > VERSION or file_version < OLDEST_SUPPORTED_VERSION) return error.InvalidProject;
         if (data[5] != CONF.PALETTE_COUNT) return error.InvalidProject;
         self.mode = switch (data[6]) {
             0 => .tiles,
@@ -570,17 +605,38 @@ pub const Project = struct {
         };
 
         var offset: usize = HEADER_BYTES;
-        for (0..BANK_COUNT) |bank| {
-            for (0..CONF.PALETTE_COUNT) |p| {
-                for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
-                    if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
-                    self.palette_banks[bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
-                    offset += PALETTE_COLOR_BYTES;
+        if (file_version >= VERSION) {
+            if (offset + 2 > len) return error.InvalidProject;
+            self.active_palette_bank = @min(data[offset], PALETTE_BANK_COUNT - 1);
+            offset += 1;
+            self.active_map_bank = @min(data[offset], MAP_BANK_COUNT - 1);
+            offset += 1;
+            for (0..PALETTE_BANK_COUNT) |bank| {
+                for (0..CONF.PALETTE_COUNT) |p| {
+                    for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
+                        if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                        self.palette_banks[bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
+                        offset += PALETTE_COLOR_BYTES;
+                    }
                 }
             }
+        } else {
+            var legacy_palettes = defaultPaletteBanks();
+            for (0..IMAGE_BANK_COUNT) |bank| {
+                for (0..CONF.PALETTE_COUNT) |p| {
+                    for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
+                        if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                        if (bank == 0) legacy_palettes[0][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
+                        offset += PALETTE_COLOR_BYTES;
+                    }
+                }
+            }
+            self.palette_banks = legacy_palettes;
+            self.active_palette_bank = 0;
+            self.active_map_bank = 0;
         }
 
-        for (0..BANK_COUNT) |bank_index| {
+        for (0..IMAGE_BANK_COUNT) |bank_index| {
             if (offset + IMAGE_BANK_STATE_BYTES > len) return error.InvalidProject;
             var bank = &self.image_banks[bank_index];
             bank.count = readU16(data[offset .. offset + 2]);
@@ -612,8 +668,9 @@ pub const Project = struct {
             bank.ensureSlotBounds();
         }
 
-        self.map = .{};
-        if (file_version >= VERSION) {
+        self.maps = [_]Map{.{}} ** MAP_BANK_COUNT;
+        const maps_to_read: usize = if (file_version >= VERSION) MAP_BANK_COUNT else 1;
+        for (0..maps_to_read) |map_bank| {
             if (offset + MAP_HEADER_BYTES > len) return error.InvalidProject;
             const width = readU16(data[offset .. offset + 2]);
             offset += 2;
@@ -622,16 +679,17 @@ pub const Project = struct {
             const sprite_count = readU16(data[offset .. offset + 2]);
             offset += 2;
             if (width == 0 or height == 0 or width > MAX_MAP_W or height > MAX_MAP_H) return error.InvalidProject;
-            self.map.width = width;
-            self.map.height = height;
+            var map = &self.maps[map_bank];
+            map.width = width;
+            map.height = height;
             const cell_count = @as(usize, width) * @as(usize, height);
             if (offset + cell_count * 2 > len) return error.InvalidProject;
-            @memcpy(self.map.tile_ids[0..cell_count], data[offset .. offset + cell_count]);
+            @memcpy(map.tile_ids[0..cell_count], data[offset .. offset + cell_count]);
             offset += cell_count;
-            @memcpy(self.map.tile_attrs[0..cell_count], data[offset .. offset + cell_count]);
-            for (self.map.tile_attrs[0..cell_count]) |*attr| attr.* &= 0x67;
+            @memcpy(map.tile_attrs[0..cell_count], data[offset .. offset + cell_count]);
+            for (map.tile_attrs[0..cell_count]) |*attr| attr.* &= 0x67;
             offset += cell_count;
-            self.map.sprite_count = @min(sprite_count, MAX_MAP_SPRITES);
+            map.sprite_count = @min(sprite_count, MAX_MAP_SPRITES);
             if (offset + @as(usize, sprite_count) * MAP_SPRITE_BYTES > len) return error.InvalidProject;
             var i: usize = 0;
             while (i < sprite_count) : (i += 1) {
@@ -643,11 +701,12 @@ pub const Project = struct {
                     .hflip = (data[offset + 6] & (1 << 5)) != 0,
                     .vflip = (data[offset + 6] & (1 << 6)) != 0,
                 };
-                if (i < MAX_MAP_SPRITES) self.map.sprites[i] = sprite;
+                if (i < MAX_MAP_SPRITES) map.sprites[i] = sprite;
                 offset += MAP_SPRITE_BYTES;
             }
         }
-        self.dirty = false;
+        self.ensureDefaultBiomeTiles();
+        self.dirty = file_version < VERSION;
     }
 
     pub fn save(self: *Project) !void {
@@ -659,6 +718,9 @@ pub const Project = struct {
         header[5] = CONF.PALETTE_COUNT;
         header[6] = @intFromEnum(self.mode);
         if (c.fwrite(&header, 1, header.len, file) != header.len) return error.InvalidProject;
+
+        var active_state = [_]u8{ self.active_palette_bank, self.active_map_bank };
+        if (c.fwrite(&active_state, 1, active_state.len, file) != active_state.len) return error.InvalidProject;
 
         for (self.palette_banks) |bank| {
             for (bank) |palette| {
@@ -698,34 +760,46 @@ pub const Project = struct {
             }
         }
 
-        var map_header: [MAP_HEADER_BYTES]u8 = undefined;
-        writeU16(map_header[0..2], self.map.width);
-        writeU16(map_header[2..4], self.map.height);
-        writeU16(map_header[4..6], self.map.sprite_count);
-        if (c.fwrite(&map_header, 1, map_header.len, file) != map_header.len) return error.InvalidProject;
-        const cell_count = @as(usize, self.map.width) * @as(usize, self.map.height);
-        if (c.fwrite(&self.map.tile_ids, 1, cell_count, file) != cell_count) return error.InvalidProject;
-        if (c.fwrite(&self.map.tile_attrs, 1, cell_count, file) != cell_count) return error.InvalidProject;
-        var sprite_buf: [MAP_SPRITE_BYTES]u8 = undefined;
-        var si: usize = 0;
-        while (si < self.map.sprite_count) : (si += 1) {
-            const sprite = self.map.sprites[si];
-            writeU16(sprite_buf[0..2], sprite.x);
-            writeU16(sprite_buf[2..4], sprite.y);
-            writeU16(sprite_buf[4..6], sprite.sprite_id);
-            sprite_buf[6] = (MapTileAttr{ .palette = sprite.palette, .hflip = sprite.hflip, .vflip = sprite.vflip }).encode();
-            if (c.fwrite(&sprite_buf, 1, sprite_buf.len, file) != sprite_buf.len) return error.InvalidProject;
+        for (self.maps) |map| {
+            var map_header: [MAP_HEADER_BYTES]u8 = undefined;
+            writeU16(map_header[0..2], map.width);
+            writeU16(map_header[2..4], map.height);
+            writeU16(map_header[4..6], map.sprite_count);
+            if (c.fwrite(&map_header, 1, map_header.len, file) != map_header.len) return error.InvalidProject;
+            const cell_count = @as(usize, map.width) * @as(usize, map.height);
+            if (c.fwrite(&map.tile_ids, 1, cell_count, file) != cell_count) return error.InvalidProject;
+            if (c.fwrite(&map.tile_attrs, 1, cell_count, file) != cell_count) return error.InvalidProject;
+            var sprite_buf: [MAP_SPRITE_BYTES]u8 = undefined;
+            var si: usize = 0;
+            while (si < map.sprite_count) : (si += 1) {
+                const sprite = map.sprites[si];
+                writeU16(sprite_buf[0..2], sprite.x);
+                writeU16(sprite_buf[2..4], sprite.y);
+                writeU16(sprite_buf[4..6], sprite.sprite_id);
+                sprite_buf[6] = (MapTileAttr{ .palette = sprite.palette, .hflip = sprite.hflip, .vflip = sprite.vflip }).encode();
+                if (c.fwrite(&sprite_buf, 1, sprite_buf.len, file) != sprite_buf.len) return error.InvalidProject;
+            }
         }
         self.dirty = false;
     }
 
+    fn ensureDefaultBiomeTiles(self: *Project) void {
+        var bank = &self.image_banks[@intFromEnum(ProjectMode.tiles)];
+        if (bank.count > DEFAULT_GRASSLAND_TILE_COUNT) return;
+        if (DEFAULT_TILESET_TILE_COUNT > CONF.MAX_TILES) return;
+        bank.count = DEFAULT_TILESET_TILE_COUNT;
+        for (0..DEFAULT_DESERT_PIXELS.len) |i| {
+            const tile_index = DEFAULT_TILESET_PIXELS.len + i;
+            bank.images[tile_index].palette_id = DEFAULT_DESERT_PALETTE_IDS[i];
+            bank.images[tile_index].pixels = DEFAULT_DESERT_PIXELS[i];
+        }
+        bank.ensureSlotBounds();
+    }
 
     fn applyDefaultTileset(self: *Project) void {
-        const tile_palettes = defaultTilesetPalettes();
-        self.palette_banks[0] = tile_palettes;
-        var sprite_palettes = tile_palettes;
-        for (0..CONF.PALETTE_COUNT) |p| sprite_palettes[p][0] = .{ 0, 0, 0 };
-        self.palette_banks[1] = sprite_palettes;
+        self.palette_banks = defaultPaletteBanks();
+        self.active_palette_bank = 0;
+        self.active_map_bank = 0;
 
         var bank = &self.image_banks[@intFromEnum(ProjectMode.tiles)];
         bank.images = [_]Image{.{}} ** CONF.MAX_TILES;
@@ -740,6 +814,11 @@ pub const Project = struct {
             bank.images[i].palette_id = DEFAULT_TILESET_PALETTE_IDS[i];
             bank.images[i].pixels = DEFAULT_TILESET_PIXELS[i];
         }
+        for (0..DEFAULT_DESERT_PIXELS.len) |i| {
+            const tile_index = DEFAULT_TILESET_PIXELS.len + i;
+            bank.images[tile_index].palette_id = DEFAULT_DESERT_PALETTE_IDS[i];
+            bank.images[tile_index].pixels = DEFAULT_DESERT_PIXELS[i];
+        }
         bank.selected_palette = bank.images[bank.selected].palette_id;
 
         var sprite_bank = &self.image_banks[@intFromEnum(ProjectMode.sprites)];
@@ -753,7 +832,7 @@ pub const Project = struct {
         sprite_bank.visible_slots = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
         self.mode = .tiles;
-        self.map = .{};
+        self.maps = [_]Map{.{}} ** MAP_BANK_COUNT;
         self.dirty = false;
         self.visual_revision = 0;
     }
@@ -767,6 +846,14 @@ pub const Project = struct {
 
     fn modeIndex(self: *const Project) usize {
         return @intFromEnum(self.mode);
+    }
+
+    fn activePaletteBankIndex(self: *const Project) usize {
+        return @min(self.active_palette_bank, PALETTE_BANK_COUNT - 1);
+    }
+
+    fn activeMapBankIndex(self: *const Project) usize {
+        return @min(self.active_map_bank, MAP_BANK_COUNT - 1);
     }
 
     fn ensureBankBounds(self: *Project) void {
@@ -789,9 +876,11 @@ fn flood(pixels: *[CONF.TILE_SIDE * CONF.TILE_SIDE]u8, x: u8, y: u8, old: u8, ne
     if (y + 1 < CONF.TILE_SIDE) flood(pixels, x, y + 1, old, new);
 }
 
-const DEFAULT_TILESET_TILE_COUNT: u16 = 33;
+const DEFAULT_GRASSLAND_TILE_COUNT: u16 = 33;
+const DEFAULT_DESERT_TILE_COUNT: u16 = 19;
+const DEFAULT_TILESET_TILE_COUNT: u16 = DEFAULT_GRASSLAND_TILE_COUNT + DEFAULT_DESERT_TILE_COUNT;
 
-fn defaultTilesetPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+fn defaultGrasslandPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
     return .{
         .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } },
         .{ .{ 68, 137, 26 }, .{ 163, 206, 39 }, .{ 173, 157, 51 }, .{ 73, 60, 43 } },
@@ -842,15 +931,49 @@ const DEFAULT_TILESET_PIXELS = [_][CONF.TILE_SIDE * CONF.TILE_SIDE]u8{
     .{ 0, 1, 1, 1, 0, 0, 0, 0, 1, 2, 3, 2, 2, 1, 2, 1, 2, 3, 3, 2, 3, 3, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3, 3, 2, 3, 2, 2, 3, 3, 2, 2, 3, 3, 3, 3, 2, 1, 0, 1, 1, 2, 2, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0 },
 };
 
-fn defaultPaletteBanks() [Project.BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
-    const tile_palettes = defaultTilePalettes();
-    var sprite_palettes = tile_palettes;
-    for (0..CONF.PALETTE_COUNT) |p| sprite_palettes[p][0] = .{ 0, 0, 0 };
-    return .{ tile_palettes, sprite_palettes };
+fn defaultDesertPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+    return .{
+        .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } },
+        .{ .{ 235, 137, 49 }, .{ 164, 100, 34 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } },
+        .{ .{ 235, 137, 49 }, .{ 68, 137, 26 }, .{ 17, 94, 51 }, .{ 164, 100, 34 } },
+        .{ .{ 235, 137, 49 }, .{ 250, 180, 11 }, .{ 164, 100, 34 }, .{ 0, 0, 0 } },
+        .{ .{ 157, 157, 157 }, .{ 164, 100, 34 }, .{ 235, 137, 49 }, .{ 82, 79, 64 } },
+        .{ .{ 34, 90, 246 }, .{ 49, 162, 242 }, .{ 235, 137, 49 }, .{ 82, 79, 64 } },
+        .{ .{ 164, 100, 34 }, .{ 235, 137, 49 }, .{ 247, 226, 107 }, .{ 250, 180, 11 } },
+        .{ .{ 178, 220, 239 }, .{ 164, 100, 34 }, .{ 21, 194, 165 }, .{ 235, 137, 49 } },
+    };
+}
+
+const DEFAULT_DESERT_PALETTE_IDS = [_]u8{ 0, 1, 1, 1, 2, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7 };
+
+const DEFAULT_DESERT_PIXELS = [_][CONF.TILE_SIDE * CONF.TILE_SIDE]u8{
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1 },
+    .{ 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 1, 2, 0, 1, 0, 0, 0, 0, 1, 2, 0, 1, 0, 0, 1, 0, 1, 2, 0, 2, 0, 0, 2, 0, 1, 1, 1, 2, 0, 0, 2, 1, 1, 2, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 0, 0, 0, 3, 3, 3, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 2, 2, 0, 1, 2, 2, 0, 0, 0, 0 },
+    .{ 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 2, 2, 0, 0, 0, 1, 2, 2, 2, 0, 3, 3, 0, 0, 2, 1, 1, 0, 3, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 3, 2, 0, 0, 0, 3, 3, 3, 3, 2, 0, 3, 3, 1, 1, 1, 1, 1, 3, 3, 1, 1, 2, 2, 1 },
+    .{ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 1, 2, 0, 0, 2, 2, 2, 0, 0, 0, 3, 3, 0, 2, 1, 3, 3, 0, 0, 3, 0, 0, 0, 0, 1, 3, 3, 0, 3, 3, 3, 0, 0, 1, 3, 0, 1, 1, 1, 3, 0, 1, 0, 3, 2, 1, 2, 1, 3, 2, 3, 1, 2 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 1, 2, 3, 2, 0, 0, 0, 1, 1, 2, 3, 2, 0, 0, 0, 1, 1, 2, 3, 3, 0, 0, 0, 0, 1, 2, 2, 3, 0, 0, 0, 1, 1, 1, 2, 3, 0, 0, 0, 1, 1, 2, 3, 2, 0, 0, 0, 0, 1, 2, 3, 2, 0, 0, 0, 1, 1, 2, 3, 2 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 1, 1, 2, 3, 0, 0, 0, 0, 1, 1, 2, 3 },
+    .{ 0, 0, 0, 1, 1, 2, 3, 2, 0, 0, 0, 1, 1, 2, 3, 3, 0, 0, 1, 1, 1, 2, 2, 3, 1, 1, 1, 1, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 3, 3, 3, 2, 3, 2, 2, 3, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 },
+    .{ 0, 0, 0, 1, 1, 2, 3, 3, 0, 0, 0, 0, 1, 2, 3, 3, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 3, 3, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 3, 3, 3, 3, 1, 1, 3, 3, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 },
+    .{ 3, 2, 2, 3, 3, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 3, 1, 1, 1, 2, 2, 2, 3, 3, 1, 1, 1, 1, 2, 2, 3, 3, 0, 0, 1, 1, 1, 2, 3, 3, 0, 0, 0, 1, 1, 2, 3, 3 },
+    .{ 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 2, 2, 0, 1, 0, 0, 0, 2, 2, 3, 2, 0, 1, 1, 0, 2, 2, 3, 2, 0, 1, 1, 0, 2, 2, 3, 2, 0, 0, 0, 3, 2, 3, 3, 3, 0, 1, 0, 2, 3, 3, 2, 2, 3, 1, 1, 3, 0, 0, 2, 3, 1, 0 },
+    .{ 3, 3, 3, 0, 0, 3, 1, 0, 3, 3, 0, 2, 0, 2, 3, 2, 0, 1, 0, 0, 2, 0, 0, 3, 2, 3, 1, 2, 2, 0, 2, 3, 1, 1, 0, 0, 2, 2, 0, 1, 1, 2, 0, 2, 0, 1, 1, 1, 3, 2, 2, 0, 2, 1, 0, 3, 3, 1, 1, 1, 1, 3, 2, 1 },
+};
+
+fn defaultPaletteBanks() [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+    return .{ defaultGrasslandPalettes(), defaultDesertPalettes(), defaultGrasslandPalettes(), defaultDesertPalettes() };
 }
 
 fn defaultTilePalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
-    return defaultTilesetPalettes();
+    return defaultGrasslandPalettes();
 }
 fn readU16(bytes: []const u8) u16 {
     return @as(u16, bytes[0]) | (@as(u16, bytes[1]) << 8);

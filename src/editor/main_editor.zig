@@ -226,8 +226,8 @@ pub const MainEditor = struct {
 
         drawPixelText(fui, renderer, "PALETTES", x, UI.content_y + 100, 2, UI.text);
         drawPalettes(fui, renderer, project, mouse, x + 48, UI.content_y + 134, self);
-        drawPixelText(fui, renderer, "EDIT COLOUR", x, UI.content_y + 548, 2, UI.text);
-        drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 586, self);
+        drawPixelText(fui, renderer, "EDIT COLOUR", x, UI.content_y + 536, 2, UI.text);
+        drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 574, self);
     }
 
     fn setInfo(self: *MainEditor, text: []const u8, color: u32) void {

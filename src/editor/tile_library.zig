@@ -219,8 +219,6 @@ fn drawLeftInfo(fui: anytype, renderer: *Render, project: *const Project) void {
     panel(renderer, x, UI.grid_y + 280, UI.left_w, 190);
     drawText(fui, renderer, "SELECTION", x + 16, UI.grid_y + 304, 2, UI.text);
     drawText(fui, renderer, "Click tile to select", x + 16, UI.grid_y + 356, 1, UI.muted);
-    drawText(fui, renderer, "Right click from preview", x + 16, UI.grid_y + 378, 1, UI.muted);
-    drawText(fui, renderer, "opens swap mode", x + 16, UI.grid_y + 400, 1, UI.muted);
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {

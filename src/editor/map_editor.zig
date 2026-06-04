@@ -205,8 +205,9 @@ pub const MapEditor = struct {
             self.setInfo("File saved", UI.accent);
         }
         if (button(fui, renderer, mouse, x + 102, y + 34, 86, 36, "EXPORT", false)) {
-            exporter.exportGameBoyEngine(project) catch {
-                self.setInfo("Export failed", UI.danger);
+            exporter.exportGameBoyEngine(project) catch |err| {
+                std.debug.print("[export] map editor export failed: {s}\n", .{@errorName(err)});
+                self.setInfo(exporter.errorMessage(err), UI.danger);
                 return;
             };
             self.setInfo("Engine data exported", UI.accent);

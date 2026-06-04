@@ -184,9 +184,10 @@ pub const MainEditor = struct {
             self.setInfo("File saved", UI.accent);
         }
         if (pillButton(fui, renderer, mouse, x + 142, UI.file_y + 34, 112, 36, "EXPORT", false)) {
-            exporter.exportGameBoyEngine(project) catch {
+            exporter.exportGameBoyEngine(project) catch |err| {
+                std.debug.print("[export] main editor export failed: {s}\n", .{@errorName(err)});
                 self.export_notice = true;
-                self.setInfo("Export failed", UI.danger);
+                self.setInfo(exporter.errorMessage(err), UI.danger);
                 return;
             };
             self.export_notice = false;
@@ -265,6 +266,7 @@ fn sectionPanel(renderer: *Render, x: i32, y: i32, w: i32, h: i32, title: []cons
 }
 
 fn drawInfoPanel(fui: anytype, renderer: *Render, editor: *const MainEditor) void {
+    sectionPanel(renderer, UI.centerX(), UI.centerInfoY(), UI.centerW(), UI.center_info_h, "INFO", fui);
     drawPixelText(fui, renderer, editor.info_text, UI.centerX() + 24, UI.centerInfoY() + 56, 1, editor.info_color);
 }
 
@@ -515,8 +517,8 @@ fn drawBottomStatus(fui: anytype, renderer: *Render, project: *const Project, sa
     renderer.draw_circle(362, y + 15, 5, UI.accent);
     drawPixelText(fui, renderer, if (project.mode == .tiles) "TILES" else "SPRITES", 382, y + 11, 1, UI.accent);
     drawPixelText(fui, renderer, "TILESET: 0x4000", 526, y + 11, 1, UI.text);
-    const status = if (save_error) "SAVE FAILED" else if (export_notice) "EXPORT TODO" else if (project.dirty) "UNSAVED" else "READY";
-    const status_color: u32 = if (save_error) UI.danger else if (project.dirty) 0xDAD45E else UI.accent;
+    const status = if (save_error) "SAVE FAILED" else if (export_notice) "EXPORT FAILED" else if (project.dirty) "UNSAVED" else "READY";
+    const status_color: u32 = if (save_error or export_notice) UI.danger else if (project.dirty) 0xDAD45E else UI.accent;
     const sx = CONF.SCREEN_W - 42 - fui.text_length(status, 1);
     drawPixelText(fui, renderer, status, sx, y + 11, 1, status_color);
 }

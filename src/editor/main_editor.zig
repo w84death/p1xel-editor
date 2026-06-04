@@ -171,12 +171,6 @@ pub const MainEditor = struct {
         drawPixelText(fui, renderer, "LMB: SELECT", x + 20, UI.preview_y + 176, 1, UI.muted);
         drawPixelText(fui, renderer, "RMB: LIBRARY", x + 136, UI.preview_y + 176, 1, UI.muted);
 
-        drawPixelText(fui, renderer, "TILE INFO", x + 16, UI.info_y, 2, UI.text);
-        drawPixelText(fui, renderer, "EDITED TILE ID:", x + 20, UI.info_y + 42, 1, UI.muted);
-        drawNumber(fui, renderer, project.selectedImageId(), x + 20, UI.info_y + 64, 0xD5F8A5);
-        drawPixelText(fui, renderer, "NON-EMPTY TILES:", x + 124, UI.info_y + 42, 1, UI.muted);
-        drawCount(fui, renderer, project.nonEmptyTiles(), project.imageCount(), x + 124, UI.info_y + 64);
-
         drawPixelText(fui, renderer, "FILE", x + 16, UI.file_y, 2, UI.text);
         if (pillButton(fui, renderer, mouse, x + 16, UI.file_y + 34, 112, 36, "SAVE", project.dirty)) {
             project.save() catch {

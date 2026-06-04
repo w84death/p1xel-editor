@@ -6,6 +6,8 @@ It is designed around a classic indexed-colour workflow: artwork is stored as ti
 
 ![P1Xel Editor - Tiles Editor ](docs/screenshot-tiles.png)
 
+![P1Xel Editor - Tiles Editor ](docs/screenshot-map.png)
+
 ## Features
 
 - 8×8 tile editor with pixel, fill, and line tools.

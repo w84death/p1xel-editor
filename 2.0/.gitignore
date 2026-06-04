@@ -1,0 +1,3 @@
+.zig-cache/
+zig-out/bin/p1xel*
+*.ppm

@@ -32,10 +32,10 @@ const UI = struct {
     const danger = 0xFF4040;
     const blue = 0x5EA8FF;
 
-    const margin: i32 = 14;
-    const top_h: i32 = 88;
-    const status_h: i32 = 34;
-    const side_x: i32 = 30;
+    const margin: i32 = 8;
+    const top_h: i32 = 82;
+    const status_h: i32 = 0;
+    const side_x: i32 = 14;
     const gap: i32 = 8;
     const left_w: i32 = 298;
     const right_w: i32 = 312;
@@ -60,7 +60,7 @@ const UI = struct {
         return rightX() - centerX() - gap;
     }
     fn contentH() i32 {
-        return CONF.SCREEN_H - content_y - status_h - 42;
+        return 580;
     }
     fn statusY() i32 {
         return CONF.SCREEN_H - status_h - 8;
@@ -91,7 +91,6 @@ pub const MainEditor = struct {
         self.drawLeftPanel(fui, renderer, project, mouse, sm);
         self.drawCenterPanel(fui, renderer, project, mouse, sm);
         self.drawRightPanel(fui, renderer, project, mouse);
-        drawBottomStatus(fui, renderer, project, self.save_error, self.export_notice);
     }
 
     fn handleCanvas(self: *MainEditor, fui: anytype, project: *Project, mouse: Mouse) void {
@@ -114,16 +113,15 @@ pub const MainEditor = struct {
     }
 
     fn drawTopBar(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
-        drawPixelText(fui, renderer, "GBC", 42, 52, 3, UI.accent);
-        drawPixelText(fui, renderer, "TILE EDITOR", 124, 52, 3, UI.text);
+        drawPixelText(fui, renderer, "GBC", UI.leftX() + 26, 52, 3, UI.accent);
+        drawPixelText(fui, renderer, "TILE EDITOR", UI.leftX() + 108, 52, 3, UI.text);
 
         if (tabButton(fui, renderer, mouse, 396, 43, 144, 46, "EDITOR", project.mode == .tiles)) project.setMode(.tiles);
         if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
         if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) {}
 
-        const tx: i32 = UI.rightX() + UI.right_w - 276;
-        if (iconButton(renderer, mouse, tx, 43, "F", false)) {}
-        if (iconButton(renderer, mouse, tx + 58, 43, "S", project.dirty)) {
+        const tx: i32 = UI.rightX() + UI.right_w - 102;
+        if (iconButton(renderer, mouse, tx, 43, "S", project.dirty)) {
             project.save() catch {
                 self.setInfo("Save failed", UI.danger);
                 return;
@@ -132,9 +130,7 @@ pub const MainEditor = struct {
             self.export_notice = false;
             self.setInfo("File saved", UI.accent);
         }
-        if (iconButton(renderer, mouse, tx + 116, 43, "<", false)) {}
-        if (iconButton(renderer, mouse, tx + 174, 43, ">", false)) {}
-        if (iconButton(renderer, mouse, tx + 232, 43, "*", false)) sm.go_to(.quit);
+        if (iconButton(renderer, mouse, tx + 58, 43, "Q", false)) sm.go_to(.quit);
     }
 
     fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
@@ -174,9 +170,7 @@ pub const MainEditor = struct {
         const id_text = std.fmt.bufPrint(&title_buf, "{d}", .{project.selectedImageId()}) catch "?";
         const title_x = UI.centerX() + @divFloor(UI.centerW() - fui.text_length("TILE ID: 000", 2), 2);
         drawPixelText(fui, renderer, "TILE ID:", title_x, 134, 2, UI.text);
-        drawPixelText(fui, renderer, id_text, title_x + 112, 134, 2, UI.accent);
-        _ = iconButton(renderer, mouse, UI.centerX() + 16, 122, "<", false);
-        _ = iconButton(renderer, mouse, UI.centerX() + UI.centerW() - 60, 122, ">", false);
+        drawPixelText(fui, renderer, id_text, title_x + 142, 134, 2, UI.accent);
 
         drawCanvas(self, fui, renderer, project, mouse);
 
@@ -187,9 +181,10 @@ pub const MainEditor = struct {
 
     fn drawRightPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
         drawPalettes(fui, renderer, project, mouse, UI.rightX() + 72, 162, self);
-        drawColorEditor(fui, renderer, project, mouse, UI.rightX() + 22, 572, self);
-        drawPixelText(fui, renderer, "Tiles: 384", UI.rightX() + 20, 826, 1, UI.text);
-        drawPixelText(fui, renderer, "8x8 / 4c / GBC", UI.rightX() + 20, 846, 1, UI.text);
+        drawColorEditor(fui, renderer, project, mouse, UI.rightX() + 22, 596, self);
+        drawPixelText(fui, renderer, "Tiles: 384", UI.rightX() + 20, 828, 1, UI.text);
+        drawPixelText(fui, renderer, "Size: 8x8", UI.rightX() + 20, 848, 1, UI.text);
+        drawPixelText(fui, renderer, "Colors: 4   Mode: GBC", UI.rightX() + 120, 828, 1, UI.text);
         renderer.draw_rect(UI.rightX() + 254, 812, 42, 44, 0xC9D28B);
         renderer.draw_rect_lines(UI.rightX() + 254, 812, 42, 44, UI.border_dark);
         renderer.draw_rect(UI.rightX() + 262, 820, 26, 16, 0x59704A);
@@ -203,9 +198,7 @@ pub const MainEditor = struct {
 
 fn drawStaticUi(fui: anytype, renderer: *Render) void {
     renderer.clear_background(UI.bg);
-    renderer.draw_rect_lines(UI.margin, 22, CONF.SCREEN_W - UI.margin * 2, CONF.SCREEN_H - 30, UI.accent);
-    renderer.draw_rect_lines(UI.margin + 2, 24, CONF.SCREEN_W - UI.margin * 2 - 4, CONF.SCREEN_H - 34, UI.accent_dark);
-    panel(renderer, 30, 32, CONF.SCREEN_W - 60, UI.top_h - 10);
+    panel(renderer, UI.leftX(), 24, CONF.SCREEN_W - UI.leftX() * 2, UI.top_h);
     drawStaticPanelFrames(fui, renderer);
 }
 
@@ -223,8 +216,8 @@ fn drawStaticPanelFrames(fui: anytype, renderer: *Render) void {
     panel(renderer, UI.centerX(), lower_y, 420, 186);
 
     sectionPanel(renderer, UI.rightX(), 110, UI.right_w, 430, "PALETTE BROWSER", fui);
-    sectionPanel(renderer, UI.rightX(), 544, UI.right_w, 232, "EDITED COLOURS", fui);
-    sectionPanel(renderer, UI.rightX(), 780, UI.right_w, 72, "INFO", fui);
+    sectionPanel(renderer, UI.rightX(), 544, UI.right_w, 256, "EDITED COLOURS", fui);
+    sectionPanel(renderer, UI.rightX(), 806, UI.right_w, 74, "INFO", fui);
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {

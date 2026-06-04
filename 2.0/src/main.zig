@@ -136,7 +136,7 @@ pub fn main() !void {
     while (c.fenster_loop(&window) == 0) {
         renderer.perf_begin_sim();
         renderer.begin_frame();
-        renderer.clear_background(0x1B1B1B);
+        if (sm.current != .editor) renderer.clear_background(0x1B1B1B);
 
         const mouse = mouse_buttons.update(@divFloor(window.x, CONF.PIXEL_SCALE), @divFloor(window.y, CONF.PIXEL_SCALE), @intCast(window.mouse));
         assets.update(renderer.dt);

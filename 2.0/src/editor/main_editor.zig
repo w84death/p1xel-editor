@@ -1,6 +1,7 @@
 const std = @import("std");
 const CONF = @import("../engine/config.zig").CONF;
-const Render = @import("../engine/render.zig").Render;
+const render_mod = @import("../engine/render.zig");
+const Render = render_mod.Render;
 const Mouse = @import("../engine/mouse.zig").Mouse;
 const Project = @import("project.zig").Project;
 const Tool = @import("project.zig").Tool;
@@ -17,21 +18,76 @@ pub const LibraryRequest = struct {
     tile_id: u16,
 };
 
+const UI = struct {
+    const bg = 0x121619;
+    const panel = 0x1B2026;
+    const panel_dark = 0x14191E;
+    const panel_hi = 0x2B323A;
+    const border = 0x3B434C;
+    const border_dark = 0x090B0D;
+    const text = 0xF0F0F0;
+    const muted = 0xB7BBC0;
+    const accent = 0x7EDB1E;
+    const accent_dark = 0x486E10;
+    const danger = 0xFF4040;
+    const blue = 0x5EA8FF;
+
+    const margin: i32 = 14;
+    const top_h: i32 = 88;
+    const status_h: i32 = 34;
+    const side_x: i32 = 30;
+    const gap: i32 = 8;
+    const left_w: i32 = 298;
+    const right_w: i32 = 312;
+    const content_y: i32 = 110;
+    const draw_mode_y: i32 = 110;
+    const palette_y: i32 = 224;
+    const info_y: i32 = 370;
+    const file_y: i32 = 506;
+
+    fn leftX() i32 {
+        return side_x;
+    }
+    fn rightX() i32 {
+        return CONF.SCREEN_W - side_x - right_w;
+    }
+    fn centerX() i32 {
+        return leftX() + left_w + gap;
+    }
+    fn centerW() i32 {
+        return rightX() - centerX() - gap;
+    }
+    fn contentH() i32 {
+        return CONF.SCREEN_H - content_y - status_h - 42;
+    }
+    fn statusY() i32 {
+        return CONF.SCREEN_H - status_h - 8;
+    }
+};
+
 pub const MainEditor = struct {
     tool: Tool = .pixel,
     line_start: ?[2]i32 = null,
     library_request: ?LibraryRequest = null,
     save_error: bool = false,
     export_notice: bool = false,
+    ui_cache_dirty: bool = true,
 
     pub fn draw(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
         self.handleCanvas(fui, project, mouse);
-        drawLeftPanel(self, fui, renderer, project, mouse, sm);
-        drawCanvas(self, fui, renderer, project, mouse);
-        drawTileSlots(self, fui, renderer, project, mouse, sm);
-        drawPalettes(self, fui, renderer, project, mouse);
-        drawColorEditor(fui, renderer, project, mouse);
-        drawStatus(fui, renderer, project, self.save_error, self.export_notice);
+        if (self.ui_cache_dirty) {
+            const previous_target = renderer.target;
+            renderer.set_target(.terrain);
+            drawStaticUi(fui, renderer);
+            renderer.set_target(previous_target);
+            self.ui_cache_dirty = false;
+        }
+        renderer.copy_buffer(.terrain, .frame);
+        self.drawTopBar(fui, renderer, project, mouse, sm);
+        self.drawLeftPanel(fui, renderer, project, mouse, sm);
+        self.drawCenterPanel(fui, renderer, project, mouse, sm);
+        self.drawRightPanel(fui, renderer, project, mouse);
+        drawBottomStatus(fui, renderer, project, self.save_error, self.export_notice);
     }
 
     fn handleCanvas(self: *MainEditor, fui: anytype, project: *Project, mouse: Mouse) void {
@@ -52,115 +108,240 @@ pub const MainEditor = struct {
             }
         }
     }
+
+    fn drawTopBar(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
+        _ = self;
+        drawPixelText(fui, renderer, "GBC", 42, 52, 3, UI.accent);
+        drawPixelText(fui, renderer, "TILE EDITOR", 124, 52, 3, UI.text);
+
+        if (tabButton(fui, renderer, mouse, 396, 43, 144, 46, "EDITOR", project.mode == .tiles)) project.setMode(.tiles);
+        if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
+        if (tabButton(fui, renderer, mouse, 712, 43, 164, 46, "PALETTES", false)) {}
+
+        const tx: i32 = UI.rightX() + UI.right_w - 276;
+        if (iconButton(renderer, mouse, tx, 43, "F", false)) {}
+        if (iconButton(renderer, mouse, tx + 58, 43, "S", project.dirty)) {
+            project.save() catch {
+                return;
+            };
+        }
+        if (iconButton(renderer, mouse, tx + 116, 43, "<", false)) {}
+        if (iconButton(renderer, mouse, tx + 174, 43, ">", false)) {}
+        if (iconButton(renderer, mouse, tx + 232, 43, "*", false)) sm.go_to(.quit);
+    }
+
+    fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
+        const x = UI.leftX();
+        if (pillButton(fui, renderer, mouse, x + 22, UI.draw_mode_y + 52, 76, 36, "PIXEL", self.tool == .pixel)) self.tool = .pixel;
+        if (pillButton(fui, renderer, mouse, x + 112, UI.draw_mode_y + 52, 76, 36, "FILL", self.tool == .fill)) self.tool = .fill;
+        if (pillButton(fui, renderer, mouse, x + 202, UI.draw_mode_y + 52, 76, 36, "LINE", self.tool == .line)) self.tool = .line;
+
+        drawCurrentPalette(fui, renderer, project, mouse, x + 24, UI.palette_y + 56);
+
+        drawPixelText(fui, renderer, "EDITED TILE ID:", x + 24, UI.info_y + 54, 1, UI.muted);
+        drawNumber(fui, renderer, project.selectedImageId(), x + 24, UI.info_y + 78, 0xD5F8A5);
+        drawPixelText(fui, renderer, "NON-EMPTY TILES:", x + 124, UI.info_y + 54, 1, UI.muted);
+        drawCount(fui, renderer, project.nonEmptyTiles(), project.imageCount(), x + 124, UI.info_y + 78);
+
+        if (pillButton(fui, renderer, mouse, x + 24, UI.file_y + 54, 112, 36, "SAVE", project.dirty)) {
+            project.save() catch {
+                self.save_error = true;
+                return;
+            };
+            self.save_error = false;
+            self.export_notice = false;
+        }
+        if (pillButton(fui, renderer, mouse, x + 150, UI.file_y + 54, 112, 36, "EXPORT", false)) self.export_notice = true;
+        _ = sm;
+    }
+
+    fn drawCenterPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
+        const canvas = canvasOrigin(fui);
+        var title_buf: [8]u8 = undefined;
+        const id_text = std.fmt.bufPrint(&title_buf, "{d}", .{project.selectedImageId()}) catch "?";
+        const title_x = UI.centerX() + @divFloor(UI.centerW() - fui.text_length("TILE ID: 000", 2), 2);
+        drawPixelText(fui, renderer, "TILE ID:", title_x, 134, 2, UI.text);
+        drawPixelText(fui, renderer, id_text, title_x + 112, 134, 2, UI.accent);
+        _ = iconButton(renderer, mouse, UI.centerX() + 16, 122, "<", false);
+        _ = iconButton(renderer, mouse, UI.centerX() + UI.centerW() - 60, 122, ">", false);
+
+        drawCanvas(self, fui, renderer, project, mouse);
+
+        const lower_y = canvas[1] + CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 16;
+        drawPixelText(fui, renderer, "TILE PREVIEW", UI.centerX() + 18, lower_y + 18, 2, UI.text);
+        drawTileSlots(self, fui, renderer, project, mouse, sm, UI.centerX() + 84, lower_y + 50, 44);
+    }
+
+    fn drawRightPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
+        _ = self;
+        drawPalettes(fui, renderer, project, mouse, UI.rightX() + 72, 162);
+        drawColorEditor(fui, renderer, project, mouse, UI.rightX() + 22, 572);
+        drawPixelText(fui, renderer, "Tiles: 384", UI.rightX() + 20, 738, 1, UI.text);
+        drawPixelText(fui, renderer, "8x8 / 4c / GBC", UI.rightX() + 118, 738, 1, UI.text);
+        renderer.draw_rect(UI.rightX() + 254, 724, 28, 28, 0xC9D28B);
+        renderer.draw_rect_lines(UI.rightX() + 254, 724, 28, 28, UI.border_dark);
+        renderer.draw_rect(UI.rightX() + 260, 730, 16, 10, 0x59704A);
+    }
 };
 
-fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
-    const x: i32 = 40;
-    var y: i32 = 44;
+fn drawStaticUi(fui: anytype, renderer: *Render) void {
+    renderer.clear_background(UI.bg);
+    renderer.draw_rect_lines(UI.margin, 22, CONF.SCREEN_W - UI.margin * 2, CONF.SCREEN_H - 30, UI.accent);
+    renderer.draw_rect_lines(UI.margin + 2, 24, CONF.SCREEN_W - UI.margin * 2 - 4, CONF.SCREEN_H - 34, UI.accent_dark);
+    panel(renderer, 30, 32, CONF.SCREEN_W - 60, UI.top_h - 10);
+    drawStaticPanelFrames(fui, renderer);
+}
 
-    fui.draw_text(renderer, "Mode", x, y, 2, 0xE6E6E6);
-    y += 26;
-    if (views.smallButton(fui, renderer, mouse, x, y, 78, 34, "Tiles", project.mode == .tiles)) project.setMode(.tiles);
-    if (views.smallButton(fui, renderer, mouse, x + 82, y, 78, 34, "Sprites", project.mode == .sprites)) project.setMode(.sprites);
+fn drawStaticPanelFrames(fui: anytype, renderer: *Render) void {
+    const x = UI.leftX();
+    sectionPanel(renderer, x, UI.draw_mode_y, UI.left_w, 104, "DRAW MODE", fui);
+    sectionPanel(renderer, x, UI.palette_y, UI.left_w, 134, "CURRENT PALETTE", fui);
+    sectionPanel(renderer, x, UI.info_y, UI.left_w, 116, "TILE INFO", fui);
+    sectionPanel(renderer, x, UI.file_y, UI.left_w, 110, "FILE", fui);
 
-    y += 58;
-    if (views.smallButton(fui, renderer, mouse, x, y, 160, 36, "Pixel", self.tool == .pixel)) self.tool = .pixel;
-    y += 38;
-    if (views.smallButton(fui, renderer, mouse, x, y, 160, 36, "Fill", self.tool == .fill)) self.tool = .fill;
-    y += 38;
-    if (views.smallButton(fui, renderer, mouse, x, y, 160, 36, "Line", self.tool == .line)) self.tool = .line;
+    panel(renderer, UI.centerX(), UI.content_y, UI.centerW(), UI.contentH());
+    const canvas = canvasOrigin(fui);
+    const lower_y = canvas[1] + CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 16;
+    panel(renderer, UI.centerX(), lower_y, 326, 100);
 
-    y += 42;
-    fui.draw_text(renderer, "Current Palette", x, y, 2, 0xE6E6E6);
-    y += 30;
-    const palette_y = y;
+    sectionPanel(renderer, UI.rightX(), 110, UI.right_w, 430, "PALETTE BROWSER", fui);
+    sectionPanel(renderer, UI.rightX(), 544, UI.right_w, 160, "EDITED COLOURS", fui);
+    sectionPanel(renderer, UI.rightX(), 708, UI.right_w, 48, "INFO", fui);
+}
+
+fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
+    if (w <= 0 or h <= 0) return;
+    renderer.draw_rect(x + 3, y + 3, w, h, 0x07090B);
+    renderer.draw_rect(x, y, w, h, UI.panel);
+    renderer.draw_rect_lines(x, y, w, h, UI.border_dark);
+    renderer.draw_rect_lines(x + 1, y + 1, w - 2, h - 2, UI.border);
+}
+
+fn sectionPanel(renderer: *Render, x: i32, y: i32, w: i32, h: i32, title: []const u8, fui: anytype) void {
+    panel(renderer, x, y, w, h);
+    if (title.len > 0) drawPixelText(fui, renderer, title, x + 22, y + 22, 2, UI.text);
+}
+
+fn drawPixelText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i32, scale: i32, color: u32) void {
+    fui.draw_text(renderer, text, x, y, scale, color);
+}
+
+fn tabButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
+    const over = views.hover(mouse, x, y, w, h);
+    const bg: u32 = if (active) UI.accent_dark else UI.panel_hi;
+    renderer.draw_rect(x + 2, y + 2, w, h, 0x080A0C);
+    renderer.draw_rect(x, y, w, h, if (over) lighten(bg) else bg);
+    renderer.draw_rect_lines(x, y, w, h, if (active) UI.accent else UI.border_dark);
+    renderer.draw_rect_lines(x + 1, y + 1, w - 2, h - 2, if (active) 0xC7FF5B else UI.border);
+    const tw = fui.text_length(label, 2);
+    fui.draw_text(renderer, label, x + @divFloor(w - tw, 2), y + 14, 2, if (active) 0xD9F99A else UI.muted);
+    return over and mouse.just_pressed;
+}
+
+fn pillButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
+    const over = views.hover(mouse, x, y, w, h);
+    const bg: u32 = if (active) UI.accent_dark else UI.panel_hi;
+    renderer.draw_rect(x + 2, y + 2, w, h, 0x090B0D);
+    renderer.draw_rect(x, y, w, h, if (over) lighten(bg) else bg);
+    renderer.draw_rect_lines(x, y, w, h, if (active) UI.accent else UI.border_dark);
+    renderer.draw_rect_lines(x + 1, y + 1, w - 2, h - 2, if (active) 0xC7FF5B else UI.border);
+    const tw = fui.text_length(label, 1);
+    fui.draw_text(renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, if (active) 0xE8FFD2 else UI.text);
+    return over and mouse.just_pressed;
+}
+
+fn iconButton(renderer: *Render, mouse: Mouse, x: i32, y: i32, label: [:0]const u8, active: bool) bool {
+    const size: i32 = 44;
+    const over = views.hover(mouse, x, y, size, size);
+    const bg: u32 = if (active) UI.accent_dark else UI.panel_hi;
+    renderer.draw_rect(x + 2, y + 2, size, size, 0x07090B);
+    renderer.draw_rect(x, y, size, size, if (over) lighten(bg) else bg);
+    renderer.draw_rect_lines(x, y, size, size, if (active) UI.accent else UI.border_dark);
+    renderer.draw_rect_lines(x + 1, y + 1, size - 2, size - 2, UI.border);
+    drawDummyIcon(renderer, x + 11, y + 11, label, if (active) UI.accent else UI.text);
+    return over and mouse.just_pressed;
+}
+
+fn miniButton(renderer: *Render, mouse: Mouse, x: i32, y: i32, label: [:0]const u8) bool {
+    _ = label;
+    const w: i32 = 30;
+    const h: i32 = 24;
+    const over = views.hover(mouse, x, y, w, h);
+    renderer.draw_rect(x + 2, y + 2, w, h, 0x07090B);
+    renderer.draw_rect(x, y, w, h, if (over) lighten(UI.panel_hi) else UI.panel_hi);
+    renderer.draw_rect_lines(x, y, w, h, UI.border_dark);
+    renderer.draw_rect(x + 10, y + 11, 10, 2, UI.text);
+    renderer.draw_rect(x + 14, y + 7, 2, 10, UI.text);
+    return over and mouse.just_pressed;
+}
+
+fn drawDummyIcon(renderer: *Render, x: i32, y: i32, label: [:0]const u8, color: u32) void {
+    _ = label;
+    renderer.draw_rect(x + 8, y, 8, 20, color);
+    renderer.draw_rect(x, y + 8, 24, 8, color);
+    renderer.draw_rect(x + 4, y + 4, 16, 16, 0x000000);
+    renderer.draw_rect(x + 8, y + 8, 8, 8, color);
+}
+
+fn drawCurrentPalette(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32) void {
     for (0..CONF.COLORS_PER_PALETTE) |i| {
-        const sx = x + @as(i32, @intCast(i)) * 40;
-        renderer.draw_rect(sx, y, 40, 40, if (project.isTransparentColor(@intCast(i))) 0x303030 else project.currentColor32(@intCast(i)));
-        renderer.draw_rect_lines(sx, y, 40, 40, 0x000000);
-        if (project.isTransparentColor(@intCast(i))) renderer.draw_line(sx, y + 39, sx + 39, y, 0xFFFFFF);
-        if (views.hover(mouse, sx, y, 40, 40)) {
+        const sx = x + @as(i32, @intCast(i)) * 48;
+        renderer.draw_rect(sx, y, 44, 44, if (project.isTransparentColor(@intCast(i))) 0x303030 else project.currentColor32(@intCast(i)));
+        renderer.draw_rect_lines(sx, y, 44, 44, UI.border_dark);
+        if (project.isTransparentColor(@intCast(i))) renderer.draw_line(sx, y + 43, sx + 43, y, UI.text);
+        if (views.hover(mouse, sx, y, 44, 44)) {
             if (mouse.just_pressed) project.setLeftColor(@intCast(i));
             if (mouse.just_right_pressed) project.setRightColor(@intCast(i));
         }
-        if (project.leftColor() == i) renderer.draw_rect_lines(sx + 3, y + 3, 34, 34, 0xFFFFFF);
-        if (project.rightColor() == i) renderer.draw_rect_lines(sx + 7, y + 7, 26, 26, 0x000000);
+        if (project.leftColor() == i) renderer.draw_rect_lines(sx + 3, y + 3, 38, 38, UI.accent);
+        if (project.rightColor() == i) renderer.draw_rect_lines(sx + 7, y + 7, 30, 30, UI.text);
     }
-    y += 50;
-    const left_x = x + @as(i32, @intCast(project.leftColor())) * 40;
-    const right_x = x + @as(i32, @intCast(project.rightColor())) * 40;
+
+    const left_x = x + @as(i32, @intCast(project.leftColor())) * 48;
+    const right_x = x + @as(i32, @intCast(project.rightColor())) * 48;
     if (project.leftColor() == project.rightColor()) {
-        fui.draw_text(renderer, "LR", left_x + 4, palette_y + 46, 2, 0xFFFFFF);
+        _ = pillButton(fui, renderer, mouse, left_x + 2, y + 52, 64, 24, "LR", true);
     } else {
-        fui.draw_text(renderer, "L", left_x + 12, palette_y + 46, 2, 0xFFFFFF);
-        fui.draw_text(renderer, "R", right_x + 12, palette_y + 46, 2, 0xFFFFFF);
-    }
-
-    y += 62;
-    fui.draw_text(renderer, "Edited Tile ID:", x, y, 2, 0xE6E6E6);
-    y += 30;
-    drawNumber(fui, renderer, project.selectedImageId(), x + 60, y, 0xFFFFFF);
-    y += 62;
-    fui.draw_text(renderer, "Non-empty Tiles:", x, y, 2, 0xE6E6E6);
-    y += 30;
-    drawNumber(fui, renderer, project.nonEmptyTiles(), x + 60, y, 0xFFFFFF);
-
-    y = 610;
-    if (views.smallButton(fui, renderer, mouse, x, y, 160, 36, "Save", project.dirty)) {
-        project.save() catch {
-            self.save_error = true;
-            return;
-        };
-        self.save_error = false;
-        self.export_notice = false;
-    }
-    y += 42;
-    if (views.smallButton(fui, renderer, mouse, x, y, 160, 36, "Export", false)) {
-        self.export_notice = true;
-    }
-    y += 42;
-    if (views.smallButton(fui, renderer, mouse, x, y, 160, 36, "Quit", false)) {
-        project.save() catch {};
-        sm.go_to(.quit);
+        _ = pillButton(fui, renderer, mouse, left_x + 2, y + 52, 64, 24, "L", true);
+        _ = pillButton(fui, renderer, mouse, right_x + 2, y + 52, 64, 24, "R", false);
     }
 }
 
 fn drawCanvas(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
     const tile = project.currentImage();
     const origin = canvasOrigin(fui);
+    renderer.draw_rect(origin[0] - 2, origin[1] - 2, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 4, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 4, 0xE6F5D8);
     var py: usize = 0;
     while (py < CONF.TILE_SIDE) : (py += 1) {
         var px: usize = 0;
         while (px < CONF.TILE_SIDE) : (px += 1) {
             const idx = tile.pixels[py * CONF.TILE_SIDE + px];
             const color = if (project.isTransparentColor(idx)) checker(px, py) else project.currentColor32(idx);
-            renderer.draw_rect(origin[0] + @as(i32, @intCast(px)) * CONF.EDITOR_CANVAS_SCALE, origin[1] + @as(i32, @intCast(py)) * CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, color);
-            renderer.draw_rect_lines(origin[0] + @as(i32, @intCast(px)) * CONF.EDITOR_CANVAS_SCALE, origin[1] + @as(i32, @intCast(py)) * CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, 0xD0D0D0);
+            const x = origin[0] + @as(i32, @intCast(px)) * CONF.EDITOR_CANVAS_SCALE;
+            const y = origin[1] + @as(i32, @intCast(py)) * CONF.EDITOR_CANVAS_SCALE;
+            renderer.draw_rect(x, y, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, color);
+            renderer.draw_rect_lines(x, y, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, 0xD7EBCB);
         }
     }
     if (self.tool == .line) if (self.line_start) |start| if (canvasCell(fui, mouse.x, mouse.y)) |end| {
         const half = @divFloor(CONF.EDITOR_CANVAS_SCALE, 2);
         renderer.draw_line(origin[0] + start[0] * CONF.EDITOR_CANVAS_SCALE + half, origin[1] + start[1] * CONF.EDITOR_CANVAS_SCALE + half, origin[0] + end[0] * CONF.EDITOR_CANVAS_SCALE + half, origin[1] + end[1] * CONF.EDITOR_CANVAS_SCALE + half, 0x202020);
     };
-    renderer.draw_rect_lines(origin[0], origin[1], CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE, 0x000000);
+    renderer.draw_rect_lines(origin[0], origin[1], CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE, UI.border_dark);
 }
 
-fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
-    const slot: i32 = 64;
-    const origin = canvasOrigin(fui);
-    const x0: i32 = origin[0] + @divFloor(CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE - slot * 3, 2);
-    const y0: i32 = origin[1] + CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 24;
+fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype, x0: i32, y0: i32, slot: i32) void {
     for (0..9) |i| {
         const cx: i32 = @intCast(i % 3);
         const cy: i32 = @intCast(i / 3);
         const x = x0 + cx * slot;
         const y = y0 + cy * slot;
-        renderer.draw_rect(x, y, slot, slot, 0x858585);
+        renderer.draw_rect(x, y, slot - 2, slot - 2, UI.panel_hi);
         const tile_id = project.visibleSlot(i);
-        if (tile_id < project.imageCount()) views.drawTile(renderer, project, tile_id, x + 4, y + 4, 7);
-        renderer.draw_rect_lines(x, y, slot, slot, 0x000000);
-        if (project.selectedImageId() == tile_id) renderer.draw_rect_lines(x + 4, y + 4, slot - 8, slot - 8, 0xFFFFFF);
-        if (views.hover(mouse, x, y, slot, slot)) {
+        if (tile_id < project.imageCount()) views.drawTile(renderer, project, tile_id, x + 3, y + 3, @divFloor(slot - 8, 8));
+        renderer.draw_rect_lines(x, y, slot - 2, slot - 2, UI.border_dark);
+        if (project.selectedImageId() == tile_id) renderer.draw_rect_lines(x + 2, y + 2, slot - 6, slot - 6, UI.accent);
+        if (views.hover(mouse, x, y, slot - 2, slot - 2)) {
             if (mouse.just_pressed and tile_id < project.imageCount()) project.selectTile(tile_id);
             if (mouse.just_right_pressed) {
                 self.library_request = .{ .mode = .swap_tile, .slot_index = @intCast(i), .tile_id = tile_id };
@@ -168,70 +349,82 @@ fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
             }
         }
     }
-    fui.draw_text(renderer, "L to edit   R to swap", x0 - 2, y0 + slot * 3 + 6, 2, 0xFFFFFF);
+    drawPixelText(fui, renderer, "L: EDIT  R: SWAP", x0 - 18, y0 + slot * 3 + 2, 1, UI.text);
 }
 
-fn drawPalettes(_: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-    const x0: i32 = fui.pivotX(.top_right) - 196;
-    const y0: i32 = fui.pivotY(.top_right) + 60;
-    const sw: i32 = 38;
-    const row_h: i32 = 52;
-    fui.draw_text(renderer, "Palettes", x0, y0 - 28, 2, 0xFFFFFF);
-
+fn drawPalettes(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x0: i32, y0: i32) void {
+    const sw: i32 = 50;
+    const sh: i32 = 36;
+    const row_h: i32 = 46;
     for (0..CONF.PALETTE_COUNT) |p| {
         const y = y0 + @as(i32, @intCast(p)) * row_h;
         var label_buf: [4]u8 = undefined;
         const label = std.fmt.bufPrint(&label_buf, "{d}", .{p}) catch "?";
-        if (project.selectedPalette() == p) fui.draw_text(renderer, ">", x0 - 32, y + 11, 2, 0xFFFFFF);
-        fui.draw_text(renderer, label, x0 - 18, y + 11, 2, 0xE6E6E6);
+        if (project.selectedPalette() == p) drawPixelText(fui, renderer, ">", x0 - 64, y + 10, 2, UI.text);
+        drawPixelText(fui, renderer, label, x0 - 40, y + 12, 2, UI.text);
+        renderer.draw_rect(x0 - 2, y - 2, sw * CONF.COLORS_PER_PALETTE + 4, sh + 4, UI.border_dark);
         for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
             const x = x0 + @as(i32, @intCast(color_slot)) * sw;
-            renderer.draw_rect(x, y, sw, 40, if (project.isTransparentColor(@intCast(color_slot))) 0x303030 else project.color32(@intCast(p), @intCast(color_slot)));
-            renderer.draw_rect_lines(x, y, sw, 40, 0x000000);
-            if (project.isTransparentColor(@intCast(color_slot))) renderer.draw_line(x, y + 39, x + sw - 1, y, 0xFFFFFF);
+            renderer.draw_rect(x, y, sw, sh, if (project.isTransparentColor(@intCast(color_slot))) 0x303030 else project.color32(@intCast(p), @intCast(color_slot)));
+            renderer.draw_rect_lines(x, y, sw, sh, UI.border_dark);
+            if (project.isTransparentColor(@intCast(color_slot))) renderer.draw_line(x, y + sh - 1, x + sw - 1, y, UI.text);
             if (project.selectedPalette() == p and project.selectedColor() == color_slot) {
-                renderer.draw_rect_lines(x + 4, y + 4, sw - 8, 32, 0xFFFFFF);
-                renderer.draw_rect_lines(x + 7, y + 7, sw - 14, 26, 0x000000);
+                renderer.draw_rect_lines(x + 4, y + 4, sw - 8, sh - 8, UI.accent);
+                renderer.draw_rect_lines(x + 8, y + 8, sw - 16, sh - 16, UI.text);
             }
-            if (views.hover(mouse, x, y, sw, 40) and (mouse.just_pressed or mouse.just_right_pressed)) {
+            if (views.hover(mouse, x, y, sw, sh) and (mouse.just_pressed or mouse.just_right_pressed)) {
                 project.setPaletteSelection(@intCast(p), @intCast(color_slot));
             }
         }
     }
 }
 
-fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-    const x: i32 = fui.pivotX(.top_right) - 228;
-    const y: i32 = fui.pivotY(.top_right) + 506;
+fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32) void {
     const selected_color = project.color32(project.selectedPalette(), project.selectedColor());
-
-    fui.draw_text(renderer, "Edit Color", x, y, 2, 0xFFFFFF);
-    renderer.draw_rect(x, y + 34, 64, 64, selected_color);
-    renderer.draw_rect_lines(x, y + 34, 64, 64, 0xFFFFFF);
+    renderer.draw_rect(x, y, 72, 48, selected_color);
+    renderer.draw_rect_lines(x, y, 72, 48, UI.text);
 
     var title_buf: [32]u8 = undefined;
     const title = std.fmt.bufPrint(&title_buf, "P{d} C{d}", .{ project.selectedPalette(), project.selectedColor() }) catch "P? C?";
-    fui.draw_text(renderer, title, x + 78, y + 40, 2, 0xE6E6E6);
+    drawPixelText(fui, renderer, title, x + 86, y + 12, 2, UI.text);
 
     const rgb = selectedRgb(project);
-    drawChannelEditor(fui, renderer, project, mouse, .r, "R", rgb[0], x, y + 116, 0xFF4040);
-    drawChannelEditor(fui, renderer, project, mouse, .g, "G", rgb[1], x, y + 162, 0x80FF40);
-    drawChannelEditor(fui, renderer, project, mouse, .b, "B", rgb[2], x, y + 208, 0x70A8FF);
+    drawChannelEditor(fui, renderer, project, mouse, .r, "R", rgb[0], x, y + 54, UI.danger);
+    drawChannelEditor(fui, renderer, project, mouse, .g, "G", rgb[1], x, y + 82, UI.accent);
+    drawChannelEditor(fui, renderer, project, mouse, .b, "B", rgb[2], x, y + 110, UI.blue);
 }
 
 fn drawChannelEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, channel: ColorChannel, label: [:0]const u8, value: u8, x: i32, y: i32, color: u32) void {
-    fui.draw_text(renderer, label, x, y + 8, 2, color);
-    if (views.smallButton(fui, renderer, mouse, x + 34, y, 40, 32, "-", false)) project.adjustSelectedRgb(channel, -1);
+    drawPixelText(fui, renderer, label, x, y + 8, 2, color);
+    renderer.draw_rect(x + 32, y + 15, 144, 6, UI.border);
+    renderer.draw_rect(x + 32, y + 15, @divFloor(@as(i32, value) * 144, 255), 6, color);
+    const knob_x = x + 32 + @divFloor(@as(i32, value) * 144, 255) - 5;
+    renderer.draw_rect(knob_x, y + 10, 10, 16, UI.text);
+    if (views.hover(mouse, x + 32, y + 4, 144, 28) and (mouse.left_down or mouse.right_down)) {
+        const rel = @max(0, @min(143, mouse.x - (x + 32)));
+        const target = @divFloor(rel * 255, 143);
+        const delta: i16 = @as(i16, @intCast(target)) - @as(i16, @intCast(value));
+        project.adjustSelectedRgb(channel, delta);
+    }
     var buf: [4]u8 = undefined;
     const value_text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch "?";
-    fui.draw_text(renderer, value_text, x + 90, y + 8, 2, 0xFFFFFF);
-    if (views.smallButton(fui, renderer, mouse, x + 136, y, 40, 32, "+", false)) project.adjustSelectedRgb(channel, 1);
+    drawPixelText(fui, renderer, value_text, x + 188, y + 8, 2, UI.text);
+    if (miniButton(renderer, mouse, x + 246, y + 4, "+")) project.adjustSelectedRgb(channel, 1);
 }
 
-fn drawStatus(fui: anytype, renderer: *Render, project: *const Project, save_error: bool, export_notice: bool) void {
-    if (save_error) fui.draw_text(renderer, "Save failed", 40, 18, 2, 0xFF4040);
-    if (export_notice) fui.draw_text(renderer, "GBC export TODO", 40, 18, 2, 0x80C8FF);
-    if (!save_error and !export_notice and project.dirty) fui.draw_text(renderer, "Unsaved edits", 40, 18, 2, 0xAAAAAA);
+fn drawBottomStatus(fui: anytype, renderer: *Render, project: *const Project, save_error: bool, export_notice: bool) void {
+    const y = UI.statusY();
+    renderer.draw_rect(30, y, CONF.SCREEN_W - 60, UI.status_h, UI.panel_dark);
+    renderer.draw_rect_lines(30, y, CONF.SCREEN_W - 60, UI.status_h, UI.border_dark);
+    drawPixelText(fui, renderer, "ROM: GAME.ROM", 40, y + 11, 1, UI.text);
+    drawPixelText(fui, renderer, "MODE:", 292, y + 11, 1, UI.text);
+    renderer.draw_circle(362, y + 15, 5, UI.accent);
+    drawPixelText(fui, renderer, if (project.mode == .tiles) "TILES" else "SPRITES", 382, y + 11, 1, UI.accent);
+    drawPixelText(fui, renderer, "TILESET: 0x4000", 526, y + 11, 1, UI.text);
+    const status = if (save_error) "SAVE FAILED" else if (export_notice) "EXPORT TODO" else if (project.dirty) "UNSAVED" else "READY";
+    const status_color: u32 = if (save_error) UI.danger else if (project.dirty) 0xDAD45E else UI.accent;
+    const sx = CONF.SCREEN_W - 42 - fui.text_length(status, 1);
+    drawPixelText(fui, renderer, status, sx, y + 11, 1, status_color);
 }
 
 fn selectedRgb(project: *const Project) [3]u8 {
@@ -246,8 +439,9 @@ fn canvasCell(fui: anytype, x: i32, y: i32) ?[2]i32 {
 }
 
 fn canvasOrigin(fui: anytype) [2]i32 {
+    _ = fui;
     const size = CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE;
-    return .{ fui.pivotX(.center) - @divFloor(size, 2), 40 };
+    return .{ UI.centerX() + @divFloor(UI.centerW() - size, 2), 170 };
 }
 
 fn checker(x: usize, y: usize) u32 {
@@ -258,4 +452,17 @@ fn drawNumber(fui: anytype, renderer: *Render, n: anytype, x: i32, y: i32, color
     var buf: [8]u8 = undefined;
     const text = std.fmt.bufPrint(&buf, "{d}", .{n}) catch "?";
     fui.draw_text(renderer, text, x, y, 3, color);
+}
+
+fn drawCount(fui: anytype, renderer: *Render, n: u16, total: u16, x: i32, y: i32) void {
+    var buf: [24]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, "{d} / {d}", .{ n, total }) catch "?";
+    fui.draw_text(renderer, text, x, y, 3, 0xD5F8A5);
+}
+
+fn lighten(color: u32) u32 {
+    const r: u32 = @min(255, ((color >> 16) & 0xFF) + 28);
+    const g: u32 = @min(255, ((color >> 8) & 0xFF) + 28);
+    const b: u32 = @min(255, (color & 0xFF) + 28);
+    return (r << 16) | (g << 8) | b;
 }

@@ -16,6 +16,8 @@ pub const MAX_MAP_SPRITES = 256;
 
 pub const MapSize = enum(u8) { size_32x32 = 0, size_64x16 = 1, size_128x16 = 2 };
 
+pub const TILE_FLAG_TRAVERSABLE: u8 = 1 << 0;
+
 pub const MapTileAttr = struct {
     palette: u8 = 0,
     hflip: bool = false,
@@ -77,6 +79,7 @@ const ImageBank = struct {
 
     fn ensureSlotBounds(self: *ImageBank) void {
         if (self.count == 0) self.count = 1;
+        if (self.count > CONF.MAX_TILES) self.count = CONF.MAX_TILES;
         if (self.selected >= self.count) self.selected = self.count - 1;
         for (&self.visible_slots, 0..) |*slot, i| {
             if (slot.* >= self.count) slot.* = @intCast(@min(i, @as(usize, self.count - 1)));
@@ -86,7 +89,7 @@ const ImageBank = struct {
 
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 7;
+    const VERSION: u8 = 9;
     const LEGACY_VERSION: u8 = 5;
     const OLDEST_SUPPORTED_VERSION: u8 = 4;
     pub const IMAGE_BANK_COUNT = 2;
@@ -102,11 +105,13 @@ pub const Project = struct {
     const MAP_HEADER_BYTES = 2 + 2 + 2;
     const MAP_SPRITE_BYTES = 2 + 2 + 2 + 1;
     const MAP_BYTES = MAP_HEADER_BYTES + MAX_MAP_CELLS * 2 + MAX_MAP_SPRITES * MAP_SPRITE_BYTES;
-    const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
+    const TILE_FLAGS_BYTES = CONF.MAX_TILES;
+    const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + TILE_FLAGS_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
 
     palette_banks: [IMAGE_BANK_COUNT][PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPaletteSets(),
     active_palette_bank: u8 = 0,
     image_banks: [IMAGE_BANK_COUNT]ImageBank = .{ ImageBank{}, ImageBank{} },
+    tile_flags: [CONF.MAX_TILES]u8 = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES,
     maps: [MAP_BANK_COUNT]Map = [_]Map{.{}} ** MAP_BANK_COUNT,
     active_map_bank: u8 = 0,
     mode: ProjectMode = .tiles,
@@ -269,7 +274,7 @@ pub const Project = struct {
     }
 
     pub fn imageCountMode(self: *const Project, mode: ProjectMode) u16 {
-        return self.image_banks[@intFromEnum(mode)].count;
+        return @min(self.image_banks[@intFromEnum(mode)].count, CONF.MAX_TILES);
     }
 
     pub fn visibleSlotMode(self: *const Project, mode: ProjectMode, slot: usize) u16 {
@@ -288,6 +293,31 @@ pub const Project = struct {
     pub fn currentImage(self: *const Project) Image {
         const bank = self.activeBankConst();
         return bank.images[bank.selected];
+    }
+
+    pub fn tileFlags(self: *const Project, tile_id: u16) u8 {
+        if (tile_id >= CONF.MAX_TILES) return TILE_FLAG_TRAVERSABLE;
+        return self.tile_flags[tile_id];
+    }
+
+    pub fn selectedTileFlags(self: *const Project) u8 {
+        return self.tileFlags(self.selectedImageId());
+    }
+
+    pub fn isTileTraversable(self: *const Project, tile_id: u16) bool {
+        return (self.tileFlags(tile_id) & TILE_FLAG_TRAVERSABLE) != 0;
+    }
+
+    pub fn setSelectedTileTraversable(self: *Project, traversable: bool) void {
+        if (self.mode != .tiles) return;
+        const tile_id = self.selectedImageId();
+        if (tile_id >= CONF.MAX_TILES) return;
+        const old = self.tile_flags[tile_id];
+        const next = if (traversable) old | TILE_FLAG_TRAVERSABLE else old & ~@as(u8, TILE_FLAG_TRAVERSABLE);
+        if (next == old) return;
+        self.tile_flags[tile_id] = next;
+        self.dirty = true;
+        self.bumpVisualRevision();
     }
 
     pub fn visibleSlot(self: *const Project, slot: usize) u16 {
@@ -667,6 +697,13 @@ pub const Project = struct {
             self.active_map_bank = 0;
         }
 
+        self.tile_flags = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES;
+        if (file_version >= 9) {
+            if (offset + TILE_FLAGS_BYTES > len) return error.InvalidProject;
+            @memcpy(self.tile_flags[0..], data[offset .. offset + TILE_FLAGS_BYTES]);
+            offset += TILE_FLAGS_BYTES;
+        }
+
         for (0..IMAGE_BANK_COUNT) |bank_index| {
             if (offset + IMAGE_BANK_STATE_BYTES > len) return error.InvalidProject;
             var bank = &self.image_banks[bank_index];
@@ -762,6 +799,8 @@ pub const Project = struct {
                 }
             }
         }
+
+        if (c.fwrite(&self.tile_flags, 1, self.tile_flags.len, file) != self.tile_flags.len) return error.InvalidProject;
 
         for (self.image_banks) |bank| {
             var state: [IMAGE_BANK_STATE_BYTES]u8 = undefined;
@@ -864,6 +903,7 @@ pub const Project = struct {
         sprite_bank.right_color = 0;
         sprite_bank.visible_slots = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
+        self.tile_flags = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES;
         self.mode = .tiles;
         self.maps = [_]Map{.{}} ** MAP_BANK_COUNT;
         self.dirty = false;

@@ -155,6 +155,8 @@ pub const MainEditor = struct {
         drawTileSlots(self, fui, renderer, project, mouse, sm, x + 76, UI.preview_y + 38, 40);
         drawPixelText(fui, renderer, "LMB: SELECT", x + 20, UI.preview_y + 176, 1, UI.muted);
         drawPixelText(fui, renderer, "RMB: LIBRARY", x + 136, UI.preview_y + 176, 1, UI.muted);
+
+        drawTileFlags(fui, renderer, project, mouse, x + 16, UI.preview_y + 216, self);
     }
 
     fn drawCenterPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
@@ -404,6 +406,16 @@ fn drawPalettes(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse
                 editor.setInfo("Palette color selected", UI.accent);
             }
         }
+    }
+}
+
+fn drawTileFlags(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32, editor: *MainEditor) void {
+    if (project.mode != .tiles) return;
+    drawPixelText(fui, renderer, "TILE FLAGS", x, y, 2, UI.text);
+    const traversable = project.isTileTraversable(project.selectedImageId());
+    if (pillButton(fui, renderer, mouse, x, y + 24, 112, 28, "WALK", traversable)) {
+        project.setSelectedTileTraversable(!traversable);
+        editor.setInfo(if (traversable) "Tile blocked" else "Tile walkable", UI.accent);
     }
 }
 

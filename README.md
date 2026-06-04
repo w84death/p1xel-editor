@@ -10,7 +10,7 @@ It is designed around a classic indexed-colour workflow: artwork is stored as ti
 
 Exported to GameBoy Color Engine:
 
-![P1Xel Editor - Export ](docs/screenshot-map.png)
+![P1Xel Editor - Export ](docs/screenshot-gbc.png)
 
 ## Features
 

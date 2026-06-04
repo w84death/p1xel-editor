@@ -130,15 +130,21 @@ pub const MainEditor = struct {
     }
 
     fn drawTopBar(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
-        _ = self;
         drawPixelText(fui, renderer, CONF.THE_NAME, 38, 44, 3, UI.text);
 
         if (tabButton(fui, renderer, mouse, 396, 43, 144, 46, "TILES", project.mode == .tiles)) project.setMode(.tiles);
         if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
         if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) sm.go_to(.map_editor);
 
-        const tx: i32 = UI.rightX() + UI.right_w - 94;
-        if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
+        const tx: i32 = UI.rightX() + UI.right_w - 192;
+        if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
+            project.save() catch {
+                self.setInfo("Save failed", UI.danger);
+                return;
+            };
+            self.setInfo("File saved", UI.accent);
+        }
+        if (pillButton(fui, renderer, mouse, tx + 98, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
     }
 
     fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {

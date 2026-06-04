@@ -5,7 +5,6 @@ const Mouse = @import("../engine/mouse.zig").Mouse;
 const Project = @import("project.zig").Project;
 const Tool = @import("project.zig").Tool;
 const ColorChannel = @import("project.zig").ColorChannel;
-const DB16 = @import("project.zig").DB16;
 const views = @import("views.zig");
 
 pub const State = enum { splash, editor, tile_library, quit };
@@ -190,30 +189,31 @@ fn drawPalettes(_: *MainEditor, fui: anytype, renderer: *Render, project: *Proje
 }
 
 fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-    const x: i32 = 40;
-    const y: i32 = 690;
-    const selected_db16 = project.palettes[project.selected_palette][project.selected_color];
-    const selected_color = DB16[selected_db16];
-    renderer.draw_rect(x, y, 56, 56, selected_color);
-    renderer.draw_rect_lines(x, y, 56, 56, 0xFFFFFF);
+    const x: i32 = 818;
+    const y: i32 = 510;
+    const selected_color = project.color32(project.selected_palette, project.selected_color);
 
-    var title_buf: [64]u8 = undefined;
-    const title = std.fmt.bufPrint(&title_buf, "Palette {d}, color {d}", .{ project.selected_palette, project.selected_color }) catch "Selected color";
-    fui.draw_text(renderer, title, x + 72, y, 2, 0xFFFFFF);
+    fui.draw_text(renderer, "Edit selected color", x, y, 2, 0xFFFFFF);
+    renderer.draw_rect(x, y + 34, 64, 64, selected_color);
+    renderer.draw_rect_lines(x, y + 34, 64, 64, 0xFFFFFF);
+
+    var title_buf: [32]u8 = undefined;
+    const title = std.fmt.bufPrint(&title_buf, "P{d} C{d}", .{ project.selected_palette, project.selected_color }) catch "P? C?";
+    fui.draw_text(renderer, title, x + 78, y + 40, 2, 0xE6E6E6);
 
     const rgb = selectedRgb(project);
-    drawChannelEditor(fui, renderer, project, mouse, .r, "R", rgb[0], x + 72, y + 30, 0xFF4040);
-    drawChannelEditor(fui, renderer, project, mouse, .g, "G", rgb[1], x + 270, y + 30, 0x80FF40);
-    drawChannelEditor(fui, renderer, project, mouse, .b, "B", rgb[2], x + 468, y + 30, 0x70A8FF);
+    drawChannelEditor(fui, renderer, project, mouse, .r, "R", rgb[0], x, y + 116, 0xFF4040);
+    drawChannelEditor(fui, renderer, project, mouse, .g, "G", rgb[1], x, y + 162, 0x80FF40);
+    drawChannelEditor(fui, renderer, project, mouse, .b, "B", rgb[2], x, y + 208, 0x70A8FF);
 }
 
 fn drawChannelEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, channel: ColorChannel, label: [:0]const u8, value: u8, x: i32, y: i32, color: u32) void {
     fui.draw_text(renderer, label, x, y + 8, 2, color);
-    if (views.smallButton(fui, renderer, mouse, x + 34, y, 44, 32, "-", false)) project.adjustSelectedRgb(channel, -16);
+    if (views.smallButton(fui, renderer, mouse, x + 34, y, 44, 32, "-", false)) project.adjustSelectedRgb(channel, -1);
     var buf: [4]u8 = undefined;
     const value_text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch "?";
     fui.draw_text(renderer, value_text, x + 92, y + 8, 2, 0xFFFFFF);
-    if (views.smallButton(fui, renderer, mouse, x + 142, y, 44, 32, "+", false)) project.adjustSelectedRgb(channel, 16);
+    if (views.smallButton(fui, renderer, mouse, x + 142, y, 44, 32, "+", false)) project.adjustSelectedRgb(channel, 1);
 }
 
 fn drawStatus(fui: anytype, renderer: *Render, project: *const Project, save_error: bool, export_notice: bool) void {
@@ -223,8 +223,7 @@ fn drawStatus(fui: anytype, renderer: *Render, project: *const Project, save_err
 }
 
 fn selectedRgb(project: *const Project) [3]u8 {
-    const color = DB16[project.palettes[project.selected_palette][project.selected_color]];
-    return .{ @intCast((color >> 16) & 0xFF), @intCast((color >> 8) & 0xFF), @intCast(color & 0xFF) };
+    return project.selectedRgb();
 }
 
 fn canvasCell(x: i32, y: i32) ?[2]i32 {

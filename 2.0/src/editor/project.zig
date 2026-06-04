@@ -4,15 +4,9 @@ const c = @cImport({
 });
 const CONF = @import("../engine/config.zig").CONF;
 
-pub const DB16 = [_]u32{
-    0x140C1C, 0x442434, 0x30346D, 0x4E4A4F,
-    0x854C30, 0x346524, 0xD04648, 0x757161,
-    0x597DCE, 0xD27D2C, 0x8595A1, 0x6DAA2C,
-    0xD2AA99, 0x6DC2CA, 0xDAD45E, 0xDEEED6,
-};
-
 pub const Tool = enum { pixel, fill, line };
 pub const ColorChannel = enum { r, g, b };
+pub const PaletteColor = [3]u8;
 
 pub const Tile = struct {
     palette_id: u8 = 0,
@@ -26,12 +20,14 @@ pub const Tile = struct {
 
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 1;
+    const VERSION: u8 = 2;
+    const PALETTE_COLOR_BYTES = 3;
+    const PALETTE_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
     const TILE_BYTES = 1 + CONF.TILE_SIDE * CONF.TILE_SIDE;
     const HEADER_BYTES = 4 + 1 + 1 + 2;
-    const MAX_FILE_BYTES = HEADER_BYTES + CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE + CONF.MAX_TILES * TILE_BYTES;
+    const MAX_FILE_BYTES = HEADER_BYTES + PALETTE_BYTES + CONF.MAX_TILES * TILE_BYTES;
 
-    palettes: [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]u8 = defaultPalettes(),
+    palettes: [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPalettes(),
     tiles: [CONF.MAX_TILES]Tile = [_]Tile{.{}} ** CONF.MAX_TILES,
     tile_count: u16 = 1,
     selected_tile: u16 = 0,
@@ -55,19 +51,23 @@ pub const Project = struct {
         return project;
     }
 
-    pub fn activePalette(self: *const Project) [CONF.COLORS_PER_PALETTE]u8 {
+    pub fn activePalette(self: *const Project) [CONF.COLORS_PER_PALETTE]PaletteColor {
         return self.palettes[self.selected_palette];
     }
 
     pub fn color32(self: *const Project, palette_id: u8, color_id: u8) u32 {
         const safe_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
         const safe_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
-        const db_index = self.palettes[safe_palette][safe_color] & 0x0F;
-        return DB16[db_index];
+        const rgb = self.palettes[safe_palette][safe_color];
+        return rgbToU32(rgb);
     }
 
     pub fn currentColor32(self: *const Project, color_id: u8) u32 {
         return self.color32(self.selected_palette, color_id);
+    }
+
+    pub fn selectedRgb(self: *const Project) PaletteColor {
+        return self.palettes[self.selected_palette][self.selected_color];
     }
 
     pub fn nonEmptyTiles(self: *const Project) u16 {
@@ -187,16 +187,16 @@ pub const Project = struct {
     }
 
     pub fn adjustSelectedRgb(self: *Project, channel: ColorChannel, delta: i16) void {
-        const color_slot = self.selected_color;
-        var db_index = self.palettes[self.selected_palette][color_slot] & 0x0F;
-        var rgb = colorToRgb(DB16[db_index]);
-        switch (channel) {
-            .r => rgb[0] = clampByte(@as(i16, rgb[0]) + delta),
-            .g => rgb[1] = clampByte(@as(i16, rgb[1]) + delta),
-            .b => rgb[2] = clampByte(@as(i16, rgb[2]) + delta),
-        }
-        db_index = nearestDb16(rgb[0], rgb[1], rgb[2]);
-        self.palettes[self.selected_palette][color_slot] = db_index;
+        const color = &self.palettes[self.selected_palette][self.selected_color];
+        const channel_index: usize = switch (channel) {
+            .r => 0,
+            .g => 1,
+            .b => 2,
+        };
+        const current = color[channel_index];
+        const next = clampByte(@as(i16, current) + delta);
+        if (next == current) return;
+        color[channel_index] = next;
         self.dirty = true;
     }
 
@@ -211,13 +211,15 @@ pub const Project = struct {
         if (data[5] != CONF.PALETTE_COUNT) return error.InvalidProject;
         const loaded_tiles = std.mem.readInt(u16, data[6..8], .little);
         if (loaded_tiles == 0 or loaded_tiles > CONF.MAX_TILES) return error.InvalidProject;
-        const expected = HEADER_BYTES + CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE + @as(usize, loaded_tiles) * TILE_BYTES;
+        const expected = HEADER_BYTES + PALETTE_BYTES + @as(usize, loaded_tiles) * TILE_BYTES;
         if (len < expected) return error.InvalidProject;
 
         var offset: usize = HEADER_BYTES;
         for (0..CONF.PALETTE_COUNT) |p| {
-            for (0..CONF.COLORS_PER_PALETTE) |color_slot| self.palettes[p][color_slot] = data[offset + color_slot] & 0x0F;
-            offset += CONF.COLORS_PER_PALETTE;
+            for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
+                self.palettes[p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
+                offset += PALETTE_COLOR_BYTES;
+            }
         }
         self.tile_count = loaded_tiles;
         for (0..loaded_tiles) |i| {
@@ -240,7 +242,9 @@ pub const Project = struct {
         std.mem.writeInt(u16, header[6..8], self.tile_count, .little);
         if (c.fwrite(&header, 1, header.len, file) != header.len) return error.InvalidProject;
         for (self.palettes) |palette| {
-            if (c.fwrite(&palette, 1, palette.len, file) != palette.len) return error.InvalidProject;
+            for (palette) |color| {
+                if (c.fwrite(&color, 1, color.len, file) != color.len) return error.InvalidProject;
+            }
         }
         var tile_buf: [TILE_BYTES]u8 = undefined;
         var i: usize = 0;
@@ -270,38 +274,21 @@ fn flood(pixels: *[CONF.TILE_SIDE * CONF.TILE_SIDE]u8, x: u8, y: u8, old: u8, ne
     if (y + 1 < CONF.TILE_SIDE) flood(pixels, x, y + 1, old, new);
 }
 
-fn defaultPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]u8 {
+fn defaultPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
     return .{
-        .{ 14, 9, 7, 15 },
-        .{ 14, 9, 8, 2 },
-        .{ 14, 9, 1, 2 },
-        .{ 0, 7, 10, 15 },
-        .{ 11, 5, 3, 0 },
-        .{ 13, 8, 2, 0 },
-        .{ 12, 6, 1, 0 },
-        .{ 15, 10, 7, 3 },
+        .{ .{ 218, 212, 94 }, .{ 210, 125, 44 }, .{ 117, 113, 97 }, .{ 222, 238, 214 } },
+        .{ .{ 218, 212, 94 }, .{ 210, 125, 44 }, .{ 89, 125, 206 }, .{ 48, 52, 109 } },
+        .{ .{ 218, 212, 94 }, .{ 210, 125, 44 }, .{ 68, 36, 52 }, .{ 48, 52, 109 } },
+        .{ .{ 20, 12, 28 }, .{ 117, 113, 97 }, .{ 133, 149, 161 }, .{ 222, 238, 214 } },
+        .{ .{ 109, 170, 44 }, .{ 52, 101, 36 }, .{ 78, 74, 79 }, .{ 20, 12, 28 } },
+        .{ .{ 109, 194, 202 }, .{ 89, 125, 206 }, .{ 48, 52, 109 }, .{ 20, 12, 28 } },
+        .{ .{ 210, 170, 153 }, .{ 208, 70, 72 }, .{ 68, 36, 52 }, .{ 20, 12, 28 } },
+        .{ .{ 222, 238, 214 }, .{ 133, 149, 161 }, .{ 117, 113, 97 }, .{ 78, 74, 79 } },
     };
 }
 
-fn colorToRgb(color: u32) [3]u8 {
-    return .{ @intCast((color >> 16) & 0xFF), @intCast((color >> 8) & 0xFF), @intCast(color & 0xFF) };
-}
-
-fn nearestDb16(r: u8, g: u8, b: u8) u8 {
-    var best: u8 = 0;
-    var best_dist: u32 = std.math.maxInt(u32);
-    for (DB16, 0..) |color, i| {
-        const rgb = colorToRgb(color);
-        const dr = @as(i32, r) - rgb[0];
-        const dg = @as(i32, g) - rgb[1];
-        const db = @as(i32, b) - rgb[2];
-        const dist: u32 = @intCast(dr * dr + dg * dg + db * db);
-        if (dist < best_dist) {
-            best_dist = dist;
-            best = @intCast(i);
-        }
-    }
-    return best;
+fn rgbToU32(rgb: PaletteColor) u32 {
+    return (@as(u32, rgb[0]) << 16) | (@as(u32, rgb[1]) << 8) | @as(u32, rgb[2]);
 }
 
 fn clampByte(value: i16) u8 {

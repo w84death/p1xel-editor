@@ -193,6 +193,19 @@ pub const MapEditor = struct {
         }
         if (button(fui, renderer, mouse, x + 134, y + 80, 54, 38, ">", false)) self.pan_x -= step;
         if (button(fui, renderer, mouse, x + 67, y + 126, 54, 38, "DN", false)) self.pan_y -= step;
+
+        y += 206;
+        drawText(fui, renderer, "FILE", x, y, 2, UI.text);
+        if (button(fui, renderer, mouse, x, y + 34, 86, 36, "SAVE", project.dirty)) {
+            project.save() catch {
+                self.setInfo("Save failed", UI.danger);
+                return;
+            };
+            self.setInfo("File saved", UI.accent);
+        }
+        if (button(fui, renderer, mouse, x + 102, y + 34, 86, 36, "EXPORT", false)) {
+            self.setInfo("Export not implemented", UI.warn);
+        }
     }
 
     fn drawSelector(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype, mode: ProjectMode, x0: i32, y0: i32, slot: i32) void {

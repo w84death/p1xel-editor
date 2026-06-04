@@ -4,7 +4,7 @@
 
 It is designed around a classic indexed-colour workflow: artwork is stored as tiny 8×8 images whose pixels are palette indices, not direct RGB values. Changing a palette updates every tile/sprite that uses that palette, making it easy to build Game Boy Color-style tilesets, sprite sheets, and maps.
 
-![P1Xel Editor design preview](docs/design.png)
+![P1Xel Editor - Tiles Editor ](docs/screenshot-tiles.png)
 
 ## Features
 

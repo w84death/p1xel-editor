@@ -276,17 +276,17 @@ The project file stores:
 - Background tile IDs and per-cell attributes.
 - Placed sprite instances and their attributes.
 
-If `art_data.p1x` does not exist or cannot be loaded, the editor starts from its built-in default project data.
+If `art_data.p1x` does not exist or cannot be loaded, the editor starts from its built-in default project data. The current default tile bank is converted from `docs/grassland.png` into the editor’s internal 8×8 indexed format.
 
 ## Source images and docs assets
 
 The repository includes example/reference art in `docs/`:
 
-- `docs/grassland.png`
+- `docs/grassland.png` — source image for the built-in default grassland tileset.
 - `docs/desert_tileset.png`
 - `docs/design.png`
 
-These are useful as visual references and for testing palette/tile workflows.
+These are useful as visual references and for testing palette/tile workflows. The grassland strip is converted into internal indexed tiles and extracted palettes in `src/editor/project.zig`.
 
 ## Building
 

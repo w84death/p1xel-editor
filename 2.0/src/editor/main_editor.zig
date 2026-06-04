@@ -8,7 +8,7 @@ const Tool = @import("project.zig").Tool;
 const ColorChannel = @import("project.zig").ColorChannel;
 const views = @import("views.zig");
 
-pub const State = enum { splash, editor, tile_library, quit };
+pub const State = enum { splash, editor, tile_library, map_editor, quit };
 
 pub const LibraryMode = enum { choose_slot, swap_tile };
 
@@ -74,6 +74,7 @@ pub const MainEditor = struct {
     tool: Tool = .pixel,
     line_start: ?[2]i32 = null,
     library_request: ?LibraryRequest = null,
+    library_return_state: State = .editor,
     save_error: bool = false,
     export_notice: bool = false,
     suppress_canvas_paint_until_mouse_up: bool = false,
@@ -138,7 +139,7 @@ pub const MainEditor = struct {
 
         if (tabButton(fui, renderer, mouse, 396, 43, 144, 46, "EDITOR", project.mode == .tiles)) project.setMode(.tiles);
         if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
-        if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) {}
+        if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) sm.go_to(.map_editor);
 
         const tx: i32 = UI.rightX() + UI.right_w - 192;
         if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
@@ -390,6 +391,7 @@ fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
             if (mouse.just_pressed and tile_id < project.imageCount()) project.selectTile(tile_id);
             if (mouse.just_right_pressed) {
                 self.library_request = .{ .mode = .swap_tile, .slot_index = @intCast(i), .tile_id = tile_id };
+                self.library_return_state = .editor;
                 sm.go_to(.tile_library);
             }
         }

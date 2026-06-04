@@ -48,7 +48,7 @@ pub const TileLibrary = struct {
         if (self.page > max_page) self.page = max_page;
 
         drawGrid(self, fui, renderer, project, editor, mouse, sm, cols, rows, per_page, count);
-        drawBottomNav(self, fui, renderer, project, mouse, sm, max_page);
+        drawBottomNav(self, fui, renderer, project, editor, mouse, sm, max_page);
     }
 
     fn drawGrid(self: *TileLibrary, fui: anytype, renderer: *Render, project: *Project, editor: *MainEditor, mouse: Mouse, sm: anytype, cols: u16, rows: u16, per_page: u16, count: u16) void {
@@ -109,10 +109,10 @@ pub const TileLibrary = struct {
         }
     }
 
-    fn drawBottomNav(self: *TileLibrary, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype, max_page: u16) void {
+    fn drawBottomNav(self: *TileLibrary, fui: anytype, renderer: *Render, project: *Project, editor: *MainEditor, mouse: Mouse, sm: anytype, max_page: u16) void {
         if (button(fui, renderer, mouse, 34, UI.bottom_y, 112, 42, "< BACK", false)) {
             self.cancelDelete();
-            sm.go_to(.editor);
+            sm.go_to(editor.library_return_state);
         }
         if (button(fui, renderer, mouse, 172, UI.bottom_y, 112, 42, "+ ADD", false)) {
             self.cancelDelete();
@@ -167,7 +167,7 @@ pub const TileLibrary = struct {
         if (!had_request) project.selectTile(tile_id);
         editor.suppress_canvas_paint_until_mouse_up = true;
         views.saveIfDirty(project);
-        sm.go_to(.editor);
+        sm.go_to(editor.library_return_state);
     }
 
     fn cancelDelete(self: *TileLibrary) void {

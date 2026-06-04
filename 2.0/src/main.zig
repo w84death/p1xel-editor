@@ -18,6 +18,7 @@ const editor_mod = @import("editor/main_editor.zig");
 const MainEditor = editor_mod.MainEditor;
 const State = editor_mod.State;
 const TileLibrary = @import("editor/tile_library.zig").TileLibrary;
+const MapEditor = @import("editor/map_editor.zig").MapEditor;
 
 const EditorTheme = struct {
     pub const PIVOT_PADDING = 4;
@@ -109,6 +110,7 @@ pub fn main() !void {
     var sm = StateMachine(State).init(.splash);
     var project = Project.loadOrDefault();
     var editor = MainEditor{};
+    var map_editor = MapEditor{};
     var library = TileLibrary{};
     var esc_lock = false;
 
@@ -123,7 +125,7 @@ pub fn main() !void {
             esc_lock = false;
         } else if (!esc_lock and window.keys[27] != 0) {
             esc_lock = true;
-            if (sm.current == .editor) sm.go_to(.quit) else sm.go_to(.editor);
+            if (sm.current == .editor or sm.current == .map_editor) sm.go_to(.quit) else sm.go_to(.editor);
         }
 
         renderer.perf_begin_draw();
@@ -131,6 +133,7 @@ pub fn main() !void {
             .splash => drawSplash(&fui, &renderer, &assets, &editor, mouse, &sm),
             .editor => editor.draw(&fui, &renderer, &project, mouse, &sm),
             .tile_library => library.draw(&fui, &renderer, &project, &editor, mouse, &sm),
+            .map_editor => map_editor.draw(&fui, &renderer, &project, &editor, mouse, &sm),
             .quit => break,
         }
         sm.update();

@@ -25,6 +25,26 @@ pub fn drawTile(renderer: *Render, project: *const Project, tile_id: u16, x: i32
     drawTileData(renderer, project, tile, x, y, scale);
 }
 
+pub fn drawImageWithAttrs(renderer: *Render, project: *const Project, mode: @import("project.zig").ProjectMode, image_id: u16, palette_id: u8, hflip: bool, vflip: bool, x: i32, y: i32, scale: i32) void {
+    if (scale <= 0 or image_id >= project.imageCountMode(mode)) return;
+    const tile = project.imageAtMode(mode, image_id);
+    var colors: [CONF.COLORS_PER_PALETTE]u32 = undefined;
+    for (0..CONF.COLORS_PER_PALETTE) |i| colors[i] = project.color32Mode(mode, palette_id, @intCast(i));
+
+    var py: usize = 0;
+    while (py < CONF.TILE_SIDE) : (py += 1) {
+        var px: usize = 0;
+        while (px < CONF.TILE_SIDE) : (px += 1) {
+            const src_x = if (hflip) CONF.TILE_SIDE - 1 - px else px;
+            const src_y = if (vflip) CONF.TILE_SIDE - 1 - py else py;
+            const idx = tile.pixels[src_y * CONF.TILE_SIDE + src_x];
+            if (mode == .sprites and idx == 0) continue;
+            const color = colors[idx];
+            renderer.draw_rect(x + @as(i32, @intCast(px)) * scale, y + @as(i32, @intCast(py)) * scale, scale, scale, color);
+        }
+    }
+}
+
 pub fn drawTileData(renderer: *Render, project: *const Project, tile: Tile, x: i32, y: i32, scale: i32) void {
     if (scale <= 0) return;
 

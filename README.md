@@ -6,7 +6,11 @@ It is designed around a classic indexed-colour workflow: artwork is stored as ti
 
 ![P1Xel Editor - Tiles Editor ](docs/screenshot-tiles.png)
 
-![P1Xel Editor - Tiles Editor ](docs/screenshot-map.png)
+![P1Xel Editor - Map Editor ](docs/screenshot-map.png)
+
+Exported to GameBoy Color Engine:
+
+![P1Xel Editor - Export ](docs/screenshot-map.png)
 
 ## Features
 

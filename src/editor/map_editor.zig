@@ -38,7 +38,7 @@ const UI = struct {
     const canvas_h: i32 = CONF.SCREEN_H - canvas_y - 22;
 };
 
-const Tool = enum { bg_stamp, bg_fill, sprite_stamp };
+const Tool = enum { bg_stamp, bg_fill, sprite_stamp, sprite_remove };
 const PendingSize = enum { none, s32x32, s64x16, s128x16 };
 
 pub const MapEditor = struct {
@@ -123,7 +123,8 @@ pub const MapEditor = struct {
         drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 116, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 142, tool_y + 30, 110, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
-        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 236, 34, "PLACE SPRITE", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 116, 34, "PLACE SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 142, tool_y + 72, 110, 34, "REM SPR", self.tool == .sprite_remove)) self.tool = .sprite_remove;
 
         drawText(fui, renderer, "BG TILES", UI.left_x + 16, UI.canvas_y + 138, 2, UI.text);
         self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .tiles, UI.left_x + 36, UI.canvas_y + 166, 50);
@@ -331,6 +332,9 @@ pub const MapEditor = struct {
                     if (mouse.just_pressed) _ = project.fillMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
                 },
                 .sprite_stamp => _ = project.addOrUpdateMapSprite(cell[0], cell[1], self.selected_sprite, self.sprite_attr),
+                .sprite_remove => {
+                    if (project.removeMapSpriteAt(cell[0], cell[1])) self.setInfo("Sprite removed", UI.accent);
+                },
             }
         }
     }

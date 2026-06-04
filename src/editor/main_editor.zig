@@ -6,7 +6,6 @@ const Mouse = @import("../engine/mouse.zig").Mouse;
 const Project = @import("project.zig").Project;
 const Tool = @import("project.zig").Tool;
 const ColorChannel = @import("project.zig").ColorChannel;
-const exporter = @import("exporter.zig");
 const views = @import("views.zig");
 
 pub const State = enum { splash, editor, tile_library, map_editor, quit };
@@ -35,7 +34,6 @@ const UI = struct {
 
     const top_y: i32 = 24;
     const top_h: i32 = 82;
-    const status_h: i32 = 0;
     const side_x: i32 = 14;
     const gap: i32 = 10;
     const left_w: i32 = 276;
@@ -46,7 +44,6 @@ const UI = struct {
     const palette_y: i33 = content_y + 138;
     const preview_y: i32 = content_y + 286;
     const info_y: i32 = content_y + 500;
-    const file_y: i32 = content_y + 622;
     const center_info_h: i32 = 136;
 
     fn leftX() i32 {
@@ -67,9 +64,6 @@ const UI = struct {
     fn centerInfoY() i32 {
         return UI.content_y + contentH() + 12;
     }
-    fn statusY() i32 {
-        return CONF.SCREEN_H - status_h - 8;
-    }
 };
 
 pub const MainEditor = struct {
@@ -77,8 +71,6 @@ pub const MainEditor = struct {
     line_start: ?[2]i32 = null,
     library_request: ?LibraryRequest = null,
     library_return_state: State = .editor,
-    save_error: bool = false,
-    export_notice: bool = false,
     suppress_canvas_paint_until_mouse_up: bool = false,
     info_text: []const u8 = "Ready",
     info_color: u32 = UI.muted,
@@ -138,23 +130,15 @@ pub const MainEditor = struct {
     }
 
     fn drawTopBar(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
+        _ = self;
         drawPixelText(fui, renderer, CONF.THE_NAME, 38, 44, 3, UI.text);
 
         if (tabButton(fui, renderer, mouse, 396, 43, 144, 46, "TILES", project.mode == .tiles)) project.setMode(.tiles);
         if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
         if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) sm.go_to(.map_editor);
 
-        const tx: i32 = UI.rightX() + UI.right_w - 192;
-        if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
-            project.save() catch {
-                self.setInfo("Save failed", UI.danger);
-                return;
-            };
-            self.save_error = false;
-            self.export_notice = false;
-            self.setInfo("File saved", UI.accent);
-        }
-        if (pillButton(fui, renderer, mouse, tx + 98, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
+        const tx: i32 = UI.rightX() + UI.right_w - 94;
+        if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
     }
 
     fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
@@ -171,28 +155,6 @@ pub const MainEditor = struct {
         drawTileSlots(self, fui, renderer, project, mouse, sm, x + 76, UI.preview_y + 38, 40);
         drawPixelText(fui, renderer, "LMB: SELECT", x + 20, UI.preview_y + 176, 1, UI.muted);
         drawPixelText(fui, renderer, "RMB: LIBRARY", x + 136, UI.preview_y + 176, 1, UI.muted);
-
-        drawPixelText(fui, renderer, "FILE", x + 16, UI.file_y, 2, UI.text);
-        if (pillButton(fui, renderer, mouse, x + 16, UI.file_y + 34, 112, 36, "SAVE", project.dirty)) {
-            project.save() catch {
-                self.save_error = true;
-                self.setInfo("Save failed", UI.danger);
-                return;
-            };
-            self.save_error = false;
-            self.export_notice = false;
-            self.setInfo("File saved", UI.accent);
-        }
-        if (pillButton(fui, renderer, mouse, x + 142, UI.file_y + 34, 112, 36, "EXPORT", false)) {
-            exporter.exportGameBoyEngine(project) catch |err| {
-                std.debug.print("[export] main editor export failed: {s}\n", .{@errorName(err)});
-                self.export_notice = true;
-                self.setInfo(exporter.errorMessage(err), UI.danger);
-                return;
-            };
-            self.export_notice = false;
-            self.setInfo("Engine data exported", UI.accent);
-        }
     }
 
     fn drawCenterPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
@@ -506,21 +468,6 @@ fn drawChannelEditor(fui: anytype, renderer: *Render, project: *Project, mouse: 
         project.adjustSelectedRgb(channel, 1);
         editor.setInfo("Color updated", UI.accent);
     }
-}
-
-fn drawBottomStatus(fui: anytype, renderer: *Render, project: *const Project, save_error: bool, export_notice: bool) void {
-    const y = UI.statusY();
-    renderer.draw_rect(30, y, CONF.SCREEN_W - 60, UI.status_h, UI.panel_dark);
-    renderer.draw_rect_lines(30, y, CONF.SCREEN_W - 60, UI.status_h, UI.border_dark);
-    drawPixelText(fui, renderer, "ROM: GAME.ROM", 40, y + 11, 1, UI.text);
-    drawPixelText(fui, renderer, "MODE:", 292, y + 11, 1, UI.text);
-    renderer.draw_circle(362, y + 15, 5, UI.accent);
-    drawPixelText(fui, renderer, if (project.mode == .tiles) "TILES" else "SPRITES", 382, y + 11, 1, UI.accent);
-    drawPixelText(fui, renderer, "TILESET: 0x4000", 526, y + 11, 1, UI.text);
-    const status = if (save_error) "SAVE FAILED" else if (export_notice) "EXPORT FAILED" else if (project.dirty) "UNSAVED" else "READY";
-    const status_color: u32 = if (save_error or export_notice) UI.danger else if (project.dirty) 0xDAD45E else UI.accent;
-    const sx = CONF.SCREEN_W - 42 - fui.text_length(status, 1);
-    drawPixelText(fui, renderer, status, sx, y + 11, 1, status_color);
 }
 
 fn selectedRgb(project: *const Project) [3]u8 {

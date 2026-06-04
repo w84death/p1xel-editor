@@ -140,25 +140,25 @@ pub const Render = struct {
     }
 
     pub fn perf_begin_sim(self: *Render) void {
-        self.perf.sim_start_ns = std.time.nanoTimestamp();
+        self.perf.sim_start_ns = c.fenster_time() * 1_000_000;
     }
 
     pub fn perf_begin_draw(self: *Render) void {
-        const now_ns = std.time.nanoTimestamp();
+        const now_ns = c.fenster_time() * 1_000_000;
         const sim_ms = ns_to_ms(now_ns - self.perf.sim_start_ns);
         self.perf.smoothed_sim_ms = smooth(self.perf.smoothed_sim_ms, sim_ms);
         self.perf.draw_start_ns = now_ns;
     }
 
     pub fn perf_begin_present(self: *Render) void {
-        const now_ns = std.time.nanoTimestamp();
+        const now_ns = c.fenster_time() * 1_000_000;
         const draw_ms = ns_to_ms(now_ns - self.perf.draw_start_ns);
         self.perf.smoothed_draw_ms = smooth(self.perf.smoothed_draw_ms, draw_ms);
         self.perf.present_start_ns = now_ns;
     }
 
     pub fn perf_end_present(self: *Render) void {
-        const now_ns = std.time.nanoTimestamp();
+        const now_ns = c.fenster_time() * 1_000_000;
         const present_ms = ns_to_ms(now_ns - self.perf.present_start_ns);
         self.perf.smoothed_present_ms = smooth(self.perf.smoothed_present_ms, present_ms);
 

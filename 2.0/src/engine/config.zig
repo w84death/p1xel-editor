@@ -5,15 +5,24 @@
 // *************************************
 
 pub const CONF = struct {
-    pub const VERSION = "ZIG-NATIVE";
-    pub const THE_NAME = "P1xel Editor";
+    pub const VERSION = "2.0-beta1";
+    pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";
-    pub const SCREEN_W = 256;
-    pub const SCREEN_H = 192;
-    pub const PIXEL_SCALE = 4;
+    pub const SCREEN_W = 1024;
+    pub const SCREEN_H = 768;
+    pub const PIXEL_SCALE = 1;
     pub const TARGET_FPS = 60.0;
     pub const FONT_WIDTH = 8;
     pub const FONT_HEIGHT = 8;
+
+    pub const PROJECT_FILE = "p1xel.gbcpix";
+    pub const TILE_SIDE = 8;
+    pub const COLORS_PER_PALETTE = 4;
+    pub const PALETTE_COUNT = 8;
+    pub const MAX_TILES = 128;
+    pub const EDITOR_CANVAS_X = 256;
+    pub const EDITOR_CANVAS_Y = 64;
+    pub const EDITOR_CANVAS_SCALE = 64;
 
     pub const SPRITE_MAX_FILE_BYTES = 16 * 1024 * 1024;
     pub const SPRITE_DEFAULT_TRANSPARENT_INDEX: u8 = 0;

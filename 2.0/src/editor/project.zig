@@ -56,6 +56,7 @@ pub const Project = struct {
     image_banks: [BANK_COUNT]ImageBank = .{ ImageBank{}, ImageBank{} },
     mode: ProjectMode = .tiles,
     dirty: bool = false,
+    visual_revision: u64 = 0,
 
     pub fn init() Project {
         var project = Project{};
@@ -75,6 +76,7 @@ pub const Project = struct {
         self.mode = mode;
         self.activeBank().ensureSlotBounds();
         self.dirty = true;
+        self.bumpVisualRevision();
     }
 
     pub fn isSpriteMode(self: *const Project) bool {
@@ -128,21 +130,30 @@ pub const Project = struct {
     }
 
     pub fn setLeftColor(self: *Project, color: u8) void {
-        self.activeBank().left_color = @min(color, CONF.COLORS_PER_PALETTE - 1);
-        self.dirty = true;
+        const bank = self.activeBank();
+        const next = @min(color, CONF.COLORS_PER_PALETTE - 1);
+        if (bank.left_color == next) return;
+        bank.left_color = next;
     }
 
     pub fn setRightColor(self: *Project, color: u8) void {
-        self.activeBank().right_color = @min(color, CONF.COLORS_PER_PALETTE - 1);
-        self.dirty = true;
+        const bank = self.activeBank();
+        const next = @min(color, CONF.COLORS_PER_PALETTE - 1);
+        if (bank.right_color == next) return;
+        bank.right_color = next;
     }
 
     pub fn setPaletteSelection(self: *Project, palette_id: u8, color_id: u8) void {
         const bank = self.activeBank();
-        bank.selected_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
-        bank.selected_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
+        const next_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
+        const next_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
+        const changed = bank.selected_palette != next_palette or bank.selected_color != next_color or bank.images[bank.selected].palette_id != next_palette;
+        bank.selected_palette = next_palette;
+        bank.selected_color = next_color;
         bank.images[bank.selected].palette_id = bank.selected_palette;
+        if (!changed) return;
         self.dirty = true;
+        self.bumpVisualRevision();
     }
 
     pub fn imageAt(self: *const Project, image_id: u16) Image {
@@ -160,8 +171,11 @@ pub const Project = struct {
 
     pub fn setVisibleSlot(self: *Project, slot: usize, image_id: u16) void {
         if (slot >= 9 or image_id >= self.imageCount()) return;
-        self.activeBank().visible_slots[slot] = image_id;
+        const bank = self.activeBank();
+        if (bank.visible_slots[slot] == image_id) return;
+        bank.visible_slots[slot] = image_id;
         self.dirty = true;
+        self.bumpVisualRevision();
     }
 
     pub fn nonEmptyTiles(self: *const Project) u16 {
@@ -177,32 +191,50 @@ pub const Project = struct {
     pub fn selectTile(self: *Project, image_id: u16) void {
         const bank = self.activeBank();
         if (image_id >= bank.count) return;
+        const next_palette = @min(bank.images[image_id].palette_id, CONF.PALETTE_COUNT - 1);
+        const changed = bank.selected != image_id or bank.selected_palette != next_palette;
         bank.selected = image_id;
-        bank.selected_palette = @min(bank.images[image_id].palette_id, CONF.PALETTE_COUNT - 1);
+        bank.selected_palette = next_palette;
+        if (!changed) return;
         self.dirty = true;
+        self.bumpVisualRevision();
     }
 
-    pub fn paintPixel(self: *Project, x: u8, y: u8, color: u8) void {
-        if (x >= CONF.TILE_SIDE or y >= CONF.TILE_SIDE) return;
+    pub fn paintPixel(self: *Project, x: u8, y: u8, color: u8) bool {
+        if (x >= CONF.TILE_SIDE or y >= CONF.TILE_SIDE) return false;
         const bank = self.activeBank();
-        bank.images[bank.selected].pixels[@as(usize, y) * CONF.TILE_SIDE + x] = color & 3;
+        const idx = @as(usize, y) * CONF.TILE_SIDE + x;
+        const new = color & 3;
+        if (bank.images[bank.selected].pixels[idx] == new and bank.images[bank.selected].palette_id == bank.selected_palette) return false;
+        bank.images[bank.selected].pixels[idx] = new;
         bank.images[bank.selected].palette_id = bank.selected_palette;
         self.dirty = true;
+        self.bumpVisualRevision();
+        return true;
     }
 
-    pub fn fill(self: *Project, x: u8, y: u8, color: u8) void {
-        if (x >= CONF.TILE_SIDE or y >= CONF.TILE_SIDE) return;
+    pub fn fill(self: *Project, x: u8, y: u8, color: u8) bool {
+        if (x >= CONF.TILE_SIDE or y >= CONF.TILE_SIDE) return false;
         const bank = self.activeBank();
         const start = @as(usize, y) * CONF.TILE_SIDE + x;
         const old = bank.images[bank.selected].pixels[start];
         const new = color & 3;
-        if (old == new) return;
+        if (old == new) {
+            if (bank.images[bank.selected].palette_id == bank.selected_palette) return false;
+            bank.images[bank.selected].palette_id = bank.selected_palette;
+            self.dirty = true;
+            self.bumpVisualRevision();
+            return true;
+        }
         flood(&bank.images[bank.selected].pixels, x, y, old, new);
         bank.images[bank.selected].palette_id = bank.selected_palette;
         self.dirty = true;
+        self.bumpVisualRevision();
+        return true;
     }
 
-    pub fn drawLine(self: *Project, x0_in: i32, y0_in: i32, x1: i32, y1: i32, color: u8) void {
+    pub fn drawLine(self: *Project, x0_in: i32, y0_in: i32, x1: i32, y1: i32, color: u8) bool {
+        var changed = false;
         var x0 = x0_in;
         var y0 = y0_in;
         const dx: i32 = @intCast(@abs(x1 - x0));
@@ -211,7 +243,7 @@ pub const Project = struct {
         const sy: i32 = if (y0 < y1) 1 else -1;
         var err = dx + dy;
         while (true) {
-            if (x0 >= 0 and x0 < CONF.TILE_SIDE and y0 >= 0 and y0 < CONF.TILE_SIDE) self.paintPixel(@intCast(x0), @intCast(y0), color);
+            if (x0 >= 0 and x0 < CONF.TILE_SIDE and y0 >= 0 and y0 < CONF.TILE_SIDE) changed = self.paintPixel(@intCast(x0), @intCast(y0), color) or changed;
             if (x0 == x1 and y0 == y1) break;
             const e2 = 2 * err;
             if (e2 >= dy) {
@@ -223,6 +255,7 @@ pub const Project = struct {
                 y0 += sy;
             }
         }
+        return changed;
     }
 
     pub fn createTile(self: *Project) ?u16 {
@@ -234,6 +267,7 @@ pub const Project = struct {
         bank.visible_slots[id % bank.visible_slots.len] = id;
         bank.selected = id;
         self.dirty = true;
+        self.bumpVisualRevision();
         return id;
     }
 
@@ -246,6 +280,7 @@ pub const Project = struct {
         bank.selected = new_id;
         bank.selected_palette = bank.images[new_id].palette_id;
         self.dirty = true;
+        self.bumpVisualRevision();
         return new_id;
     }
 
@@ -261,6 +296,7 @@ pub const Project = struct {
         if (bank.selected >= bank.count) bank.selected = bank.count - 1;
         bank.selected_palette = bank.images[bank.selected].palette_id;
         self.dirty = true;
+        self.bumpVisualRevision();
     }
 
     pub fn moveTileLeft(self: *Project, id: u16) void {
@@ -286,6 +322,7 @@ pub const Project = struct {
         }
         if (bank.selected == a) bank.selected = b else if (bank.selected == b) bank.selected = a;
         self.dirty = true;
+        self.bumpVisualRevision();
     }
 
     pub fn adjustSelectedRgb(self: *Project, channel: ColorChannel, delta: i16) void {
@@ -300,6 +337,11 @@ pub const Project = struct {
         if (next == current) return;
         color[channel_index] = next;
         self.dirty = true;
+        self.bumpVisualRevision();
+    }
+
+    pub fn visualRevision(self: *const Project) u64 {
+        return self.visual_revision;
     }
 
     pub fn load(self: *Project) !void {
@@ -426,6 +468,10 @@ pub const Project = struct {
 
     fn ensureBankBounds(self: *Project) void {
         for (&self.image_banks) |*bank| bank.ensureSlotBounds();
+    }
+
+    fn bumpVisualRevision(self: *Project) void {
+        self.visual_revision +%= 1;
     }
 };
 

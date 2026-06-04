@@ -80,6 +80,7 @@ pub const MainEditor = struct {
     info_text: []const u8 = "Ready",
     info_color: u32 = UI.muted,
     ui_cache_dirty: bool = true,
+    cached_canvas_revision: u64 = std.math.maxInt(u64),
 
     pub fn draw(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
         self.handleCanvas(fui, project, mouse);
@@ -88,7 +89,15 @@ pub const MainEditor = struct {
             renderer.set_target(.terrain);
             drawStaticUi(fui, renderer);
             renderer.set_target(previous_target);
+            self.cached_canvas_revision = std.math.maxInt(u64);
             self.ui_cache_dirty = false;
+        }
+        if (self.cached_canvas_revision != project.visualRevision()) {
+            const previous_target = renderer.target;
+            renderer.set_target(.terrain);
+            drawCanvasBase(fui, renderer, project);
+            renderer.set_target(previous_target);
+            self.cached_canvas_revision = project.visualRevision();
         }
         renderer.copy_buffer(.terrain, .frame);
         self.drawTopBar(fui, renderer, project, mouse, sm);
@@ -106,11 +115,15 @@ pub const MainEditor = struct {
         const paint_color = if (mouse.right_down) project.rightColor() else project.leftColor();
         if (mouse.left_down or mouse.right_down) {
             switch (self.tool) {
-                .pixel => project.paintPixel(@intCast(cell[0]), @intCast(cell[1]), paint_color),
-                .fill => if (mouse.just_pressed or mouse.just_right_pressed) project.fill(@intCast(cell[0]), @intCast(cell[1]), paint_color),
+                .pixel => {
+                    _ = project.paintPixel(@intCast(cell[0]), @intCast(cell[1]), paint_color);
+                },
+                .fill => {
+                    if (mouse.just_pressed or mouse.just_right_pressed) _ = project.fill(@intCast(cell[0]), @intCast(cell[1]), paint_color);
+                },
                 .line => if (mouse.just_pressed or mouse.just_right_pressed) {
                     if (self.line_start) |start| {
-                        project.drawLine(start[0], start[1], cell[0], cell[1], paint_color);
+                        _ = project.drawLine(start[0], start[1], cell[0], cell[1], paint_color);
                         self.line_start = null;
                     } else {
                         self.line_start = cell;
@@ -180,7 +193,7 @@ pub const MainEditor = struct {
         drawPixelText(fui, renderer, "TILE ID:", title_x, 134, 2, UI.text);
         drawPixelText(fui, renderer, id_text, title_x + 142, 134, 2, UI.accent);
 
-        drawCanvas(self, fui, renderer, project, mouse);
+        drawCanvasOverlay(self, fui, renderer, mouse);
 
         drawInfoPanel(fui, renderer, self);
     }
@@ -325,10 +338,12 @@ fn drawCurrentPalette(fui: anytype, renderer: *Render, project: *Project, mouse:
     }
 }
 
-fn drawCanvas(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
+fn drawCanvasBase(fui: anytype, renderer: *Render, project: *Project) void {
     const tile = project.currentImage();
     const origin = canvasOrigin(fui);
-    renderer.draw_rect(origin[0] - 2, origin[1] - 2, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 4, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE + 4, 0xE6F5D8);
+    const size = CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE;
+    renderer.draw_rect(origin[0] - 2, origin[1] - 2, size + 4, size + 4, 0xE6F5D8);
+
     var py: usize = 0;
     while (py < CONF.TILE_SIDE) : (py += 1) {
         var px: usize = 0;
@@ -338,14 +353,24 @@ fn drawCanvas(self: *MainEditor, fui: anytype, renderer: *Render, project: *Proj
             const x = origin[0] + @as(i32, @intCast(px)) * CONF.EDITOR_CANVAS_SCALE;
             const y = origin[1] + @as(i32, @intCast(py)) * CONF.EDITOR_CANVAS_SCALE;
             renderer.draw_rect(x, y, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, color);
-            renderer.draw_rect_lines(x, y, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, 0xD7EBCB);
         }
     }
+
+    var grid: usize = 0;
+    while (grid <= CONF.TILE_SIDE) : (grid += 1) {
+        const offset = @as(i32, @intCast(grid)) * CONF.EDITOR_CANVAS_SCALE;
+        renderer.draw_line(origin[0] + offset, origin[1], origin[0] + offset, origin[1] + size, 0xD7EBCB);
+        renderer.draw_line(origin[0], origin[1] + offset, origin[0] + size, origin[1] + offset, 0xD7EBCB);
+    }
+    renderer.draw_rect_lines(origin[0], origin[1], size, size, UI.border_dark);
+}
+
+fn drawCanvasOverlay(self: *MainEditor, fui: anytype, renderer: *Render, mouse: Mouse) void {
     if (self.tool == .line) if (self.line_start) |start| if (canvasCell(fui, mouse.x, mouse.y)) |end| {
+        const origin = canvasOrigin(fui);
         const half = @divFloor(CONF.EDITOR_CANVAS_SCALE, 2);
         renderer.draw_line(origin[0] + start[0] * CONF.EDITOR_CANVAS_SCALE + half, origin[1] + start[1] * CONF.EDITOR_CANVAS_SCALE + half, origin[0] + end[0] * CONF.EDITOR_CANVAS_SCALE + half, origin[1] + end[1] * CONF.EDITOR_CANVAS_SCALE + half, 0x202020);
     };
-    renderer.draw_rect_lines(origin[0], origin[1], CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE, CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE, UI.border_dark);
 }
 
 fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype, x0: i32, y0: i32, slot: i32) void {

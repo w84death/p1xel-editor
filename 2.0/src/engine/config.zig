@@ -5,7 +5,7 @@
 // *************************************
 
 pub const CONF = struct {
-    pub const VERSION = "2.0";
+    pub const VERSION = "2.1-beta";
     pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";
     pub const SCREEN_W = 1440;
@@ -15,7 +15,7 @@ pub const CONF = struct {
     pub const FONT_WIDTH = 8;
     pub const FONT_HEIGHT = 8;
 
-    pub const PROJECT_FILE = "p1xel.gbcpix";
+    pub const PROJECT_FILE = "art_data.p1x";
     pub const TILE_SIDE = 8;
     pub const COLORS_PER_PALETTE = 4;
     pub const PALETTE_COUNT = 8;

@@ -136,7 +136,6 @@ pub fn main() !void {
     while (c.fenster_loop(&window) == 0) {
         renderer.perf_begin_sim();
         renderer.begin_frame();
-        if (sm.current != .editor) renderer.clear_background(0x1B1B1B);
 
         const mouse = mouse_buttons.update(@divFloor(window.x, CONF.PIXEL_SCALE), @divFloor(window.y, CONF.PIXEL_SCALE), @intCast(window.mouse));
         assets.update(renderer.dt);
@@ -148,8 +147,9 @@ pub fn main() !void {
             if (sm.current == .editor) sm.go_to(.quit) else sm.go_to(.editor);
         }
 
+        renderer.perf_begin_draw();
         switch (sm.current) {
-            .splash => drawSplash(&fui, &renderer, &assets, mouse, &sm),
+            .splash => drawSplash(&fui, &renderer, &assets, &editor, mouse, &sm),
             .editor => editor.draw(&fui, &renderer, &project, mouse, &sm),
             .tile_library => library.draw(&fui, &renderer, &project, &editor, mouse, &sm),
             .quit => break,
@@ -157,7 +157,6 @@ pub fn main() !void {
         sm.update();
         if (sm.current == .quit) break;
 
-        renderer.perf_begin_draw();
         if (sm.current != .splash) drawGlobalOverlay(&fui, &renderer, &assets);
         renderer.perf_begin_present();
         renderer.present();
@@ -168,7 +167,7 @@ pub fn main() !void {
     try project.save();
 }
 
-fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, mouse: Mouse, sm: anytype) void {
+fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, editor: *MainEditor, mouse: Mouse, sm: anytype) void {
     const cx = @divFloor(CONF.SCREEN_W, 2);
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
@@ -178,14 +177,23 @@ fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, mouse: Mouse,
     drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, 0xDAD45E);
     drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 82, 3, 0x7EDB1E);
 
-    if (@mod(@divFloor(renderer.now, 500), 2) == 0) {
-        drawCenteredText(fui, renderer, "click to start", cx, CONF.SCREEN_H - 92, 1, 0xAAAAAA);
-    }
+    const button_w: i32 = 220;
+    const button_h: i32 = 44;
+    const button_x = cx - @divFloor(button_w, 2);
+    const button_y = CONF.SCREEN_H - 122;
+    const over = mouse.x >= button_x and mouse.x < button_x + button_w and mouse.y >= button_y and mouse.y < button_y + button_h;
+    renderer.draw_rect(button_x + 3, button_y + 3, button_w, button_h, 0x050505);
+    renderer.draw_rect(button_x, button_y, button_w, button_h, if (over) 0x355A35 else 0x202020);
+    renderer.draw_rect_lines(button_x, button_y, button_w, button_h, if (over) 0x7EDB1E else 0x404040);
+    drawCenteredText(fui, renderer, "START", cx, button_y + 15, 1, if (over) 0xFFFFFF else 0xAAAAAA);
 
     drawCenteredText(fui, renderer, "Powered by Borowik Engine", cx, CONF.SCREEN_H - 58, 1, 0xDAD45E);
     if (assets.icon) |*icon| icon.draw(renderer, cx - 16, CONF.SCREEN_H - 42);
 
-    if (mouse.just_pressed or mouse.just_right_pressed) sm.go_to(.editor);
+    if (over and (mouse.just_pressed or mouse.just_right_pressed)) {
+        editor.suppress_canvas_paint_until_mouse_up = true;
+        sm.go_to(.editor);
+    }
 }
 
 fn drawGlobalOverlay(fui: *Fui, renderer: *Render, assets: *SpriteAssets) void {

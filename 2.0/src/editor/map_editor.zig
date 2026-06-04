@@ -27,11 +27,13 @@ const UI = struct {
     const top_y: i32 = 24;
     const top_h: i32 = 82;
     const left_x: i32 = 14;
-    const left_w: i32 = 304;
+    const left_w: i32 = 276;
+    const right_w: i32 = 220;
     const gap: i32 = 10;
     const canvas_x: i32 = left_x + left_w + gap;
     const canvas_y: i32 = 110;
-    const canvas_w: i32 = CONF.SCREEN_W - canvas_x - 14;
+    const right_x: i32 = CONF.SCREEN_W - side_x - right_w;
+    const canvas_w: i32 = right_x - canvas_x - gap;
     const canvas_h: i32 = CONF.SCREEN_H - canvas_y - 22;
 };
 
@@ -52,11 +54,17 @@ pub const MapEditor = struct {
     cached_map_scale: i32 = 0,
     cached_map_width: u16 = 0,
     cached_map_height: u16 = 0,
+    cached_origin_x: i32 = std.math.minInt(i32),
+    cached_origin_y: i32 = std.math.minInt(i32),
+    zoom_extra: i32 = 0,
+    pan_x: i32 = 0,
+    pan_y: i32 = 0,
 
     pub fn draw(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
         renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, UI.bg);
         self.drawTopBar(fui, renderer, project, mouse, sm);
         self.drawLeftPanel(fui, renderer, project, main_editor, mouse, sm);
+        self.drawRightPanel(fui, renderer, project, mouse);
         self.handleCanvas(project, mouse);
         self.drawCanvas(fui, renderer, project, mouse);
     }
@@ -84,22 +92,66 @@ pub const MapEditor = struct {
 
     fn drawLeftPanel(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
         panel(renderer, UI.left_x, UI.canvas_y, UI.left_w, UI.canvas_h);
-        drawText(fui, renderer, "BG TILES", UI.left_x + 20, UI.canvas_y + 18, 2, UI.text);
-        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .tiles, UI.left_x + 54, UI.canvas_y + 48, 56);
+        const tool_y = UI.canvas_y + 18;
+        drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 116, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 142, tool_y + 30, 110, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 236, 34, "PLACE SPRITE", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
 
-        drawText(fui, renderer, "SPRITES", UI.left_x + 20, UI.canvas_y + 240, 2, UI.text);
-        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .sprites, UI.left_x + 54, UI.canvas_y + 270, 56);
+        drawText(fui, renderer, "BG TILES", UI.left_x + 16, UI.canvas_y + 138, 2, UI.text);
+        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .tiles, UI.left_x + 36, UI.canvas_y + 166, 50);
 
-        const tool_y = UI.canvas_y + 474;
-        drawText(fui, renderer, "TOOLS", UI.left_x + 20, tool_y, 2, UI.text);
-        if (button(fui, renderer, mouse, UI.left_x + 20, tool_y + 34, 126, 38, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
-        if (button(fui, renderer, mouse, UI.left_x + 156, tool_y + 34, 126, 38, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
-        if (button(fui, renderer, mouse, UI.left_x + 20, tool_y + 82, 262, 38, "PLACE SPRITE", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
+        drawText(fui, renderer, "SPRITES", UI.left_x + 16, UI.canvas_y + 348, 2, UI.text);
+        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .sprites, UI.left_x + 36, UI.canvas_y + 376, 50);
 
-        const attr_y = UI.canvas_y + 616;
+        const attr_y = UI.canvas_y + 588;
         drawText(fui, renderer, "SELECTED TILE", UI.left_x + 20, attr_y, 2, UI.text);
         self.drawAttrEditor(fui, renderer, project, mouse, attr_y + 36);
         drawText(fui, renderer, self.info_text, UI.left_x + 20, UI.canvas_y + UI.canvas_h - 30, 1, self.info_color);
+    }
+
+    fn drawRightPanel(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
+        panel(renderer, UI.right_x, UI.canvas_y, UI.right_w, UI.canvas_h);
+        const x = UI.right_x + 16;
+        var y = UI.canvas_y + 18;
+
+        drawText(fui, renderer, "MAP SIZE", x, y, 2, UI.text);
+        drawText(fui, renderer, "DOUBLE CLICK TO CROP", x, y + 30, 1, UI.muted);
+        self.sizeButton(fui, renderer, project, mouse, x, y + 52, 86, 34, "32x32", .s32x32, 32, 32);
+        self.sizeButton(fui, renderer, project, mouse, x + 102, y + 52, 86, 34, "64x16", .s64x16, 64, 16);
+        self.sizeButton(fui, renderer, project, mouse, x, y + 94, 188, 34, "128x16", .s128x16, 128, 16);
+
+        y += 168;
+        drawText(fui, renderer, "ZOOM", x, y, 2, UI.text);
+        if (button(fui, renderer, mouse, x, y + 34, 54, 38, "-", false) and self.zoom_extra > 0) {
+            self.zoom_extra -= 1;
+            self.setInfo("Zoom out", UI.accent);
+        }
+        var zoom_buf: [16]u8 = undefined;
+        const zoom_text = std.fmt.bufPrint(&zoom_buf, "+{d}", .{self.zoom_extra}) catch "+?";
+        drawText(fui, renderer, zoom_text, x + 78, y + 46, 1, UI.accent);
+        if (button(fui, renderer, mouse, x + 134, y + 34, 54, 38, "+", false) and self.zoom_extra < 6) {
+            self.zoom_extra += 1;
+            self.setInfo("Zoom in", UI.accent);
+        }
+        if (button(fui, renderer, mouse, x, y + 82, 188, 34, "RESET VIEW", false)) {
+            self.zoom_extra = 0;
+            self.pan_x = 0;
+            self.pan_y = 0;
+            self.setInfo("View reset", UI.accent);
+        }
+
+        y += 160;
+        drawText(fui, renderer, "PAN", x, y, 2, UI.text);
+        const step = @as(i32, CONF.TILE_SIDE) * self.canvasScale(project) * 4;
+        if (button(fui, renderer, mouse, x + 67, y + 34, 54, 38, "UP", false)) self.pan_y += step;
+        if (button(fui, renderer, mouse, x, y + 80, 54, 38, "<", false)) self.pan_x += step;
+        if (button(fui, renderer, mouse, x + 67, y + 80, 54, 38, "0", false)) {
+            self.pan_x = 0;
+            self.pan_y = 0;
+        }
+        if (button(fui, renderer, mouse, x + 134, y + 80, 54, 38, ">", false)) self.pan_x -= step;
+        if (button(fui, renderer, mouse, x + 67, y + 126, 54, 38, "DN", false)) self.pan_y -= step;
     }
 
     fn drawSelector(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype, mode: ProjectMode, x0: i32, y0: i32, slot: i32) void {
@@ -108,8 +160,8 @@ pub const MapEditor = struct {
         for (0..9) |i| {
             const cx: i32 = @intCast(i % 3);
             const cy: i32 = @intCast(i / 3);
-            const x = x0 + cx * (slot + 10);
-            const y = y0 + cy * (slot + 10);
+            const x = x0 + cx * (slot + 6);
+            const y = y0 + cy * (slot + 6);
             const image_id = project.visibleSlotMode(mode, i);
             const selected = if (mode == .tiles) image_id == self.selected_tile else image_id == self.selected_sprite;
             renderer.draw_rect(x, y, slot, slot, if (selected) UI.accent_dark else UI.panel_hi);
@@ -146,7 +198,7 @@ pub const MapEditor = struct {
     fn drawAttrEditor(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, y: i32) void {
         drawText(fui, renderer, "PALETTE", UI.left_x + 20, y, 1, UI.muted);
         for (0..8) |p| {
-            const x = UI.left_x + 20 + @as(i32, @intCast(p)) * 34;
+            const x = UI.left_x + 20 + @as(i32, @intCast(p)) * 30;
             var label_buf: [2]u8 = undefined;
             const label = std.fmt.bufPrint(&label_buf, "{d}", .{p}) catch "?";
             if (button(fui, renderer, mouse, x, y + 22, 28, 28, label, self.bg_attr.palette == p)) {
@@ -156,23 +208,18 @@ pub const MapEditor = struct {
                 self.setInfo("Palette assigned", UI.accent);
             }
         }
-        if (button(fui, renderer, mouse, UI.left_x + 20, y + 64, 126, 36, "H FLIP", self.bg_attr.hflip)) {
+        if (button(fui, renderer, mouse, UI.left_x + 20, y + 64, 112, 36, "H FLIP", self.bg_attr.hflip)) {
             self.bg_attr.hflip = !self.bg_attr.hflip;
             self.sprite_attr.hflip = self.bg_attr.hflip;
             self.applySelectedCellAttr(project);
             self.setInfo("Horizontal flip toggled", UI.accent);
         }
-        if (button(fui, renderer, mouse, UI.left_x + 156, y + 64, 126, 36, "V FLIP", self.bg_attr.vflip)) {
+        if (button(fui, renderer, mouse, UI.left_x + 142, y + 64, 112, 36, "V FLIP", self.bg_attr.vflip)) {
             self.bg_attr.vflip = !self.bg_attr.vflip;
             self.sprite_attr.vflip = self.bg_attr.vflip;
             self.applySelectedCellAttr(project);
             self.setInfo("Vertical flip toggled", UI.accent);
         }
-
-        drawText(fui, renderer, "SIZE - DOUBLE CLICK TO CROP", UI.left_x + 20, y + 124, 1, UI.muted);
-        self.sizeButton(fui, renderer, project, mouse, UI.left_x + 20, y + 146, 82, 34, "32x32", .s32x32, 32, 32);
-        self.sizeButton(fui, renderer, project, mouse, UI.left_x + 110, y + 146, 82, 34, "64x16", .s64x16, 64, 16);
-        self.sizeButton(fui, renderer, project, mouse, UI.left_x + 200, y + 146, 82, 34, "128x16", .s128x16, 128, 16);
     }
 
     fn sizeButton(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: []const u8, pending: PendingSize, width: u16, height: u16) void {
@@ -228,7 +275,7 @@ pub const MapEditor = struct {
         const map_h = @as(i32, project.map.height) * cell_px;
 
         self.ensureMapCache(renderer, project, origin, scale, cell_px, map_w, map_h);
-        copyTerrainRectToFrame(renderer, origin[0], origin[1], map_w, map_h);
+        copyTerrainRectToFrame(renderer, origin[0], origin[1], map_w, map_h, UI.canvas_x + 1, UI.canvas_y + 1, UI.canvas_w - 2, UI.canvas_h - 2);
 
         if (self.canvasCell(project, mouse.x, mouse.y)) |cell| {
             const hx = origin[0] + @as(i32, cell[0]) * cell_px;
@@ -244,7 +291,7 @@ pub const MapEditor = struct {
 
     fn ensureMapCache(self: *MapEditor, renderer: *Render, project: *Project, origin: [2]i32, scale: i32, cell_px: i32, map_w: i32, map_h: i32) void {
         const revision = project.visualRevision();
-        if (self.cached_map_revision == revision and self.cached_map_scale == scale and self.cached_map_width == project.map.width and self.cached_map_height == project.map.height) return;
+        if (self.cached_map_revision == revision and self.cached_map_scale == scale and self.cached_map_width == project.map.width and self.cached_map_height == project.map.height and self.cached_origin_x == origin[0] and self.cached_origin_y == origin[1]) return;
 
         const previous_target = renderer.target;
         renderer.set_target(.terrain);
@@ -284,6 +331,8 @@ pub const MapEditor = struct {
         self.cached_map_scale = scale;
         self.cached_map_width = project.map.width;
         self.cached_map_height = project.map.height;
+        self.cached_origin_x = origin[0];
+        self.cached_origin_y = origin[1];
     }
 
     fn drawCanvasHeader(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
@@ -295,19 +344,19 @@ pub const MapEditor = struct {
     }
 
     fn canvasScale(self: *MapEditor, project: *const Project) i32 {
-        _ = self;
         const available_w = UI.canvas_w - 40;
         const available_h = UI.canvas_h - 86;
         const map_px_w = @as(i32, project.map.width) * CONF.TILE_SIDE;
         const map_px_h = @as(i32, project.map.height) * CONF.TILE_SIDE;
-        return @max(1, @min(@divFloor(available_w, map_px_w), @divFloor(available_h, map_px_h)));
+        const fit = @max(1, @min(@divFloor(available_w, map_px_w), @divFloor(available_h, map_px_h)));
+        return fit + self.zoom_extra;
     }
 
     fn canvasOrigin(self: *MapEditor, project: *const Project) [2]i32 {
         const scale = self.canvasScale(project);
         const map_w = @as(i32, project.map.width) * CONF.TILE_SIDE * scale;
         const map_h = @as(i32, project.map.height) * CONF.TILE_SIDE * scale;
-        return .{ UI.canvas_x + @divFloor(UI.canvas_w - map_w, 2), UI.canvas_y + 64 + @divFloor(UI.canvas_h - 78 - map_h, 2) };
+        return .{ UI.canvas_x + @divFloor(UI.canvas_w - map_w, 2) + self.pan_x, UI.canvas_y + 64 + @divFloor(UI.canvas_h - 78 - map_h, 2) + self.pan_y };
     }
 
     fn canvasCell(self: *MapEditor, project: *const Project, mx: i32, my: i32) ?[2]u16 {
@@ -316,6 +365,7 @@ pub const MapEditor = struct {
         const origin = self.canvasOrigin(project);
         const map_w = @as(i32, project.map.width) * cell_px;
         const map_h = @as(i32, project.map.height) * cell_px;
+        if (mx < UI.canvas_x + 1 or my < UI.canvas_y + 1 or mx >= UI.canvas_x + UI.canvas_w - 1 or my >= UI.canvas_y + UI.canvas_h - 1) return null;
         if (mx < origin[0] or my < origin[1] or mx >= origin[0] + map_w or my >= origin[1] + map_h) return null;
         return .{ @intCast(@divFloor(mx - origin[0], cell_px)), @intCast(@divFloor(my - origin[1], cell_px)) };
     }
@@ -332,7 +382,7 @@ pub const MapEditor = struct {
     }
 };
 
-fn copyTerrainRectToFrame(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
+fn copyTerrainRectToFrame(renderer: *Render, x: i32, y: i32, w: i32, h: i32, clip_x: i32, clip_y: i32, clip_w: i32, clip_h: i32) void {
     if (w <= 0 or h <= 0) return;
     var rx = x;
     var ry = y;
@@ -346,6 +396,16 @@ fn copyTerrainRectToFrame(renderer: *Render, x: i32, y: i32, w: i32, h: i32) voi
         rh += ry;
         ry = 0;
     }
+    if (rx < clip_x) {
+        rw -= clip_x - rx;
+        rx = clip_x;
+    }
+    if (ry < clip_y) {
+        rh -= clip_y - ry;
+        ry = clip_y;
+    }
+    if (rx + rw > clip_x + clip_w) rw = clip_x + clip_w - rx;
+    if (ry + rh > clip_y + clip_h) rh = clip_y + clip_h - ry;
     if (rx + rw > renderer.width) rw = renderer.width - rx;
     if (ry + rh > renderer.height) rh = renderer.height - ry;
     if (rw <= 0 or rh <= 0) return;

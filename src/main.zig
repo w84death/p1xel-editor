@@ -143,6 +143,7 @@ pub fn main() !void {
                 editor.ui_cache_dirty = true;
             }
             if (previous_state != .map_editor and sm.current == .map_editor) {
+                if (previous_state == .tile_library) map_editor.syncLibrarySelection(&project);
                 map_editor.cached_map_revision = std.math.maxInt(u64);
             }
         }

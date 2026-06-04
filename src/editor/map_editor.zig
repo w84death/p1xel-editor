@@ -60,6 +60,23 @@ pub const MapEditor = struct {
     pan_x: i32 = 0,
     pan_y: i32 = 0,
 
+    pub fn syncLibrarySelection(self: *MapEditor, project: *const Project) void {
+        const image_id = project.selectedImageId();
+        const image = project.imageAtMode(project.mode, image_id);
+        const default_palette = image.palette_id;
+        if (project.mode == .tiles) {
+            self.selected_tile = @intCast(@min(image_id, 255));
+            self.bg_attr.palette = default_palette;
+            self.tool = .bg_stamp;
+            self.setInfo("BG tile selected", UI.accent);
+        } else {
+            self.selected_sprite = image_id;
+            self.sprite_attr.palette = default_palette;
+            self.tool = .sprite_stamp;
+            self.setInfo("Sprite selected", UI.accent);
+        }
+    }
+
     pub fn draw(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
         const previous_target = renderer.target;
         renderer.set_target(.frame);

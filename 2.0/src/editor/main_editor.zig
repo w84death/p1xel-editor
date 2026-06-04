@@ -73,6 +73,7 @@ fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
     y += 42;
     fui.draw_text(renderer, "Current Palette", x, y, 2, 0xE6E6E6);
     y += 30;
+    const palette_y = y;
     for (0..CONF.COLORS_PER_PALETTE) |i| {
         const sx = x + @as(i32, @intCast(i)) * 40;
         renderer.draw_rect(sx, y, 40, 40, if (project.isTransparentColor(@intCast(i))) 0x303030 else project.currentColor32(@intCast(i)));
@@ -86,8 +87,14 @@ fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
         if (project.rightColor() == i) renderer.draw_rect_lines(sx + 7, y + 7, 26, 26, 0x000000);
     }
     y += 50;
-    fui.draw_text(renderer, "L", x + 12, y, 2, project.currentColor32(project.leftColor()));
-    fui.draw_text(renderer, "R", x + 72, y, 2, project.currentColor32(project.rightColor()));
+    const left_x = x + @as(i32, @intCast(project.leftColor())) * 40;
+    const right_x = x + @as(i32, @intCast(project.rightColor())) * 40;
+    if (project.leftColor() == project.rightColor()) {
+        fui.draw_text(renderer, "LR", left_x + 4, palette_y + 46, 2, 0xFFFFFF);
+    } else {
+        fui.draw_text(renderer, "L", left_x + 12, palette_y + 46, 2, 0xFFFFFF);
+        fui.draw_text(renderer, "R", right_x + 12, palette_y + 46, 2, 0xFFFFFF);
+    }
 
     y += 62;
     fui.draw_text(renderer, "Edited Tile ID:", x, y, 2, 0xE6E6E6);
@@ -165,12 +172,11 @@ fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
 }
 
 fn drawPalettes(_: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-    const x0: i32 = fui.pivotX(.top_right) - 190;
+    const x0: i32 = fui.pivotX(.top_right) - 196;
     const y0: i32 = fui.pivotY(.top_right) + 60;
     const sw: i32 = 38;
     const row_h: i32 = 52;
-    const title = if (project.mode == .tiles) "Tile Palettes" else "Sprite Palettes";
-    fui.draw_text(renderer, title, x0 - 22, y0 - 32, 2, 0xFFFFFF);
+    fui.draw_text(renderer, "Palettes", x0, y0 - 28, 2, 0xFFFFFF);
 
     for (0..CONF.PALETTE_COUNT) |p| {
         const y = y0 + @as(i32, @intCast(p)) * row_h;
@@ -195,11 +201,11 @@ fn drawPalettes(_: *MainEditor, fui: anytype, renderer: *Render, project: *Proje
 }
 
 fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-    const x: i32 = fui.pivotX(.top_right) - 222;
+    const x: i32 = fui.pivotX(.top_right) - 228;
     const y: i32 = fui.pivotY(.top_right) + 506;
     const selected_color = project.color32(project.selectedPalette(), project.selectedColor());
 
-    fui.draw_text(renderer, "Edit selected color", x, y, 2, 0xFFFFFF);
+    fui.draw_text(renderer, "Edit Color", x, y, 2, 0xFFFFFF);
     renderer.draw_rect(x, y + 34, 64, 64, selected_color);
     renderer.draw_rect_lines(x, y + 34, 64, 64, 0xFFFFFF);
 
@@ -215,11 +221,11 @@ fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mo
 
 fn drawChannelEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, channel: ColorChannel, label: [:0]const u8, value: u8, x: i32, y: i32, color: u32) void {
     fui.draw_text(renderer, label, x, y + 8, 2, color);
-    if (views.smallButton(fui, renderer, mouse, x + 34, y, 44, 32, "-", false)) project.adjustSelectedRgb(channel, -1);
+    if (views.smallButton(fui, renderer, mouse, x + 34, y, 40, 32, "-", false)) project.adjustSelectedRgb(channel, -1);
     var buf: [4]u8 = undefined;
     const value_text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch "?";
-    fui.draw_text(renderer, value_text, x + 92, y + 8, 2, 0xFFFFFF);
-    if (views.smallButton(fui, renderer, mouse, x + 142, y, 44, 32, "+", false)) project.adjustSelectedRgb(channel, 1);
+    fui.draw_text(renderer, value_text, x + 90, y + 8, 2, 0xFFFFFF);
+    if (views.smallButton(fui, renderer, mouse, x + 136, y, 40, 32, "+", false)) project.adjustSelectedRgb(channel, 1);
 }
 
 fn drawStatus(fui: anytype, renderer: *Render, project: *const Project, save_error: bool, export_notice: bool) void {

@@ -20,8 +20,8 @@ pub fn smallButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32
 }
 
 pub fn drawTile(renderer: *Render, project: *const Project, tile_id: u16, x: i32, y: i32, scale: i32) void {
-    if (tile_id >= project.tile_count) return;
-    const tile = project.tiles[tile_id];
+    if (tile_id >= project.imageCount()) return;
+    const tile = project.imageAt(tile_id);
     drawTileData(renderer, project, tile, x, y, scale);
 }
 

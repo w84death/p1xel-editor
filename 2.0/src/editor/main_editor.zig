@@ -36,7 +36,7 @@ pub const MainEditor = struct {
 
     fn handleCanvas(self: *MainEditor, fui: anytype, project: *Project, mouse: Mouse) void {
         const cell = canvasCell(fui, mouse.x, mouse.y) orelse return;
-        const paint_color = if (mouse.right_down) project.right_color else project.left_color;
+        const paint_color = if (mouse.right_down) project.rightColor() else project.leftColor();
         if (mouse.left_down or mouse.right_down) {
             switch (self.tool) {
                 .pixel => project.paintPixel(@intCast(cell[0]), @intCast(cell[1]), paint_color),
@@ -79,20 +79,20 @@ fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
         renderer.draw_rect_lines(sx, y, 40, 40, 0x000000);
         if (project.isTransparentColor(@intCast(i))) renderer.draw_line(sx, y + 39, sx + 39, y, 0xFFFFFF);
         if (views.hover(mouse, sx, y, 40, 40)) {
-            if (mouse.just_pressed) project.left_color = @intCast(i);
-            if (mouse.just_right_pressed) project.right_color = @intCast(i);
+            if (mouse.just_pressed) project.setLeftColor(@intCast(i));
+            if (mouse.just_right_pressed) project.setRightColor(@intCast(i));
         }
-        if (project.left_color == i) renderer.draw_rect_lines(sx + 3, y + 3, 34, 34, 0xFFFFFF);
-        if (project.right_color == i) renderer.draw_rect_lines(sx + 7, y + 7, 26, 26, 0x000000);
+        if (project.leftColor() == i) renderer.draw_rect_lines(sx + 3, y + 3, 34, 34, 0xFFFFFF);
+        if (project.rightColor() == i) renderer.draw_rect_lines(sx + 7, y + 7, 26, 26, 0x000000);
     }
     y += 50;
-    fui.draw_text(renderer, "L", x + 12, y, 2, project.currentColor32(project.left_color));
-    fui.draw_text(renderer, "R", x + 72, y, 2, project.currentColor32(project.right_color));
+    fui.draw_text(renderer, "L", x + 12, y, 2, project.currentColor32(project.leftColor()));
+    fui.draw_text(renderer, "R", x + 72, y, 2, project.currentColor32(project.rightColor()));
 
     y += 62;
     fui.draw_text(renderer, "Edited Tile ID:", x, y, 2, 0xE6E6E6);
     y += 30;
-    drawNumber(fui, renderer, project.selected_tile, x + 60, y, 0xFFFFFF);
+    drawNumber(fui, renderer, project.selectedImageId(), x + 60, y, 0xFFFFFF);
     y += 62;
     fui.draw_text(renderer, "Non-empty Tiles:", x, y, 2, 0xE6E6E6);
     y += 30;
@@ -119,7 +119,7 @@ fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
 }
 
 fn drawCanvas(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-    const tile = project.tiles[project.selected_tile];
+    const tile = project.currentImage();
     const origin = canvasOrigin(fui);
     var py: usize = 0;
     while (py < CONF.TILE_SIDE) : (py += 1) {
@@ -149,12 +149,12 @@ fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
         const x = x0 + cx * slot;
         const y = y0 + cy * slot;
         renderer.draw_rect(x, y, slot, slot, 0x858585);
-        const tile_id = project.visible_slots[i];
-        if (tile_id < project.tile_count) views.drawTile(renderer, project, tile_id, x + 4, y + 4, 7);
+        const tile_id = project.visibleSlot(i);
+        if (tile_id < project.imageCount()) views.drawTile(renderer, project, tile_id, x + 4, y + 4, 7);
         renderer.draw_rect_lines(x, y, slot, slot, 0x000000);
-        if (project.selected_tile == tile_id) renderer.draw_rect_lines(x + 4, y + 4, slot - 8, slot - 8, 0xFFFFFF);
+        if (project.selectedImageId() == tile_id) renderer.draw_rect_lines(x + 4, y + 4, slot - 8, slot - 8, 0xFFFFFF);
         if (views.hover(mouse, x, y, slot, slot)) {
-            if (mouse.just_pressed and tile_id < project.tile_count) project.selectTile(tile_id);
+            if (mouse.just_pressed and tile_id < project.imageCount()) project.selectTile(tile_id);
             if (mouse.just_right_pressed) {
                 self.library_request = .{ .mode = .swap_tile, .slot_index = @intCast(i), .tile_id = tile_id };
                 sm.go_to(.tile_library);
@@ -176,22 +176,19 @@ fn drawPalettes(_: *MainEditor, fui: anytype, renderer: *Render, project: *Proje
         const y = y0 + @as(i32, @intCast(p)) * row_h;
         var label_buf: [4]u8 = undefined;
         const label = std.fmt.bufPrint(&label_buf, "{d}", .{p}) catch "?";
-        if (project.selected_palette == p) fui.draw_text(renderer, ">", x0 - 32, y + 11, 2, 0xFFFFFF);
+        if (project.selectedPalette() == p) fui.draw_text(renderer, ">", x0 - 32, y + 11, 2, 0xFFFFFF);
         fui.draw_text(renderer, label, x0 - 18, y + 11, 2, 0xE6E6E6);
         for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
             const x = x0 + @as(i32, @intCast(color_slot)) * sw;
             renderer.draw_rect(x, y, sw, 40, if (project.isTransparentColor(@intCast(color_slot))) 0x303030 else project.color32(@intCast(p), @intCast(color_slot)));
             renderer.draw_rect_lines(x, y, sw, 40, 0x000000);
             if (project.isTransparentColor(@intCast(color_slot))) renderer.draw_line(x, y + 39, x + sw - 1, y, 0xFFFFFF);
-            if (project.selected_palette == p and project.selected_color == color_slot) {
+            if (project.selectedPalette() == p and project.selectedColor() == color_slot) {
                 renderer.draw_rect_lines(x + 4, y + 4, sw - 8, 32, 0xFFFFFF);
                 renderer.draw_rect_lines(x + 7, y + 7, sw - 14, 26, 0x000000);
             }
             if (views.hover(mouse, x, y, sw, 40) and (mouse.just_pressed or mouse.just_right_pressed)) {
-                project.selected_palette = @intCast(p);
-                project.selected_color = @intCast(color_slot);
-                project.tiles[project.selected_tile].palette_id = project.selected_palette;
-                project.dirty = true;
+                project.setPaletteSelection(@intCast(p), @intCast(color_slot));
             }
         }
     }
@@ -200,14 +197,14 @@ fn drawPalettes(_: *MainEditor, fui: anytype, renderer: *Render, project: *Proje
 fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
     const x: i32 = fui.pivotX(.top_right) - 222;
     const y: i32 = fui.pivotY(.top_right) + 506;
-    const selected_color = project.color32(project.selected_palette, project.selected_color);
+    const selected_color = project.color32(project.selectedPalette(), project.selectedColor());
 
     fui.draw_text(renderer, "Edit selected color", x, y, 2, 0xFFFFFF);
     renderer.draw_rect(x, y + 34, 64, 64, selected_color);
     renderer.draw_rect_lines(x, y + 34, 64, 64, 0xFFFFFF);
 
     var title_buf: [32]u8 = undefined;
-    const title = std.fmt.bufPrint(&title_buf, "P{d} C{d}", .{ project.selected_palette, project.selected_color }) catch "P? C?";
+    const title = std.fmt.bufPrint(&title_buf, "P{d} C{d}", .{ project.selectedPalette(), project.selectedColor() }) catch "P? C?";
     fui.draw_text(renderer, title, x + 78, y + 40, 2, 0xE6E6E6);
 
     const rgb = selectedRgb(project);

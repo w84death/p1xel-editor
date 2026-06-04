@@ -31,7 +31,7 @@ pub fn drawTileData(renderer: *Render, project: *const Project, tile: Tile, x: i
         var px: usize = 0;
         while (px < CONF.TILE_SIDE) : (px += 1) {
             const idx = tile.pixels[py * CONF.TILE_SIDE + px];
-            const color = if (idx == 0) checker(px, py) else project.color32(tile.palette_id, idx);
+            const color = if (project.isTransparentColor(idx)) checker(px, py) else project.color32(tile.palette_id, idx);
             renderer.draw_rect(x + @as(i32, @intCast(px)) * scale, y + @as(i32, @intCast(py)) * scale, scale, scale, color);
         }
     }

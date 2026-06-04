@@ -169,18 +169,22 @@ pub const Render = struct {
     }
 
     pub fn draw_perf_overlay(self: *Render, fui: anytype, comptime Theme: type) void {
+        self.draw_perf_overlay_at(fui, Theme, fui.pivotX(.bottom_left), fui.pivotY(.bottom_left) - Theme.FONT_PERFLINE_HEIGHT * 3);
+    }
+
+    pub fn draw_perf_overlay_at(self: *Render, fui: anytype, comptime Theme: type, x: i32, y: i32) void {
         const fps: i32 = @intFromFloat(@round(self.perf.smoothed_fps));
         const fps_text = std.fmt.bufPrint(&self.perf.fps_text_buf, "FPS: {d}", .{fps}) catch "FPS: ?";
-        fui.draw_text(self, fps_text, fui.pivotX(.bottom_left), fui.pivotY(.bottom_left), Theme.FONT_PERF, Theme.SECONDARY_COLOR);
+        fui.draw_text(self, fps_text, x, y, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
 
         const sim_ms_text = std.fmt.bufPrint(&self.perf.sim_text_buf, "SIM: {d:.2}ms", .{self.perf.smoothed_sim_ms}) catch "SIM: ?";
-        fui.draw_text(self, sim_ms_text, fui.pivotX(.bottom_left), fui.pivotY(.bottom_left) - Theme.FONT_PERFLINE_HEIGHT, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
+        fui.draw_text(self, sim_ms_text, x, y + Theme.FONT_PERFLINE_HEIGHT, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
 
         const draw_ms_text = std.fmt.bufPrint(&self.perf.draw_text_buf, "DRAW: {d:.2}ms", .{self.perf.smoothed_draw_ms}) catch "DRAW: ?";
-        fui.draw_text(self, draw_ms_text, fui.pivotX(.bottom_left), fui.pivotY(.bottom_left) - Theme.FONT_PERFLINE_HEIGHT * 2, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
+        fui.draw_text(self, draw_ms_text, x, y + Theme.FONT_PERFLINE_HEIGHT * 2, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
 
         const present_ms_text = std.fmt.bufPrint(&self.perf.present_text_buf, "PRESENT: {d:.2}ms", .{self.perf.smoothed_present_ms}) catch "PRESENT: ?";
-        fui.draw_text(self, present_ms_text, fui.pivotX(.bottom_left), fui.pivotY(.bottom_left) - Theme.FONT_PERFLINE_HEIGHT * 3, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
+        fui.draw_text(self, present_ms_text, x, y + Theme.FONT_PERFLINE_HEIGHT * 3, Theme.FONT_PERF, Theme.SECONDARY_COLOR);
     }
 
     pub fn set_target(self: *Render, target: Framebuffer) void {

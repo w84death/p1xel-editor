@@ -173,15 +173,23 @@ fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, mouse: Mouse,
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
     renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, 0x111111);
-    if (assets.logo) |*logo| logo.draw(renderer, cx - 50, cy - 86);
-    if (assets.icon) |*icon| icon.draw(renderer, cx - 16, cy - 24);
-    fui.draw_text(renderer, "P1xel Editor", cx - 96, cy + 36, 3, 0xFFFFFF);
-    fui.draw_text(renderer, "Click anywhere to start", cx - 108, cy + 76, 2, 0xAAAAAA);
+    if (assets.logo) |*logo| logo.draw(renderer, cx - 50, cy - 96);
+    if (assets.icon) |*icon| icon.draw(renderer, cx - 16, cy - 34);
+    drawCenteredText(fui, renderer, "P1xel Editor", cx, cy + 28, 3, 0xFFFFFF);
+    drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 66, 2, 0xDAD45E);
+    drawCenteredText(fui, renderer, "Click anywhere to start", cx, cy + 108, 2, 0xAAAAAA);
 
     if (mouse.just_pressed or mouse.just_right_pressed) sm.go_to(.editor);
 }
 
 fn drawGlobalOverlay(fui: *Fui, renderer: *Render, assets: *SpriteAssets) void {
-    if (assets.icon) |*icon| icon.draw(renderer, CONF.SCREEN_W - 44, CONF.SCREEN_H - 44);
-    renderer.draw_perf_overlay(fui, EditorTheme);
+    const icon_x = fui.pivotX(.bottom_right) - 32;
+    const icon_y = fui.pivotY(.bottom_right) - 32;
+    if (assets.icon) |*icon| icon.draw(renderer, icon_x, icon_y);
+    renderer.draw_perf_overlay_at(fui, EditorTheme, icon_x - 116, icon_y - 4);
+}
+
+fn drawCenteredText(fui: *Fui, renderer: *Render, text: []const u8, center_x: i32, y: i32, scale: i32, color: u32) void {
+    const x = center_x - @divFloor(fui.text_length(text, scale), 2);
+    fui.draw_text(renderer, text, x, y, scale, color);
 }

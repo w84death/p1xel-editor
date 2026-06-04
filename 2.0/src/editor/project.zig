@@ -6,6 +6,7 @@ const CONF = @import("../engine/config.zig").CONF;
 
 pub const Tool = enum { pixel, fill, line };
 pub const ColorChannel = enum { r, g, b };
+pub const ProjectMode = enum(u8) { tiles = 0, sprites = 1 };
 pub const PaletteColor = [3]u8;
 
 pub const Tile = struct {
@@ -20,14 +21,16 @@ pub const Tile = struct {
 
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 2;
+    const VERSION: u8 = 3;
+    const PALETTE_BANK_COUNT = 2;
     const PALETTE_COLOR_BYTES = 3;
-    const PALETTE_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
+    const PALETTE_BANK_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
+    const PALETTE_BYTES = PALETTE_BANK_COUNT * PALETTE_BANK_BYTES;
     const TILE_BYTES = 1 + CONF.TILE_SIDE * CONF.TILE_SIDE;
-    const HEADER_BYTES = 4 + 1 + 1 + 2;
+    const HEADER_BYTES = 4 + 1 + 1 + 2 + 1;
     const MAX_FILE_BYTES = HEADER_BYTES + PALETTE_BYTES + CONF.MAX_TILES * TILE_BYTES;
 
-    palettes: [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPalettes(),
+    palette_banks: [PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaultPaletteBanks(),
     tiles: [CONF.MAX_TILES]Tile = [_]Tile{.{}} ** CONF.MAX_TILES,
     tile_count: u16 = 1,
     selected_tile: u16 = 0,
@@ -36,6 +39,7 @@ pub const Project = struct {
     left_color: u8 = 1,
     right_color: u8 = 0,
     visible_slots: [9]u16 = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8 },
+    mode: ProjectMode = .tiles,
     dirty: bool = false,
 
     pub fn init() Project {
@@ -51,14 +55,30 @@ pub const Project = struct {
         return project;
     }
 
+    pub fn setMode(self: *Project, mode: ProjectMode) void {
+        if (self.mode == mode) return;
+        self.mode = mode;
+        self.selected_palette = @min(self.selected_palette, CONF.PALETTE_COUNT - 1);
+        self.selected_color = @min(self.selected_color, CONF.COLORS_PER_PALETTE - 1);
+        self.dirty = true;
+    }
+
+    pub fn isSpriteMode(self: *const Project) bool {
+        return self.mode == .sprites;
+    }
+
+    pub fn isTransparentColor(self: *const Project, color_id: u8) bool {
+        return self.isSpriteMode() and color_id == 0;
+    }
+
     pub fn activePalette(self: *const Project) [CONF.COLORS_PER_PALETTE]PaletteColor {
-        return self.palettes[self.selected_palette];
+        return self.palette_banks[self.modeIndex()][self.selected_palette];
     }
 
     pub fn color32(self: *const Project, palette_id: u8, color_id: u8) u32 {
         const safe_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
         const safe_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
-        const rgb = self.palettes[safe_palette][safe_color];
+        const rgb = self.palette_banks[self.modeIndex()][safe_palette][safe_color];
         return rgbToU32(rgb);
     }
 
@@ -67,7 +87,7 @@ pub const Project = struct {
     }
 
     pub fn selectedRgb(self: *const Project) PaletteColor {
-        return self.palettes[self.selected_palette][self.selected_color];
+        return self.palette_banks[self.modeIndex()][self.selected_palette][self.selected_color];
     }
 
     pub fn nonEmptyTiles(self: *const Project) u16 {
@@ -112,9 +132,7 @@ pub const Project = struct {
         const sy: i32 = if (y0 < y1) 1 else -1;
         var err = dx + dy;
         while (true) {
-            if (x0 >= 0 and x0 < CONF.TILE_SIDE and y0 >= 0 and y0 < CONF.TILE_SIDE) {
-                self.paintPixel(@intCast(x0), @intCast(y0), color);
-            }
+            if (x0 >= 0 and x0 < CONF.TILE_SIDE and y0 >= 0 and y0 < CONF.TILE_SIDE) self.paintPixel(@intCast(x0), @intCast(y0), color);
             if (x0 == x1 and y0 == y1) break;
             const e2 = 2 * err;
             if (e2 >= dy) {
@@ -187,7 +205,7 @@ pub const Project = struct {
     }
 
     pub fn adjustSelectedRgb(self: *Project, channel: ColorChannel, delta: i16) void {
-        const color = &self.palettes[self.selected_palette][self.selected_color];
+        const color = &self.palette_banks[self.modeIndex()][self.selected_palette][self.selected_color];
         const channel_index: usize = switch (channel) {
             .r => 0,
             .g => 1,
@@ -210,15 +228,23 @@ pub const Project = struct {
         if (data[4] != VERSION) return error.InvalidProject;
         if (data[5] != CONF.PALETTE_COUNT) return error.InvalidProject;
         const loaded_tiles = std.mem.readInt(u16, data[6..8], .little);
+        const loaded_mode: ProjectMode = switch (data[8]) {
+            0 => .tiles,
+            1 => .sprites,
+            else => return error.InvalidProject,
+        };
         if (loaded_tiles == 0 or loaded_tiles > CONF.MAX_TILES) return error.InvalidProject;
         const expected = HEADER_BYTES + PALETTE_BYTES + @as(usize, loaded_tiles) * TILE_BYTES;
         if (len < expected) return error.InvalidProject;
 
+        self.mode = loaded_mode;
         var offset: usize = HEADER_BYTES;
-        for (0..CONF.PALETTE_COUNT) |p| {
-            for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
-                self.palettes[p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
-                offset += PALETTE_COLOR_BYTES;
+        for (0..PALETTE_BANK_COUNT) |bank| {
+            for (0..CONF.PALETTE_COUNT) |p| {
+                for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
+                    self.palette_banks[bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
+                    offset += PALETTE_COLOR_BYTES;
+                }
             }
         }
         self.tile_count = loaded_tiles;
@@ -240,10 +266,13 @@ pub const Project = struct {
         header[4] = VERSION;
         header[5] = CONF.PALETTE_COUNT;
         std.mem.writeInt(u16, header[6..8], self.tile_count, .little);
+        header[8] = @intFromEnum(self.mode);
         if (c.fwrite(&header, 1, header.len, file) != header.len) return error.InvalidProject;
-        for (self.palettes) |palette| {
-            for (palette) |color| {
-                if (c.fwrite(&color, 1, color.len, file) != color.len) return error.InvalidProject;
+        for (self.palette_banks) |bank| {
+            for (bank) |palette| {
+                for (palette) |color| {
+                    if (c.fwrite(&color, 1, color.len, file) != color.len) return error.InvalidProject;
+                }
             }
         }
         var tile_buf: [TILE_BYTES]u8 = undefined;
@@ -254,6 +283,10 @@ pub const Project = struct {
             if (c.fwrite(&tile_buf, 1, tile_buf.len, file) != tile_buf.len) return error.InvalidProject;
         }
         self.dirty = false;
+    }
+
+    fn modeIndex(self: *const Project) usize {
+        return @intFromEnum(self.mode);
     }
 
     fn ensureSlotBounds(self: *Project) void {
@@ -274,7 +307,16 @@ fn flood(pixels: *[CONF.TILE_SIDE * CONF.TILE_SIDE]u8, x: u8, y: u8, old: u8, ne
     if (y + 1 < CONF.TILE_SIDE) flood(pixels, x, y + 1, old, new);
 }
 
-fn defaultPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+fn defaultPaletteBanks() [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+    const tile_palettes = defaultTilePalettes();
+    var sprite_palettes = tile_palettes;
+    for (0..CONF.PALETTE_COUNT) |p| {
+        sprite_palettes[p][0] = .{ 0, 0, 0 };
+    }
+    return .{ tile_palettes, sprite_palettes };
+}
+
+fn defaultTilePalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
     return .{
         .{ .{ 218, 212, 94 }, .{ 210, 125, 44 }, .{ 117, 113, 97 }, .{ 222, 238, 214 } },
         .{ .{ 218, 212, 94 }, .{ 210, 125, 44 }, .{ 89, 125, 206 }, .{ 48, 52, 109 } },

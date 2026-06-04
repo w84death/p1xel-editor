@@ -44,27 +44,11 @@ const EditorTheme = struct {
 };
 
 const SpriteAssets = struct {
-    logo_sheet: ?*SpriteSheet = null,
     icon_sheet: ?*SpriteSheet = null,
-    logo: ?Sprite = null,
     icon: ?Sprite = null,
 
     fn load(allocator: std.mem.Allocator) SpriteAssets {
         var assets = SpriteAssets{};
-        if (SpriteSheet.load(allocator, .{
-            .name = "logo.bmp",
-            .source = @embedFile("sprites/logo.bmp"),
-            .tile_w = 100,
-            .tile_h = 26,
-        })) |sheet| {
-            assets.logo_sheet = sheet;
-            var sprite = Sprite.init(sheet, 0.14);
-            sprite.set_animation(0, @min(@as(usize, 3), sheet.frame_count()), 0.14, true) catch {};
-            assets.logo = sprite;
-        } else |err| {
-            std.log.err("failed to load logo sprite: {s}", .{@errorName(err)});
-        }
-
         if (SpriteSheet.load(allocator, .{
             .name = "borowik.bmp",
             .source = @embedFile("sprites/borowik.bmp"),
@@ -82,10 +66,6 @@ const SpriteAssets = struct {
     }
 
     fn deinit(self: *SpriteAssets, allocator: std.mem.Allocator) void {
-        if (self.logo_sheet) |sheet| {
-            sheet.deinit();
-            allocator.destroy(sheet);
-        }
         if (self.icon_sheet) |sheet| {
             sheet.deinit();
             allocator.destroy(sheet);
@@ -93,7 +73,6 @@ const SpriteAssets = struct {
     }
 
     fn update(self: *SpriteAssets, dt: f32) void {
-        if (self.logo) |*sprite| sprite.update(dt);
         if (self.icon) |*sprite| sprite.update(dt);
     }
 };

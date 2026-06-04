@@ -83,6 +83,7 @@ pub const MainEditor = struct {
     info_color: u32 = UI.muted,
     ui_cache_dirty: bool = true,
     cached_canvas_revision: u64 = std.math.maxInt(u64),
+    copied_color: ?[3]u8 = null,
 
     pub fn draw(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
         self.handleCanvas(fui, project, mouse);
@@ -455,6 +456,29 @@ fn drawColorEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mo
     drawChannelEditor(fui, renderer, project, mouse, .r, "R", rgb[0], x, y + 52, UI.danger, editor);
     drawChannelEditor(fui, renderer, project, mouse, .g, "G", rgb[1], x, y + 82, UI.accent, editor);
     drawChannelEditor(fui, renderer, project, mouse, .b, "B", rgb[2], x, y + 112, UI.blue, editor);
+
+    if (pillButton(fui, renderer, mouse, x, y + 148, 82, 32, "COPY", false)) {
+        editor.copied_color = rgb;
+        editor.setInfo("Color copied", UI.accent);
+    }
+    if (pillButton(fui, renderer, mouse, x + 96, y + 148, 82, 32, "PASTE", editor.copied_color != null)) {
+        if (editor.copied_color) |copied| {
+            pasteSelectedRgb(project, copied);
+            editor.setInfo("Color pasted", UI.accent);
+        } else {
+            editor.setInfo("No copied color", UI.danger);
+        }
+    }
+}
+
+fn pasteSelectedRgb(project: *Project, rgb: [3]u8) void {
+    const current = selectedRgb(project);
+    const r_delta = @as(i16, @intCast(rgb[0])) - @as(i16, @intCast(current[0]));
+    const g_delta = @as(i16, @intCast(rgb[1])) - @as(i16, @intCast(current[1]));
+    const b_delta = @as(i16, @intCast(rgb[2])) - @as(i16, @intCast(current[2]));
+    if (r_delta != 0) project.adjustSelectedRgb(.r, r_delta);
+    if (g_delta != 0) project.adjustSelectedRgb(.g, g_delta);
+    if (b_delta != 0) project.adjustSelectedRgb(.b, b_delta);
 }
 
 fn drawChannelEditor(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, channel: ColorChannel, label: [:0]const u8, value: u8, x: i32, y: i32, color: u32, editor: *MainEditor) void {

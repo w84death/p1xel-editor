@@ -188,10 +188,11 @@ fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, editor: *Main
 }
 
 fn drawGlobalOverlay(fui: *Fui, renderer: *Render, assets: *SpriteAssets) void {
-    const icon_x = fui.pivotX(.bottom_right) - 32;
-    const icon_y = fui.pivotY(.bottom_right) - 32;
+    const save_button_x: i32 = CONF.SCREEN_W - 14 - 192;
+    const icon_x = save_button_x - 44;
+    const icon_y: i32 = 50;
     if (assets.icon) |*icon| icon.draw(renderer, icon_x, icon_y);
-    renderer.draw_perf_overlay_at(fui, EditorTheme, icon_x - 116, icon_y - 4);
+    renderer.draw_fps_overlay_at(fui, EditorTheme, icon_x - 76, icon_y + 12);
 }
 
 fn drawCenteredText(fui: *Fui, renderer: *Render, text: []const u8, center_x: i32, y: i32, scale: i32, color: u32) void {

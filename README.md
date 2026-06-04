@@ -12,12 +12,13 @@ It is designed around a classic indexed-colour workflow: artwork is stored as ti
 
 - 8×8 tile editor with pixel, fill, and line tools.
 - Separate **Tiles** and **Sprites** banks.
-- Indexed-colour editing with 8 palettes and 4 colours per palette.
-- Per-tile palette assignment.
+- Indexed-colour editing with 4 biome palette banks.
+- Each biome palette bank contains 8 palettes with 4 colours each.
+- Per-tile palette assignment within the active biome palette bank.
 - Tile/sprite library with add, duplicate, delete, paging, and visible-slot selection.
-- Map editor with background tile stamping, fill, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
+- Map editor with 4 independent map banks, background tile stamping, fill, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
 - Persistent project storage in `art_data.p1x`.
-- Built-in default project/palette data when no project file exists.
+- Built-in default project data with a shared base tileset and imported biome palette sets.
 
 ## Project limits
 
@@ -64,9 +65,20 @@ Indexed colour is useful for retro/game-art workflows because it lets you:
 - Keep art compatible with constrained hardware-style formats.
 - Separate shape/detail editing from colour-theme editing.
 
-## Palettes
+## Palettes and biome banks
 
-The editor supports **4 palette banks**. Each palette bank contains **8 palettes**, and each palette contains **4 colour slots**.
+The editor supports **4 palette banks** intended as biome banks. Each bank contains **8 palettes**, and each palette contains **4 colour slots**.
+
+The important idea is that the **tileset is shared**, but the palette bank can change. This lets the game reuse the same tile IDs and pixel-index data while swapping the active biome palette before loading a different map/sprite set.
+
+Current default setup:
+
+| Bank | Purpose |
+| ---: | --- |
+| `1` | Grassland palette set. |
+| `2` | Desert palette set imported from `docs/desert_tileset.png`. |
+| `3` | Extra grassland-style palette bank, available for another biome/variant. |
+| `4` | Extra desert-style palette bank, available for another biome/variant. |
 
 In the tile/sprite editor, the right panel contains:
 
@@ -85,7 +97,9 @@ The active left/right colours are shown with `L`, `R`, or `LR` markers.
 
 ### Editing RGB values
 
-In **Edit Colour**, choose a palette colour and then adjust its RGB channels. Because the artwork is indexed, changing a palette colour updates all visible pixels that reference that palette slot.
+In **Edit Colour**, choose a palette colour and then adjust its RGB channels. Because the artwork is indexed, changing a palette colour updates all visible pixels that reference that palette slot in the **active palette bank**.
+
+Palette changes are bank-local. Editing bank `2`, palette `3`, colour `1` does not change bank `1`, palette `3`, colour `1`.
 
 ### Transparency in sprite mode
 
@@ -189,7 +203,16 @@ The grid displays up to `16×8` images per page. Image IDs are shown in hexadeci
 
 ## Map Editor
 
-The map editor lets you build maps from the shared tileset base and place sprite instances on top. There are four map banks; switching map bank also switches to the matching palette bank, so each biome map has its own dedicated palette set.
+The map editor lets you build maps from the shared tileset base and place sprite instances on top.
+
+There are **4 map banks**. Switching map bank also switches to the matching palette bank, so each biome map has its own dedicated palette set while still using the same shared tile IDs.
+
+| Map bank | Automatically uses palette bank |
+| ---: | ---: |
+| `1` | `1` |
+| `2` | `2` |
+| `3` | `3` |
+| `4` | `4` |
 
 ### Top bar
 
@@ -246,6 +269,8 @@ The canvas header displays the current map size.
 
 Selects one of four maps. Map bank `1` uses palette bank `1`, map bank `2` uses palette bank `2`, and so on.
 
+This mirrors the intended game workflow: switch palette bank, then load/use the matching map bank.
+
 #### Map Size
 
 Available sizes:
@@ -277,6 +302,7 @@ art_data.p1x
 The project file stores:
 
 - Four biome palette banks.
+- Active palette bank and active map bank.
 - Tile bank state and images.
 - Sprite bank state and images.
 - Visible quick-access slots.
@@ -286,6 +312,15 @@ The project file stores:
 - Placed sprite instances and their attributes for each map bank.
 
 If `art_data.p1x` does not exist or cannot be loaded, the editor starts from its built-in default project data. The current default tile bank contains the embedded grassland base tiles plus tiles imported from `docs/desert_tileset.png`.
+
+### Project format migration
+
+The current project format supports four palette banks and four map banks. Older project files are migrated on load:
+
+- Existing tile/sprite data is preserved.
+- Existing map data is loaded into map bank `1`.
+- Desert biome tiles are appended to the shared tile base when needed.
+- Saving writes the new project format back to `art_data.p1x`.
 
 ## Source images and docs assets
 
@@ -297,6 +332,14 @@ The repository includes example/reference art in `docs/`:
 - `docs/screenshot-map.png`
 
 These are useful as visual references and for testing palette/tile workflows. The built-in grassland data and imported desert data are stored as internal indexed tiles and extracted palettes in `src/editor/project.zig`.
+
+The default internal tile base is therefore a combined tileset:
+
+```text
+[ embedded grassland tiles ][ imported desert tiles ]
+```
+
+All four map banks reference this one shared tile base.
 
 ## Building
 
@@ -356,17 +399,19 @@ Important files:
 
 ## Workflow tips
 
-1. Start in **TILES** and draw reusable 8×8 background tiles.
-2. Use palette banks for biome swaps: the same shared tileset can be displayed with different palette sets.
-3. Switch to **SPRITES** for transparent sprite artwork. Remember colour index `0` is transparent in sprite mode.
-4. Use the visible nine-slot tile map for quick access. RMB on a slot opens the library to swap it.
-5. Open **MAP EDITOR** to stamp tiles, fill regions, and place sprites.
-6. Switch map banks to edit each biome map; the matching palette bank is selected automatically.
-7. Save regularly; the editor writes to `art_data.p1x`.
+1. Start in **TILES** and draw or refine reusable 8×8 background tiles.
+2. Use **Palette Bank** in the tile editor to preview/edit a biome palette set.
+3. Use palette banks for biome swaps: the same shared tileset can be displayed with different palette sets.
+4. Switch to **SPRITES** for transparent sprite artwork. Remember colour index `0` is transparent in sprite mode.
+5. Use the visible nine-slot tile map for quick access. RMB on a slot opens the library to swap it.
+6. Open **MAP EDITOR** to stamp tiles, fill regions, and place sprites.
+7. Switch map banks to edit each biome map; the matching palette bank is selected automatically.
+8. In-game, mirror this workflow by selecting the palette bank before loading/rendering the related map/sprites.
+9. Save regularly; the editor writes to `art_data.p1x`.
 
 ## Current limitations
 
 - Export UI exists, but export is not implemented yet.
 - Art is constrained to 8×8 indexed images.
-- Each image can reference one 4-colour palette.
+- Each image can reference one 4-colour palette ID; the displayed colours come from the active palette bank.
 - The built-in map size presets are fixed.

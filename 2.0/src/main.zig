@@ -158,7 +158,7 @@ pub fn main() !void {
         if (sm.current == .quit) break;
 
         renderer.perf_begin_draw();
-        drawGlobalOverlay(&fui, &renderer, &assets);
+        if (sm.current != .splash) drawGlobalOverlay(&fui, &renderer, &assets);
         renderer.perf_begin_present();
         renderer.present();
         renderer.perf_end_present();
@@ -173,7 +173,6 @@ fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, mouse: Mouse,
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
     renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, 0x111111);
-    if (assets.logo) |*logo| logo.draw(renderer, cx - 50, cy - 128);
     drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, 0xFFFFFF);
     drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, 0xAAAAAA);
     drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, 0xDAD45E);

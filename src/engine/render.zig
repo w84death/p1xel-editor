@@ -73,7 +73,9 @@ pub const Render = struct {
         @memset(frame_buf, 0);
         @memset(terrain_buf, 0);
 
-        std.debug.print("[init] renderer initilized\n", .{});
+        std.debug.print("[init] Welcome to Borowik Engine {s}\n", .{CONF.VERSION});
+        std.debug.print("[init] by Krzysztof Krystian Jankowski - github.com/w84death/borowik-engine\n", .{});
+        std.debug.print("[init] renderer initialized\n", .{});
 
         return .{
             .window_buf = buf,

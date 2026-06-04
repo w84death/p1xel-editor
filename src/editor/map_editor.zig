@@ -61,33 +61,42 @@ pub const MapEditor = struct {
     pan_y: i32 = 0,
 
     pub fn draw(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
+        const previous_target = renderer.target;
+        renderer.set_target(.frame);
+        defer renderer.set_target(previous_target);
+
         renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, UI.bg);
-        self.drawTopBar(fui, renderer, project, mouse, sm);
+        self.drawTopBar(fui, renderer, project, main_editor, mouse, sm);
         self.drawLeftPanel(fui, renderer, project, main_editor, mouse, sm);
         self.drawRightPanel(fui, renderer, project, mouse);
         self.handleCanvas(project, mouse);
         self.drawCanvas(fui, renderer, project, mouse);
     }
 
-    fn drawTopBar(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
+    fn drawTopBar(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
         panel(renderer, UI.side_x, UI.top_y, CONF.SCREEN_W - UI.side_x * 2, UI.top_h);
         drawText(fui, renderer, "MAP EDITOR", 38, 44, 3, UI.text);
 
-        if (button(fui, renderer, mouse, 396, 43, 144, 46, "EDITOR", false)) sm.go_to(.editor);
+        if (button(fui, renderer, mouse, 396, 43, 144, 46, "TILES", false)) {
+            main_editor.ui_cache_dirty = true;
+            sm.go_to(.editor);
+        }
         if (button(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", false)) {
             project.setMode(.sprites);
+            main_editor.ui_cache_dirty = true;
             sm.go_to(.editor);
         }
         _ = button(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", true);
 
-        if (button(fui, renderer, mouse, 1260, 43, 86, 46, "SAVE", project.dirty)) {
+        const tx: i32 = UI.right_x + UI.right_w - 192;
+        if (button(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
             project.save() catch {
                 self.setInfo("Save failed", UI.danger);
                 return;
             };
             self.setInfo("File saved", UI.accent);
         }
-        if (button(fui, renderer, mouse, 1354, 43, 52, 46, "X", false)) sm.go_to(.quit);
+        if (button(fui, renderer, mouse, tx + 98, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
     }
 
     fn drawLeftPanel(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
@@ -103,10 +112,12 @@ pub const MapEditor = struct {
 
         drawText(fui, renderer, "SPRITES", UI.left_x + 16, UI.canvas_y + 348, 2, UI.text);
         self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .sprites, UI.left_x + 36, UI.canvas_y + 376, 50);
+        drawText(fui, renderer, "LMB: SELECT", UI.left_x + 20, UI.canvas_y + 556, 1, UI.muted);
+        drawText(fui, renderer, "RMB: LIBRARY", UI.left_x + 136, UI.canvas_y + 556, 1, UI.muted);
 
         const attr_y = UI.canvas_y + 588;
         drawText(fui, renderer, "SELECTED TILE", UI.left_x + 20, attr_y, 2, UI.text);
-        self.drawAttrEditor(fui, renderer, project, mouse, attr_y + 36);
+        self.drawAttrEditor(fui, renderer, mouse, attr_y + 36);
         drawText(fui, renderer, self.info_text, UI.left_x + 20, UI.canvas_y + UI.canvas_h - 30, 1, self.info_color);
     }
 
@@ -195,29 +206,38 @@ pub const MapEditor = struct {
         }
     }
 
-    fn drawAttrEditor(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, y: i32) void {
+    fn drawAttrEditor(self: *MapEditor, fui: anytype, renderer: *Render, mouse: Mouse, y: i32) void {
+        const editing_sprite = self.tool == .sprite_stamp;
+        const active_attr = if (editing_sprite) self.sprite_attr else self.bg_attr;
+
         drawText(fui, renderer, "PALETTE", UI.left_x + 20, y, 1, UI.muted);
         for (0..8) |p| {
             const x = UI.left_x + 20 + @as(i32, @intCast(p)) * 30;
             var label_buf: [2]u8 = undefined;
             const label = std.fmt.bufPrint(&label_buf, "{d}", .{p}) catch "?";
-            if (button(fui, renderer, mouse, x, y + 22, 28, 28, label, self.bg_attr.palette == p)) {
-                self.bg_attr.palette = @intCast(p);
-                self.sprite_attr.palette = @intCast(p);
-                self.applySelectedCellAttr(project);
+            if (button(fui, renderer, mouse, x, y + 22, 28, 28, label, active_attr.palette == p)) {
+                if (editing_sprite) {
+                    self.sprite_attr.palette = @intCast(p);
+                } else {
+                    self.bg_attr.palette = @intCast(p);
+                }
                 self.setInfo("Palette assigned", UI.accent);
             }
         }
-        if (button(fui, renderer, mouse, UI.left_x + 20, y + 64, 112, 36, "H FLIP", self.bg_attr.hflip)) {
-            self.bg_attr.hflip = !self.bg_attr.hflip;
-            self.sprite_attr.hflip = self.bg_attr.hflip;
-            self.applySelectedCellAttr(project);
+        if (button(fui, renderer, mouse, UI.left_x + 20, y + 64, 112, 36, "H FLIP", active_attr.hflip)) {
+            if (editing_sprite) {
+                self.sprite_attr.hflip = !self.sprite_attr.hflip;
+            } else {
+                self.bg_attr.hflip = !self.bg_attr.hflip;
+            }
             self.setInfo("Horizontal flip toggled", UI.accent);
         }
-        if (button(fui, renderer, mouse, UI.left_x + 142, y + 64, 112, 36, "V FLIP", self.bg_attr.vflip)) {
-            self.bg_attr.vflip = !self.bg_attr.vflip;
-            self.sprite_attr.vflip = self.bg_attr.vflip;
-            self.applySelectedCellAttr(project);
+        if (button(fui, renderer, mouse, UI.left_x + 142, y + 64, 112, 36, "V FLIP", active_attr.vflip)) {
+            if (editing_sprite) {
+                self.sprite_attr.vflip = !self.sprite_attr.vflip;
+            } else {
+                self.bg_attr.vflip = !self.bg_attr.vflip;
+            }
             self.setInfo("Vertical flip toggled", UI.accent);
         }
     }

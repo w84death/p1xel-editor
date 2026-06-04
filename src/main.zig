@@ -129,6 +129,7 @@ pub fn main() !void {
         }
 
         renderer.perf_begin_draw();
+        const previous_state = sm.current;
         switch (sm.current) {
             .splash => drawSplash(&fui, &renderer, &assets, &editor, mouse, &sm),
             .editor => editor.draw(&fui, &renderer, &project, mouse, &sm),
@@ -137,6 +138,14 @@ pub fn main() !void {
             .quit => break,
         }
         sm.update();
+        if (previous_state != sm.current) {
+            if (previous_state == .map_editor and sm.current != .map_editor) {
+                editor.ui_cache_dirty = true;
+            }
+            if (previous_state != .map_editor and sm.current == .map_editor) {
+                map_editor.cached_map_revision = std.math.maxInt(u64);
+            }
+        }
         if (sm.current == .quit) break;
 
         if (sm.current != .splash) drawGlobalOverlay(&fui, &renderer, &assets);

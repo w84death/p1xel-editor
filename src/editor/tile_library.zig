@@ -9,6 +9,7 @@ const views = @import("views.zig");
 const UI = struct {
     const bg = 0x121619;
     const panel = 0x1B2026;
+    const panel_dark = 0x14191E;
     const panel_hi = 0x2B323A;
     const border = 0x3B434C;
     const border_dark = 0x090B0D;
@@ -21,12 +22,13 @@ const UI = struct {
     const side_x: i32 = 14;
     const top_y: i32 = 24;
     const top_h: i32 = 82;
-    const left_x: i32 = 30;
-    const left_w: i32 = 246;
-    const grid_x: i32 = 290;
-    const grid_y: i32 = 124;
-    const grid_w: i32 = CONF.SCREEN_W - grid_x - 24;
-    const grid_h: i32 = 656;
+    const gap: i32 = 10;
+    const left_x: i32 = side_x;
+    const left_w: i32 = 276;
+    const grid_x: i32 = left_x + left_w + gap;
+    const grid_y: i32 = 110;
+    const grid_w: i32 = CONF.SCREEN_W - grid_x - side_x;
+    const grid_h: i32 = 670;
     const bottom_y: i32 = 802;
 };
 
@@ -222,21 +224,19 @@ fn drawLeftInfo(fui: anytype, renderer: *Render, project: *const Project) void {
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
-    renderer.draw_rect(x + 3, y + 3, w, h, 0x07090B);
+    renderer.draw_rect(x + 3, y + 3, w, h, UI.border_dark);
     renderer.draw_rect(x, y, w, h, UI.panel);
-    renderer.draw_rect_lines(x, y, w, h, UI.border_dark);
-    renderer.draw_rect_lines(x + 1, y + 1, w - 2, h - 2, UI.border);
+    renderer.draw_rect_lines(x, y, w, h, UI.border);
 }
 
 fn button(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
     const over = views.hover(mouse, x, y, w, h);
-    const bg: u32 = if (active) UI.danger else if (over) lighten(UI.panel_hi) else UI.panel_hi;
-    renderer.draw_rect(x + 2, y + 2, w, h, 0x07090B);
+    const bg: u32 = if (active) UI.danger else if (over) UI.panel_hi else UI.panel_dark;
+    renderer.draw_rect(x + 2, y + 2, w, h, 0x050607);
     renderer.draw_rect(x, y, w, h, bg);
-    renderer.draw_rect_lines(x, y, w, h, if (active) UI.danger else UI.border_dark);
-    renderer.draw_rect_lines(x + 1, y + 1, w - 2, h - 2, if (active) 0xFF8080 else UI.border);
+    renderer.draw_rect_lines(x, y, w, h, if (active) UI.danger else UI.border);
     const tw = fui.text_length(label, 1);
-    drawText(fui, renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, UI.text);
+    drawText(fui, renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, if (active) UI.text else UI.muted);
     return over and mouse.just_pressed;
 }
 

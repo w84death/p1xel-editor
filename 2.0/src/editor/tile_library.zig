@@ -165,6 +165,7 @@ pub const TileLibrary = struct {
             editor.library_request = null;
         }
         if (!had_request) project.selectTile(tile_id);
+        editor.suppress_canvas_paint_until_mouse_up = true;
         views.saveIfDirty(project);
         sm.go_to(.editor);
     }

@@ -173,11 +173,18 @@ fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, mouse: Mouse,
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
     renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, 0x111111);
-    if (assets.logo) |*logo| logo.draw(renderer, cx - 50, cy - 96);
-    if (assets.icon) |*icon| icon.draw(renderer, cx - 16, cy - 34);
-    drawCenteredText(fui, renderer, "P1xel Editor", cx, cy + 28, 3, 0xFFFFFF);
-    drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 66, 2, 0xDAD45E);
-    drawCenteredText(fui, renderer, "Click anywhere to start", cx, cy + 108, 2, 0xAAAAAA);
+    if (assets.logo) |*logo| logo.draw(renderer, cx - 50, cy - 128);
+    drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, 0xFFFFFF);
+    drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, 0xAAAAAA);
+    drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, 0xDAD45E);
+    drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 82, 3, 0x7EDB1E);
+
+    if (@mod(@divFloor(renderer.now, 500), 2) == 0) {
+        drawCenteredText(fui, renderer, "click to start", cx, CONF.SCREEN_H - 92, 1, 0xAAAAAA);
+    }
+
+    drawCenteredText(fui, renderer, "Powered by Borowik Engine", cx, CONF.SCREEN_H - 58, 1, 0xDAD45E);
+    if (assets.icon) |*icon| icon.draw(renderer, cx - 16, CONF.SCREEN_H - 42);
 
     if (mouse.just_pressed or mouse.just_right_pressed) sm.go_to(.editor);
 }

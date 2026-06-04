@@ -76,6 +76,7 @@ pub const MainEditor = struct {
     library_request: ?LibraryRequest = null,
     save_error: bool = false,
     export_notice: bool = false,
+    suppress_canvas_paint_until_mouse_up: bool = false,
     info_text: []const u8 = "Ready",
     info_color: u32 = UI.muted,
     ui_cache_dirty: bool = true,
@@ -97,6 +98,10 @@ pub const MainEditor = struct {
     }
 
     fn handleCanvas(self: *MainEditor, fui: anytype, project: *Project, mouse: Mouse) void {
+        if (self.suppress_canvas_paint_until_mouse_up) {
+            if (!mouse.left_down and !mouse.right_down) self.suppress_canvas_paint_until_mouse_up = false;
+            return;
+        }
         const cell = canvasCell(fui, mouse.x, mouse.y) orelse return;
         const paint_color = if (mouse.right_down) project.rightColor() else project.leftColor();
         if (mouse.left_down or mouse.right_down) {
@@ -122,7 +127,7 @@ pub const MainEditor = struct {
         if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
         if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) {}
 
-        const tx: i32 = UI.rightX() + UI.right_w - 184;
+        const tx: i32 = UI.rightX() + UI.right_w - 192;
         if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
             project.save() catch {
                 self.setInfo("Save failed", UI.danger);
@@ -183,9 +188,6 @@ pub const MainEditor = struct {
     fn drawRightPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
         drawPalettes(fui, renderer, project, mouse, UI.rightX() + 72, 162, self);
         drawColorEditor(fui, renderer, project, mouse, UI.rightX() + 22, 596, self);
-        drawPixelText(fui, renderer, "Tiles: 384", UI.rightX() + 20, 854, 1, UI.text);
-        drawPixelText(fui, renderer, "Size: 8x8", UI.rightX() + 20, 874, 1, UI.text);
-        drawPixelText(fui, renderer, "Colors: 4   Mode: GBC", UI.rightX() + 120, 854, 1, UI.text);
     }
 
     fn setInfo(self: *MainEditor, text: []const u8, color: u32) void {
@@ -213,7 +215,6 @@ fn drawStaticPanelFrames(fui: anytype, renderer: *Render) void {
 
     sectionPanel(renderer, UI.rightX(), 110, UI.right_w, 430, "PALETTE BROWSER", fui);
     sectionPanel(renderer, UI.rightX(), 544, UI.right_w, 256, "EDITED COLOURS", fui);
-    sectionPanel(renderer, UI.rightX(), 806, UI.right_w, 106, "INFO", fui);
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
@@ -317,9 +318,9 @@ fn drawCurrentPalette(fui: anytype, renderer: *Render, project: *Project, mouse:
     const left_x = x + @as(i32, @intCast(project.leftColor())) * 48;
     const right_x = x + @as(i32, @intCast(project.rightColor())) * 48;
     if (project.leftColor() == project.rightColor()) {
-        _ = pillButton(fui, renderer, mouse, left_x, y + 52, 44, 24, "LR", true);
+        _ = pillButton(fui, renderer, mouse, left_x, y + 52, 44, 24, "LR", false);
     } else {
-        _ = pillButton(fui, renderer, mouse, left_x, y + 52, 44, 24, "L", true);
+        _ = pillButton(fui, renderer, mouse, left_x, y + 52, 44, 24, "L", false);
         _ = pillButton(fui, renderer, mouse, right_x, y + 52, 44, 24, "R", false);
     }
 }

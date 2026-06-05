@@ -856,16 +856,7 @@ pub const Project = struct {
     }
 
     fn ensureDefaultBiomeTiles(self: *Project) void {
-        var bank = &self.image_banks[@intFromEnum(ProjectMode.tiles)];
-        if (bank.count > DEFAULT_GRASSLAND_TILE_COUNT) return;
-        if (DEFAULT_TILESET_TILE_COUNT > CONF.MAX_TILES) return;
-        bank.count = DEFAULT_TILESET_TILE_COUNT;
-        for (0..DEFAULT_DESERT_PIXELS.len) |i| {
-            const tile_index = DEFAULT_TILESET_PIXELS.len + i;
-            bank.images[tile_index].palette_id = DEFAULT_DESERT_PALETTE_IDS[i];
-            bank.images[tile_index].pixels = DEFAULT_DESERT_PIXELS[i];
-        }
-        bank.ensureSlotBounds();
+        _ = self;
     }
 
     fn applyDefaultTileset(self: *Project) void {
@@ -875,23 +866,13 @@ pub const Project = struct {
 
         var bank = &self.image_banks[@intFromEnum(ProjectMode.tiles)];
         bank.images = [_]Image{.{}} ** CONF.MAX_TILES;
-        bank.count = DEFAULT_TILESET_TILE_COUNT;
-        bank.selected = if (DEFAULT_TILESET_TILE_COUNT > 1) 1 else 0;
+        bank.count = 1;
+        bank.selected = 0;
+        bank.selected_palette = 0;
         bank.selected_color = 1;
         bank.left_color = 1;
         bank.right_color = 0;
-        bank.visible_slots = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-
-        for (0..DEFAULT_TILESET_PIXELS.len) |i| {
-            bank.images[i].palette_id = DEFAULT_TILESET_PALETTE_IDS[i];
-            bank.images[i].pixels = DEFAULT_TILESET_PIXELS[i];
-        }
-        for (0..DEFAULT_DESERT_PIXELS.len) |i| {
-            const tile_index = DEFAULT_TILESET_PIXELS.len + i;
-            bank.images[tile_index].palette_id = DEFAULT_DESERT_PALETTE_IDS[i];
-            bank.images[tile_index].pixels = DEFAULT_DESERT_PIXELS[i];
-        }
-        bank.selected_palette = bank.images[bank.selected].palette_id;
+        bank.visible_slots = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
         var sprite_bank = &self.image_banks[@intFromEnum(ProjectMode.sprites)];
         sprite_bank.images = [_]Image{.{}} ** CONF.MAX_TILES;
@@ -1042,7 +1023,17 @@ const DEFAULT_DESERT_PIXELS = [_][CONF.TILE_SIDE * CONF.TILE_SIDE]u8{
 };
 
 fn defaultPaletteBanks() [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
-    return .{ defaultGrasslandPalettes(), defaultDesertPalettes(), defaultGrasslandPalettes(), defaultDesertPalettes() };
+    return [_][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor{defaultClearPalettes()} ** Project.PALETTE_BANK_COUNT;
+}
+
+fn defaultClearPalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
+    const grayscale = [CONF.COLORS_PER_PALETTE]PaletteColor{
+        .{ 0, 0, 0 },
+        .{ 85, 85, 85 },
+        .{ 170, 170, 170 },
+        .{ 255, 255, 255 },
+    };
+    return [_][CONF.COLORS_PER_PALETTE]PaletteColor{grayscale} ** CONF.PALETTE_COUNT;
 }
 
 fn defaultPaletteSets() [Project.IMAGE_BANK_COUNT][Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
@@ -1056,7 +1047,7 @@ fn duplicatePaletteSets(shared: [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT]
 }
 
 fn defaultTilePalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
-    return defaultGrasslandPalettes();
+    return defaultClearPalettes();
 }
 fn readU16(bytes: []const u8) u16 {
     return @as(u16, bytes[0]) | (@as(u16, bytes[1]) << 8);

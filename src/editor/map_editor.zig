@@ -9,20 +9,18 @@ const MapTileAttr = project_mod.MapTileAttr;
 const MainEditor = @import("main_editor.zig").MainEditor;
 const exporter = @import("exporter.zig");
 const views = @import("views.zig");
+const editor_ui = @import("ui.zig");
 
 const UI = struct {
-    const bg = 0x121619;
-    const panel = 0x1B2026;
-    const panel_dark = 0x14191E;
-    const panel_hi = 0x2B323A;
-    const border = 0x3B434C;
-    const border_dark = 0x090B0D;
-    const text = 0xF0F0F0;
-    const muted = 0xB7BBC0;
-    const accent = 0x7EDB1E;
-    const accent_dark = 0x486E10;
-    const danger = 0xFF4040;
-    const warn = 0xDAD45E;
+    const bg = editor_ui.Theme.bg;
+    const panel_hi = editor_ui.Theme.panel_hi;
+    const border_dark = editor_ui.Theme.border_dark;
+    const text = editor_ui.Theme.text;
+    const muted = editor_ui.Theme.muted;
+    const accent = editor_ui.Theme.accent;
+    const accent_dark = editor_ui.Theme.accent_dark;
+    const danger = editor_ui.Theme.danger;
+    const warn = editor_ui.Theme.warn;
 
     const side_x: i32 = 14;
     const top_y: i32 = 24;
@@ -92,29 +90,28 @@ pub const MapEditor = struct {
     }
 
     fn drawTopBar(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
-        panel(renderer, UI.side_x, UI.top_y, CONF.SCREEN_W - UI.side_x * 2, UI.top_h);
-        drawText(fui, renderer, "MAP EDITOR", 38, 44, 3, UI.text);
-
-        if (button(fui, renderer, mouse, 396, 43, 144, 46, "TILES", false)) {
-            main_editor.ui_cache_dirty = true;
-            sm.go_to(.editor);
+        const action = editor_ui.drawTopBar(fui, renderer, mouse, CONF.THE_NAME, .map_editor, project.dirty, UI.right_x) orelse return;
+        switch (action) {
+            .tiles => {
+                project.setMode(.tiles);
+                main_editor.ui_cache_dirty = true;
+                sm.go_to(.editor);
+            },
+            .sprites => {
+                project.setMode(.sprites);
+                main_editor.ui_cache_dirty = true;
+                sm.go_to(.editor);
+            },
+            .map_editor => {},
+            .save => {
+                project.save() catch {
+                    self.setInfo("Save failed", UI.danger);
+                    return;
+                };
+                self.setInfo("File saved", UI.accent);
+            },
+            .quit => sm.go_to(.quit),
         }
-        if (button(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", false)) {
-            project.setMode(.sprites);
-            main_editor.ui_cache_dirty = true;
-            sm.go_to(.editor);
-        }
-        _ = button(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", true);
-
-        const tx: i32 = UI.right_x + UI.right_w - 192;
-        if (button(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
-            project.save() catch {
-                self.setInfo("Save failed", UI.danger);
-                return;
-            };
-            self.setInfo("File saved", UI.accent);
-        }
-        if (button(fui, renderer, mouse, tx + 98, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
     }
 
     fn drawLeftPanel(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
@@ -450,12 +447,6 @@ pub const MapEditor = struct {
         return .{ @intCast(@divFloor(mx - origin[0], cell_px)), @intCast(@divFloor(my - origin[1], cell_px)) };
     }
 
-    fn applySelectedCellAttr(self: *MapEditor, project: *Project) void {
-        if (self.selected_cell) |cell| {
-            _ = project.paintMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
-        }
-    }
-
     fn setInfo(self: *MapEditor, text: []const u8, color: u32) void {
         self.info_text = text;
         self.info_color = color;
@@ -503,22 +494,13 @@ fn copyTerrainRectToFrame(renderer: *Render, x: i32, y: i32, w: i32, h: i32, cli
 }
 
 fn button(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: []const u8, active: bool) bool {
-    const hovered = views.hover(mouse, x, y, w, h);
-    const bg: u32 = if (active) UI.accent_dark else if (hovered) UI.panel_hi else UI.panel_dark;
-    renderer.draw_rect(x + 2, y + 2, w, h, 0x050607);
-    renderer.draw_rect(x, y, w, h, bg);
-    renderer.draw_rect_lines(x, y, w, h, if (active) UI.accent else UI.border);
-    const tw = fui.text_length(label, 1);
-    drawText(fui, renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, if (active) UI.text else UI.muted);
-    return hovered and mouse.just_pressed;
+    return editor_ui.button(fui, renderer, mouse, x, y, w, h, label, active);
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
-    renderer.draw_rect(x + 3, y + 3, w, h, UI.border_dark);
-    renderer.draw_rect(x, y, w, h, UI.panel);
-    renderer.draw_rect_lines(x, y, w, h, UI.border);
+    editor_ui.panel(renderer, x, y, w, h);
 }
 
 fn drawText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i32, scale: i32, color: u32) void {
-    fui.draw_text(renderer, text, x, y, scale, color);
+    editor_ui.drawText(fui, renderer, text, x, y, scale, color);
 }

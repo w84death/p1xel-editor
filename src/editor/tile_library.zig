@@ -5,19 +5,17 @@ const Mouse = @import("../engine/mouse.zig").Mouse;
 const Project = @import("project.zig").Project;
 const MainEditor = @import("main_editor.zig").MainEditor;
 const views = @import("views.zig");
+const editor_ui = @import("ui.zig");
 
 const UI = struct {
-    const bg = 0x121619;
-    const panel = 0x1B2026;
-    const panel_dark = 0x14191E;
-    const panel_hi = 0x2B323A;
-    const border = 0x3B434C;
-    const border_dark = 0x090B0D;
-    const text = 0xF0F0F0;
-    const muted = 0xB7BBC0;
-    const accent = 0x7EDB1E;
-    const accent_dark = 0x486E10;
-    const danger = 0xFF4040;
+    const bg = editor_ui.Theme.bg;
+    const panel_hi = editor_ui.Theme.panel_hi;
+    const border_dark = editor_ui.Theme.border_dark;
+    const text = editor_ui.Theme.text;
+    const muted = editor_ui.Theme.muted;
+    const accent = editor_ui.Theme.accent;
+    const accent_dark = editor_ui.Theme.accent_dark;
+    const danger = editor_ui.Theme.danger;
 
     const side_x: i32 = 14;
     const top_y: i32 = 24;
@@ -222,29 +220,13 @@ fn drawLeftInfo(fui: anytype, renderer: *Render, project: *const Project) void {
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
-    renderer.draw_rect(x + 3, y + 3, w, h, UI.border_dark);
-    renderer.draw_rect(x, y, w, h, UI.panel);
-    renderer.draw_rect_lines(x, y, w, h, UI.border);
+    editor_ui.panel(renderer, x, y, w, h);
 }
 
 fn button(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
-    const over = views.hover(mouse, x, y, w, h);
-    const bg: u32 = if (active) UI.danger else if (over) UI.panel_hi else UI.panel_dark;
-    renderer.draw_rect(x + 2, y + 2, w, h, 0x050607);
-    renderer.draw_rect(x, y, w, h, bg);
-    renderer.draw_rect_lines(x, y, w, h, if (active) UI.danger else UI.border);
-    const tw = fui.text_length(label, 1);
-    drawText(fui, renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, if (active) UI.text else UI.muted);
-    return over and mouse.just_pressed;
+    return editor_ui.dangerButton(fui, renderer, mouse, x, y, w, h, label, active);
 }
 
 fn drawText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i32, scale: i32, color: u32) void {
-    fui.draw_text(renderer, text, x, y, scale, color);
-}
-
-fn lighten(color: u32) u32 {
-    const r: u32 = @min(255, ((color >> 16) & 0xFF) + 28);
-    const g: u32 = @min(255, ((color >> 8) & 0xFF) + 28);
-    const b: u32 = @min(255, (color & 0xFF) + 28);
-    return (r << 16) | (g << 8) | b;
+    editor_ui.drawText(fui, renderer, text, x, y, scale, color);
 }

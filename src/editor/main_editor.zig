@@ -7,6 +7,7 @@ const Project = @import("project.zig").Project;
 const Tool = @import("project.zig").Tool;
 const ColorChannel = @import("project.zig").ColorChannel;
 const views = @import("views.zig");
+const editor_ui = @import("ui.zig");
 
 pub const State = enum { splash, editor, tile_library, map_editor, quit };
 
@@ -19,18 +20,17 @@ pub const LibraryRequest = struct {
 };
 
 const UI = struct {
-    const bg = 0x121619;
-    const panel = 0x1B2026;
-    const panel_dark = 0x14191E;
-    const panel_hi = 0x2B323A;
-    const border = 0x3B434C;
-    const border_dark = 0x090B0D;
-    const text = 0xF0F0F0;
-    const muted = 0xB7BBC0;
-    const accent = 0x7EDB1E;
-    const accent_dark = 0x486E10;
-    const danger = 0xFF4040;
-    const blue = 0x5EA8FF;
+    const bg = editor_ui.Theme.bg;
+    const panel_dark = editor_ui.Theme.panel_dark;
+    const panel_hi = editor_ui.Theme.panel_hi;
+    const border = editor_ui.Theme.border;
+    const border_dark = editor_ui.Theme.border_dark;
+    const text = editor_ui.Theme.text;
+    const muted = editor_ui.Theme.muted;
+    const accent = editor_ui.Theme.accent;
+    const accent_dark = editor_ui.Theme.accent_dark;
+    const danger = editor_ui.Theme.danger;
+    const blue = editor_ui.Theme.blue;
 
     const top_y: i32 = 24;
     const top_h: i32 = 82;
@@ -41,9 +41,8 @@ const UI = struct {
     const content_y: i32 = 110;
     const side_panel_h: i32 = CONF.SCREEN_H - content_y - 22;
     const draw_mode_y: i32 = content_y + 18;
-    const palette_y: i33 = content_y + 138;
+    const palette_y: i32 = content_y + 138;
     const preview_y: i32 = content_y + 286;
-    const info_y: i32 = content_y + 500;
     const center_info_h: i32 = 136;
 
     fn leftX() i32 {
@@ -130,21 +129,21 @@ pub const MainEditor = struct {
     }
 
     fn drawTopBar(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
-        drawPixelText(fui, renderer, CONF.THE_NAME, 38, 44, 3, UI.text);
-
-        if (tabButton(fui, renderer, mouse, 396, 43, 144, 46, "TILES", project.mode == .tiles)) project.setMode(.tiles);
-        if (tabButton(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", project.mode == .sprites)) project.setMode(.sprites);
-        if (tabButton(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", false)) sm.go_to(.map_editor);
-
-        const tx: i32 = UI.rightX() + UI.right_w - 192;
-        if (pillButton(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", project.dirty)) {
-            project.save() catch {
-                self.setInfo("Save failed", UI.danger);
-                return;
-            };
-            self.setInfo("File saved", UI.accent);
+        const active_tab: editor_ui.TopTab = if (project.mode == .tiles) .tiles else .sprites;
+        const action = editor_ui.drawTopBar(fui, renderer, mouse, CONF.THE_NAME, active_tab, project.dirty, UI.rightX()) orelse return;
+        switch (action) {
+            .tiles => project.setMode(.tiles),
+            .sprites => project.setMode(.sprites),
+            .map_editor => sm.go_to(.map_editor),
+            .save => {
+                project.save() catch {
+                    self.setInfo("Save failed", UI.danger);
+                    return;
+                };
+                self.setInfo("File saved", UI.accent);
+            },
+            .quit => sm.go_to(.quit),
         }
-        if (pillButton(fui, renderer, mouse, tx + 98, 43, 86, 46, "QUIT", false)) sm.go_to(.quit);
     }
 
     fn drawLeftPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
@@ -224,10 +223,7 @@ fn drawStaticPanelFrames(fui: anytype, renderer: *Render) void {
 }
 
 fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
-    if (w <= 0 or h <= 0) return;
-    renderer.draw_rect(x + 3, y + 3, w, h, UI.border_dark);
-    renderer.draw_rect(x, y, w, h, UI.panel);
-    renderer.draw_rect_lines(x, y, w, h, UI.border);
+    editor_ui.panel(renderer, x, y, w, h);
 }
 
 fn sectionPanel(renderer: *Render, x: i32, y: i32, w: i32, h: i32, title: []const u8, fui: anytype) void {
@@ -241,29 +237,11 @@ fn drawInfoPanel(fui: anytype, renderer: *Render, editor: *const MainEditor) voi
 }
 
 fn drawPixelText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i32, scale: i32, color: u32) void {
-    fui.draw_text(renderer, text, x, y, scale, color);
-}
-
-fn tabButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
-    const over = views.hover(mouse, x, y, w, h);
-    const bg: u32 = if (active) UI.accent_dark else if (over) UI.panel_hi else UI.panel_dark;
-    renderer.draw_rect(x + 2, y + 2, w, h, 0x050607);
-    renderer.draw_rect(x, y, w, h, bg);
-    renderer.draw_rect_lines(x, y, w, h, if (active) UI.accent else UI.border);
-    const tw = fui.text_length(label, 1);
-    fui.draw_text(renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, if (active) UI.text else UI.muted);
-    return over and mouse.just_pressed;
+    editor_ui.drawText(fui, renderer, text, x, y, scale, color);
 }
 
 fn pillButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
-    const over = views.hover(mouse, x, y, w, h);
-    const bg: u32 = if (active) UI.accent_dark else if (over) UI.panel_hi else UI.panel_dark;
-    renderer.draw_rect(x + 2, y + 2, w, h, 0x050607);
-    renderer.draw_rect(x, y, w, h, bg);
-    renderer.draw_rect_lines(x, y, w, h, if (active) UI.accent else UI.border);
-    const tw = fui.text_length(label, 1);
-    fui.draw_text(renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, if (active) UI.text else UI.muted);
-    return over and mouse.just_pressed;
+    return editor_ui.button(fui, renderer, mouse, x, y, w, h, label, active);
 }
 
 fn iconButton(renderer: *Render, mouse: Mouse, x: i32, y: i32, label: [:0]const u8, active: bool) bool {
@@ -507,23 +485,4 @@ fn canvasOrigin(fui: anytype) [2]i32 {
 
 fn checker(x: usize, y: usize) u32 {
     return if ((x + y) % 2 == 0) 0xF0F0F0 else 0xFFFFFF;
-}
-
-fn drawNumber(fui: anytype, renderer: *Render, n: anytype, x: i32, y: i32, color: u32) void {
-    var buf: [8]u8 = undefined;
-    const text = std.fmt.bufPrint(&buf, "{d}", .{n}) catch "?";
-    fui.draw_text(renderer, text, x, y, 3, color);
-}
-
-fn drawCount(fui: anytype, renderer: *Render, n: u16, total: u16, x: i32, y: i32) void {
-    var buf: [24]u8 = undefined;
-    const text = std.fmt.bufPrint(&buf, "{d} / {d}", .{ n, total }) catch "?";
-    fui.draw_text(renderer, text, x, y, 3, 0xD5F8A5);
-}
-
-fn lighten(color: u32) u32 {
-    const r: u32 = @min(255, ((color >> 16) & 0xFF) + 28);
-    const g: u32 = @min(255, ((color >> 8) & 0xFF) + 28);
-    const b: u32 = @min(255, (color & 0xFF) + 28);
-    return (r << 16) | (g << 8) | b;
 }

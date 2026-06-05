@@ -8,17 +8,6 @@ pub fn hover(mouse: Mouse, x: i32, y: i32, w: i32, h: i32) bool {
     return mouse.x >= x and mouse.x < x + w and mouse.y >= y and mouse.y < y + h;
 }
 
-pub fn smallButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
-    const bg: u32 = if (active) 0xE8E8E8 else 0x6F6F6F;
-    const fg: u32 = if (active) 0x151515 else 0xEEEEEE;
-    const is_hover = hover(mouse, x, y, w, h);
-    renderer.draw_rect(x, y, w, h, if (is_hover) lighten(bg) else bg);
-    renderer.draw_rect_lines(x, y, w, h, 0x000000);
-    const tw = fui.text_length(label, 1);
-    fui.draw_text(renderer, label, x + @divFloor(w - tw, 2), y + @divFloor(h - CONF.FONT_HEIGHT, 2), 1, fg);
-    return is_hover and mouse.just_pressed;
-}
-
 pub fn drawTile(renderer: *Render, project: *const Project, tile_id: u16, x: i32, y: i32, scale: i32) void {
     if (tile_id >= project.imageCount()) return;
     const tile = project.imageAt(tile_id);
@@ -102,11 +91,4 @@ pub fn saveIfDirty(project: *Project) void {
 
 fn checker(x: usize, y: usize) u32 {
     return if ((x + y) % 2 == 0) 0x2E2E2E else 0x484848;
-}
-
-fn lighten(color: u32) u32 {
-    const r: u32 = @min(255, ((color >> 16) & 0xFF) + 24);
-    const g: u32 = @min(255, ((color >> 8) & 0xFF) + 24);
-    const b: u32 = @min(255, (color & 0xFF) + 24);
-    return (r << 16) | (g << 8) | b;
 }

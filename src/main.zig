@@ -19,6 +19,7 @@ const MainEditor = editor_mod.MainEditor;
 const State = editor_mod.State;
 const TileLibrary = @import("editor/tile_library.zig").TileLibrary;
 const MapEditor = @import("editor/map_editor.zig").MapEditor;
+const views = @import("editor/views.zig");
 
 const EditorTheme = struct {
     pub const PIVOT_PADDING = 4;
@@ -42,6 +43,41 @@ const EditorTheme = struct {
     pub const MENU_YES_COLOR = 0x477A47;
     pub const NO_COLOR = 0x663333;
     pub const MENU_NO_COLOR = 0x884444;
+};
+
+const SplashStyle = struct {
+    const bg = 0x111111;
+    const title = 0xFFFFFF;
+    const muted = 0xAAAAAA;
+    const warn = 0xDAD45E;
+    const accent = 0x7EDB1E;
+    const button_shadow = 0x050505;
+    const button = 0x202020;
+    const button_hover = 0x355A35;
+    const button_border = 0x404040;
+};
+
+const AppState = struct {
+    fui: Fui,
+    mouse_buttons: MouseButtons,
+    sm: StateMachine(State),
+    project: Project,
+    editor: MainEditor,
+    map_editor: MapEditor,
+    library: TileLibrary,
+    esc_lock: bool = false,
+
+    fn init() AppState {
+        return .{
+            .fui = Fui.init(CONF.SCREEN_W, CONF.SCREEN_H),
+            .mouse_buttons = MouseButtons.init(),
+            .sm = StateMachine(State).init(.splash),
+            .project = Project.loadOrDefault(),
+            .editor = .{},
+            .map_editor = .{},
+            .library = .{},
+        };
+    }
 };
 
 const SpriteAssets = struct {
@@ -105,87 +141,109 @@ pub fn main() !void {
     var assets = SpriteAssets.load(allocator);
     defer assets.deinit(allocator);
 
-    var fui = Fui.init(CONF.SCREEN_W, CONF.SCREEN_H);
-    var mouse_buttons = MouseButtons.init();
-    var sm = StateMachine(State).init(.splash);
-    var project = Project.loadOrDefault();
-    var editor = MainEditor{};
-    var map_editor = MapEditor{};
-    var library = TileLibrary{};
-    var esc_lock = false;
+    var app = AppState.init();
 
     while (c.fenster_loop(&window) == 0) {
-        renderer.perf_begin_sim();
-        renderer.begin_frame();
-
-        const mouse = mouse_buttons.update(@divFloor(window.x, CONF.PIXEL_SCALE), @divFloor(window.y, CONF.PIXEL_SCALE), @intCast(window.mouse));
-        assets.update(renderer.dt);
-
-        if (esc_lock and window.keys[27] == 0) {
-            esc_lock = false;
-        } else if (!esc_lock and window.keys[27] != 0) {
-            esc_lock = true;
-            if (sm.current == .editor or sm.current == .map_editor) sm.go_to(.quit) else sm.go_to(.editor);
-        }
+        const mouse = beginFrame(&renderer, &assets, &app.mouse_buttons, &window);
+        handleEscape(&app.sm, &app.esc_lock, window.keys[27] != 0);
 
         renderer.perf_begin_draw();
-        const previous_state = sm.current;
-        switch (sm.current) {
-            .splash => drawSplash(&fui, &renderer, &assets, &editor, mouse, &sm),
-            .editor => editor.draw(&fui, &renderer, &project, mouse, &sm),
-            .tile_library => library.draw(&fui, &renderer, &project, &editor, mouse, &sm),
-            .map_editor => map_editor.draw(&fui, &renderer, &project, &editor, mouse, &sm),
-            .quit => break,
-        }
-        sm.update();
-        if (previous_state != sm.current) {
-            if (previous_state == .map_editor and sm.current != .map_editor) {
-                editor.ui_cache_dirty = true;
-            }
-            if (previous_state != .map_editor and sm.current == .map_editor) {
-                if (previous_state == .tile_library) map_editor.syncLibrarySelection(&project);
-                map_editor.cached_map_revision = std.math.maxInt(u64);
-            }
-        }
-        if (sm.current == .quit) break;
+        const previous_state = app.sm.current;
+        if (!drawCurrentState(&app, &renderer, &assets, mouse)) break;
 
-        if (sm.current != .splash) drawGlobalOverlay(&fui, &renderer, &assets);
-        renderer.perf_begin_present();
-        renderer.present();
-        renderer.perf_end_present();
-        renderer.cap_frame(CONF.TARGET_FPS);
+        app.sm.update();
+        handleStateTransition(previous_state, &app);
+        if (app.sm.current == .quit) break;
+
+        if (app.sm.current != .splash) drawGlobalOverlay(&app.fui, &renderer, &assets);
+        presentFrame(&renderer);
     }
 
-    try project.save();
+    try app.project.save();
+}
+
+fn beginFrame(renderer: *Render, assets: *SpriteAssets, mouse_buttons: *MouseButtons, window: *const c.fenster) Mouse {
+    renderer.perf_begin_sim();
+    renderer.begin_frame();
+    const mouse = mouse_buttons.update(@divFloor(window.x, CONF.PIXEL_SCALE), @divFloor(window.y, CONF.PIXEL_SCALE), @intCast(window.mouse));
+    assets.update(renderer.dt);
+    return mouse;
+}
+
+fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) void {
+    if (esc_lock.* and !esc_pressed) {
+        esc_lock.* = false;
+        return;
+    }
+    if (esc_lock.* or !esc_pressed) return;
+
+    esc_lock.* = true;
+    sm.go_to(if (sm.current == .editor or sm.current == .map_editor) .quit else .editor);
+}
+
+fn drawCurrentState(app: *AppState, renderer: *Render, assets: *SpriteAssets, mouse: Mouse) bool {
+    switch (app.sm.current) {
+        .splash => drawSplash(&app.fui, renderer, assets, &app.editor, mouse, &app.sm),
+        .editor => app.editor.draw(&app.fui, renderer, &app.project, mouse, &app.sm),
+        .tile_library => app.library.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
+        .map_editor => app.map_editor.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
+        .quit => return false,
+    }
+    return true;
+}
+
+fn handleStateTransition(previous_state: State, app: *AppState) void {
+    if (previous_state == app.sm.current) return;
+
+    if (previous_state == .map_editor and app.sm.current != .map_editor) {
+        app.editor.ui_cache_dirty = true;
+    }
+    if (previous_state != .map_editor and app.sm.current == .map_editor) {
+        if (previous_state == .tile_library) app.map_editor.syncLibrarySelection(&app.project);
+        app.map_editor.cached_map_revision = std.math.maxInt(u64);
+    }
+}
+
+fn presentFrame(renderer: *Render) void {
+    renderer.perf_begin_present();
+    renderer.present();
+    renderer.perf_end_present();
+    renderer.cap_frame(CONF.TARGET_FPS);
 }
 
 fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, editor: *MainEditor, mouse: Mouse, sm: anytype) void {
     const cx = @divFloor(CONF.SCREEN_W, 2);
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
-    renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, 0x111111);
-    drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, 0xFFFFFF);
-    drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, 0xAAAAAA);
-    drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, 0xDAD45E);
-    drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 82, 3, 0x7EDB1E);
+    renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, SplashStyle.bg);
+    drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, SplashStyle.title);
+    drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, SplashStyle.muted);
+    drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, SplashStyle.warn);
+    drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 82, 3, SplashStyle.accent);
 
-    const button_w: i32 = 220;
-    const button_h: i32 = 44;
-    const button_x = cx - @divFloor(button_w, 2);
-    const button_y = CONF.SCREEN_H - 122;
-    const over = mouse.x >= button_x and mouse.x < button_x + button_w and mouse.y >= button_y and mouse.y < button_y + button_h;
-    renderer.draw_rect(button_x + 3, button_y + 3, button_w, button_h, 0x050505);
-    renderer.draw_rect(button_x, button_y, button_w, button_h, if (over) 0x355A35 else 0x202020);
-    renderer.draw_rect_lines(button_x, button_y, button_w, button_h, if (over) 0x7EDB1E else 0x404040);
-    drawCenteredText(fui, renderer, "START", cx, button_y + 15, 1, if (over) 0xFFFFFF else 0xAAAAAA);
+    const start_clicked = drawSplashButton(fui, renderer, mouse, cx, CONF.SCREEN_H - 122);
 
-    drawCenteredText(fui, renderer, "Powered by Borowik Engine", cx, CONF.SCREEN_H - 58, 1, 0xDAD45E);
+    drawCenteredText(fui, renderer, "Powered by Borowik Engine", cx, CONF.SCREEN_H - 58, 1, SplashStyle.warn);
     if (assets.icon) |*icon| icon.draw(renderer, cx - 16, CONF.SCREEN_H - 42);
 
-    if (over and (mouse.just_pressed or mouse.just_right_pressed)) {
+    if (start_clicked) {
         editor.suppress_canvas_paint_until_mouse_up = true;
         sm.go_to(.editor);
     }
+}
+
+fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y: i32) bool {
+    const button_w: i32 = 220;
+    const button_h: i32 = 44;
+    const x = center_x - @divFloor(button_w, 2);
+    const hovered = views.hover(mouse, x, y, button_w, button_h);
+
+    renderer.draw_rect(x + 3, y + 3, button_w, button_h, SplashStyle.button_shadow);
+    renderer.draw_rect(x, y, button_w, button_h, if (hovered) SplashStyle.button_hover else SplashStyle.button);
+    renderer.draw_rect_lines(x, y, button_w, button_h, if (hovered) SplashStyle.accent else SplashStyle.button_border);
+    drawCenteredText(fui, renderer, "START", center_x, y + 15, 1, if (hovered) SplashStyle.title else SplashStyle.muted);
+
+    return hovered and (mouse.just_pressed or mouse.just_right_pressed);
 }
 
 fn drawGlobalOverlay(fui: *Fui, renderer: *Render, assets: *SpriteAssets) void {

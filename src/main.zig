@@ -197,10 +197,11 @@ fn handleStateTransition(previous_state: State, app: *AppState) void {
 
     if (previous_state == .map_editor and app.sm.current != .map_editor) {
         app.editor.ui_cache_dirty = true;
+        app.map_editor.invalidateCache();
     }
     if (previous_state != .map_editor and app.sm.current == .map_editor) {
         if (previous_state == .tile_library) app.map_editor.syncLibrarySelection(&app.project);
-        app.map_editor.cached_map_revision = std.math.maxInt(u64);
+        app.map_editor.invalidateCache();
     }
 }
 

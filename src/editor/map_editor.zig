@@ -55,9 +55,14 @@ pub const MapEditor = struct {
     cached_map_height: u16 = 0,
     cached_origin_x: i32 = std.math.minInt(i32),
     cached_origin_y: i32 = std.math.minInt(i32),
+    cache_dirty: bool = true,
     zoom_extra: i32 = 0,
     pan_x: i32 = 0,
     pan_y: i32 = 0,
+
+    pub fn invalidateCache(self: *MapEditor) void {
+        self.cache_dirty = true;
+    }
 
     pub fn syncLibrarySelection(self: *MapEditor, project: *const Project) void {
         const image_id = project.selectedImageId();
@@ -149,7 +154,7 @@ pub const MapEditor = struct {
             const label = std.fmt.bufPrint(&label_buf, "{d}", .{bank + 1}) catch "?";
             if (button(fui, renderer, mouse, bx, y + 34, 38, 34, label, project.activeMapBank() == bank)) {
                 project.setMapBank(@intCast(bank));
-                self.cached_map_revision = std.math.maxInt(u64);
+                self.invalidateCache();
                 self.setInfo("Map bank selected", UI.accent);
             }
         }
@@ -364,7 +369,7 @@ pub const MapEditor = struct {
     fn ensureMapCache(self: *MapEditor, renderer: *Render, project: *Project, origin: [2]i32, scale: i32, cell_px: i32, map_w: i32, map_h: i32) void {
         const revision = project.visualRevision();
         const map = project.activeMap();
-        if (self.cached_map_revision == revision and self.cached_map_scale == scale and self.cached_map_width == map.width and self.cached_map_height == map.height and self.cached_origin_x == origin[0] and self.cached_origin_y == origin[1]) return;
+        if (!self.cache_dirty and self.cached_map_revision == revision and self.cached_map_scale == scale and self.cached_map_width == map.width and self.cached_map_height == map.height and self.cached_origin_x == origin[0] and self.cached_origin_y == origin[1]) return;
 
         const previous_target = renderer.target;
         renderer.set_target(.terrain);
@@ -406,6 +411,7 @@ pub const MapEditor = struct {
         self.cached_map_height = map.height;
         self.cached_origin_x = origin[0];
         self.cached_origin_y = origin[1];
+        self.cache_dirty = false;
     }
 
     fn drawCanvasHeader(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {

@@ -6,6 +6,7 @@
 
 pub const CONF = struct {
     pub const VERSION = "2.5";
+    pub const ENGINE = "1.1";
     pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";
     pub const SCREEN_W = 1440;

@@ -17,14 +17,14 @@ const UI = struct {
     const accent_dark = editor_ui.Theme.accent_dark;
     const danger = editor_ui.Theme.danger;
 
-    const side_x: i32 = 14;
-    const top_y: i32 = 24;
-    const top_h: i32 = 82;
-    const gap: i32 = 10;
-    const left_x: i32 = side_x;
-    const left_w: i32 = 276;
-    const grid_x: i32 = left_x + left_w + gap;
-    const grid_y: i32 = 110;
+    const side_x: i32 = editor_ui.Layout.side_x;
+    const top_y: i32 = editor_ui.Layout.top_y;
+    const top_h: i32 = editor_ui.Layout.top_h;
+    const gap: i32 = editor_ui.Layout.gap;
+    const left_x: i32 = editor_ui.Layout.leftX();
+    const left_w: i32 = editor_ui.Layout.left_w;
+    const grid_x: i32 = editor_ui.Layout.centerX();
+    const grid_y: i32 = editor_ui.Layout.content_y;
     const grid_w: i32 = CONF.SCREEN_W - grid_x - side_x;
     const grid_h: i32 = 670;
     const bottom_y: i32 = 802;
@@ -117,12 +117,12 @@ pub const TileLibrary = struct {
         if (button(fui, renderer, mouse, 172, UI.bottom_y, 112, 42, "+ ADD", false)) {
             self.cancelDelete();
             _ = project.createTile();
-            views.saveIfDirty(project);
+            saveLibraryProject(project, editor);
         }
         if (button(fui, renderer, mouse, 294, UI.bottom_y, 172, 42, "DUPLICATE", false)) {
             self.cancelDelete();
             _ = project.duplicateTile(project.selectedImageId());
-            views.saveIfDirty(project);
+            saveLibraryProject(project, editor);
         }
 
         const delete_label: [:0]const u8 = if (self.pending_delete and self.pending_delete_id == project.selectedImageId()) "CONFIRM" else "DELETE";
@@ -130,7 +130,7 @@ pub const TileLibrary = struct {
             const selected = project.selectedImageId();
             if (self.pending_delete and self.pending_delete_id == selected) {
                 project.deleteTile(selected);
-                views.saveIfDirty(project);
+                saveLibraryProject(project, editor);
                 self.cancelDelete();
             } else {
                 self.pending_delete = true;
@@ -166,7 +166,7 @@ pub const TileLibrary = struct {
         }
         if (!had_request) project.selectTile(tile_id);
         editor.suppress_canvas_paint_until_mouse_up = true;
-        views.saveIfDirty(project);
+        saveLibraryProject(project, editor);
         sm.go_to(editor.library_return_state);
     }
 
@@ -175,6 +175,13 @@ pub const TileLibrary = struct {
         self.pending_delete_id = 0;
     }
 };
+
+fn saveLibraryProject(project: *Project, editor: *MainEditor) void {
+    views.saveIfDirty(project) catch {
+        editor.setInfo("Save failed", UI.danger);
+        return;
+    };
+}
 
 fn drawBackground(renderer: *Render) void {
     renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, UI.bg);

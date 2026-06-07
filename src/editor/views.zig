@@ -84,9 +84,9 @@ fn drawTileDataFast(renderer: *Render, project: *const Project, tile: Tile, x: i
     }
 }
 
-pub fn saveIfDirty(project: *Project) void {
+pub fn saveIfDirty(project: *Project) !void {
     if (!project.dirty) return;
-    project.save() catch {};
+    try project.save();
 }
 
 fn checker(x: usize, y: usize) u32 {

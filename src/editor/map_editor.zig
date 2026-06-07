@@ -22,18 +22,18 @@ const UI = struct {
     const danger = editor_ui.Theme.danger;
     const warn = editor_ui.Theme.warn;
 
-    const side_x: i32 = 14;
-    const top_y: i32 = 24;
-    const top_h: i32 = 82;
-    const left_x: i32 = 14;
-    const left_w: i32 = 276;
-    const right_w: i32 = 220;
-    const gap: i32 = 10;
-    const canvas_x: i32 = left_x + left_w + gap;
-    const canvas_y: i32 = 110;
-    const right_x: i32 = CONF.SCREEN_W - side_x - right_w;
-    const canvas_w: i32 = right_x - canvas_x - gap;
-    const canvas_h: i32 = CONF.SCREEN_H - canvas_y - 22;
+    const side_x: i32 = editor_ui.Layout.side_x;
+    const top_y: i32 = editor_ui.Layout.top_y;
+    const top_h: i32 = editor_ui.Layout.top_h;
+    const left_x: i32 = editor_ui.Layout.leftX();
+    const left_w: i32 = editor_ui.Layout.left_w;
+    const right_w: i32 = editor_ui.Layout.right_w;
+    const gap: i32 = editor_ui.Layout.gap;
+    const canvas_x: i32 = editor_ui.Layout.centerX();
+    const canvas_y: i32 = editor_ui.Layout.content_y;
+    const right_x: i32 = editor_ui.Layout.rightX();
+    const canvas_w: i32 = editor_ui.Layout.centerW();
+    const canvas_h: i32 = editor_ui.Layout.contentH();
 };
 
 const Tool = enum { bg_stamp, bg_fill, sprite_stamp, sprite_remove };

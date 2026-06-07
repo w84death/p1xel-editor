@@ -23,6 +23,36 @@ pub const Theme = struct {
     pub const shadow = 0x050607;
 };
 
+pub const Layout = struct {
+    pub const side_x: i32 = 14;
+    pub const top_y: i32 = 24;
+    pub const top_h: i32 = 82;
+    pub const gap: i32 = 10;
+    pub const left_w: i32 = 276;
+    pub const right_w: i32 = 220;
+    pub const content_y: i32 = 110;
+
+    pub fn leftX() i32 {
+        return side_x;
+    }
+
+    pub fn rightX() i32 {
+        return CONF.SCREEN_W - side_x - right_w;
+    }
+
+    pub fn centerX() i32 {
+        return leftX() + left_w + gap;
+    }
+
+    pub fn centerW() i32 {
+        return rightX() - centerX() - gap;
+    }
+
+    pub fn contentH() i32 {
+        return CONF.SCREEN_H - content_y - 22;
+    }
+};
+
 pub fn drawText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i32, scale: i32, color: u32) void {
     fui.draw_text(renderer, text, x, y, scale, color);
 }

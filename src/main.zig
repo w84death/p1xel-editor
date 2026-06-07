@@ -120,7 +120,7 @@ pub fn main() !void {
         presentFrame(&renderer);
     }
 
-    try app.project.save();
+    if (app.project.dirty) try app.project.save();
 }
 
 fn beginFrame(renderer: *Render, mouse_buttons: *MouseButtons, window: *const c.fenster) Mouse {

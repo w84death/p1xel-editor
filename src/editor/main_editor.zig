@@ -39,14 +39,14 @@ const UI = struct {
     const danger = editor_ui.Theme.danger;
     const blue = editor_ui.Theme.blue;
 
-    const top_y: i32 = 24;
-    const top_h: i32 = 82;
-    const side_x: i32 = 14;
-    const gap: i32 = 10;
-    const left_w: i32 = 276;
-    const right_w: i32 = 220;
-    const content_y: i32 = 110;
-    const side_panel_h: i32 = CONF.SCREEN_H - content_y - 22;
+    const top_y: i32 = editor_ui.Layout.top_y;
+    const top_h: i32 = editor_ui.Layout.top_h;
+    const side_x: i32 = editor_ui.Layout.side_x;
+    const gap: i32 = editor_ui.Layout.gap;
+    const left_w: i32 = editor_ui.Layout.left_w;
+    const right_w: i32 = editor_ui.Layout.right_w;
+    const content_y: i32 = editor_ui.Layout.content_y;
+    const side_panel_h: i32 = editor_ui.Layout.contentH();
     const draw_mode_y: i32 = content_y + 18;
     const palette_y: i32 = content_y + 138;
     const preview_y: i32 = content_y + 286;
@@ -55,16 +55,16 @@ const UI = struct {
     const canvas_y: i32 = 154;
 
     fn leftX() i32 {
-        return side_x;
+        return editor_ui.Layout.leftX();
     }
     fn rightX() i32 {
-        return CONF.SCREEN_W - side_x - right_w;
+        return editor_ui.Layout.rightX();
     }
     fn centerX() i32 {
-        return leftX() + left_w + gap;
+        return editor_ui.Layout.centerX();
     }
     fn centerW() i32 {
-        return rightX() - centerX() - gap;
+        return editor_ui.Layout.centerW();
     }
     fn contentH() i32 {
         return side_panel_h - center_info_h - 12;
@@ -211,7 +211,7 @@ pub const MainEditor = struct {
         drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 574, self);
     }
 
-    fn setInfo(self: *MainEditor, text: []const u8, color: u32) void {
+    pub fn setInfo(self: *MainEditor, text: []const u8, color: u32) void {
         self.info_text = text;
         self.info_color = color;
     }

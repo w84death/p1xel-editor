@@ -16,6 +16,7 @@ pub fn errorMessage(err: anyerror) []const u8 {
     return switch (err) {
         error.ExportOpenFailed => "Export open failed",
         error.ExportWriteFailed => "Export write failed",
+        error.ExportSpriteOutOfRange => "Sprite ID exceeds export limit",
         else => "Export failed",
     };
 }
@@ -45,18 +46,36 @@ pub fn exportGameBoyEngine(project: *const Project) !void {
         project.imageCountMode(.sprites),
     });
 
-    var writer = try BinaryWriter.create(ENGINE_EXPORT_PATH);
-    errdefer writer.close();
+    try validateExport(project);
 
-    try writeHeader(&writer, project);
-    try writeSpritePalettes(&writer, project);
-    try writeSpriteTiles(&writer, project);
-    try writeLevels(&writer, project);
-    writer.close();
+    {
+        var writer = try BinaryWriter.create(ENGINE_EXPORT_PATH);
+        defer writer.close();
+
+        try writeHeader(&writer, project);
+        try writeSpritePalettes(&writer, project);
+        try writeSpriteTiles(&writer, project);
+        try writeLevels(&writer, project);
+    }
 
     try writeRgbdsInclude(project);
 
     std.debug.print("[export] finished binary engine export to {s}\n", .{ENGINE_EXPORT_PATH});
+}
+
+fn validateExport(project: *const Project) !void {
+    const exported_sprite_count = @min(project.imageCountMode(.sprites), BG_TILE_BASE);
+    for (LEVELS) |level| {
+        const map = project.mapAtBank(level.bank_id);
+        var i: usize = 0;
+        while (i < map.sprite_count) : (i += 1) {
+            const sprite_id = map.sprites[i].sprite_id;
+            if (sprite_id >= exported_sprite_count) {
+                std.debug.print("[export] sprite id {d} in {s} exceeds exported OBJ tile limit {d}\n", .{ sprite_id, level.label, exported_sprite_count });
+                return error.ExportSpriteOutOfRange;
+            }
+        }
+    }
 }
 
 fn writeHeader(writer: *BinaryWriter, project: *const Project) !void {

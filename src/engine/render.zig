@@ -259,16 +259,17 @@ pub const Render = struct {
 
     pub fn draw_rect(self: *Render, x: i32, y: i32, w: i32, h: i32, color: u32) void {
         const clipped = self.clip_rect(x, y, w, h) orelse return;
+        const buf = self.active_buffer_ptr();
+        const screen_w: usize = @intCast(self.width);
+        const sx: usize = @intCast(clipped.x);
+        const sy: usize = @intCast(clipped.y);
+        const sw: usize = @intCast(clipped.w);
+        const sh: usize = @intCast(clipped.h);
 
-        const ix: u32 = @intCast(clipped.x);
-        const iy: u32 = @intCast(clipped.y);
-        const iw: u32 = @intCast(clipped.w);
-        const ih: u32 = @intCast(clipped.h);
-
-        for (iy..(iy + ih)) |row| {
-            for (ix..(ix + iw)) |col| {
-                self.put_pixel(@intCast(col), @intCast(row), color);
-            }
+        var row: usize = 0;
+        while (row < sh) : (row += 1) {
+            const start = (sy + row) * screen_w + sx;
+            @memset(buf[start .. start + sw], color);
         }
     }
 

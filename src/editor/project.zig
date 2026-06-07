@@ -1,8 +1,5 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("stdio.h");
-    @cInclude("stdlib.h");
-});
+const builtin = @import("builtin");
 const CONF = @import("../engine/config.zig").CONF;
 
 pub const Tool = enum { pixel, fill, line };
@@ -484,11 +481,12 @@ pub const Project = struct {
     pub fn copyCurrentPixelsToTransferFile(self: *const Project) !void {
         var path_buf: [512]u8 = undefined;
         const path = try pixelTransferPath(&path_buf);
-        const file = c.fopen(path.ptr, "wb") orelse return error.PixelTransferOpenFailed;
-        defer _ = c.fclose(file);
+        const io = std.Options.debug_io;
+        const file = try std.Io.Dir.createFileAbsolute(io, path, .{ .truncate = true });
+        defer file.close(io);
 
         const image = self.currentImage();
-        try writeFileBytes(file, "P1XEL_PIXELS_V1\n");
+        try file.writeStreamingAll(io, "P1XEL_PIXELS_V1\n");
         var y: usize = 0;
         while (y < CONF.TILE_SIDE) : (y += 1) {
             var row: [CONF.TILE_SIDE + 1]u8 = undefined;
@@ -497,18 +495,19 @@ pub const Project = struct {
                 row[x] = '0' + (image.pixels[y * CONF.TILE_SIDE + x] & 3);
             }
             row[CONF.TILE_SIDE] = '\n';
-            try writeFileBytes(file, &row);
+            try file.writeStreamingAll(io, &row);
         }
     }
 
     pub fn pastePixelsFromTransferFile(self: *Project) !void {
         var path_buf: [512]u8 = undefined;
         const path = try pixelTransferPath(&path_buf);
-        const file = c.fopen(path.ptr, "rb") orelse return error.PixelTransferOpenFailed;
-        defer _ = c.fclose(file);
+        const io = std.Options.debug_io;
+        const file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
+        defer file.close(io);
 
         var data: [128]u8 = undefined;
-        const len = c.fread(&data, 1, data.len, file);
+        const len = try file.readPositionalAll(io, &data, 0);
         const header = "P1XEL_PIXELS_V1\n";
         if (len < header.len or !std.mem.eql(u8, data[0..header.len], header)) return error.InvalidPixelTransfer;
 
@@ -690,10 +689,11 @@ pub const Project = struct {
     }
 
     pub fn load(self: *Project) !void {
-        const file = c.fopen(CONF.PROJECT_FILE, "rb") orelse return error.InvalidProject;
-        defer _ = c.fclose(file);
+        const io = std.Options.debug_io;
+        const file = std.Io.Dir.cwd().openFile(io, CONF.PROJECT_FILE, .{ .mode = .read_only }) catch return error.InvalidProject;
+        defer file.close(io);
         var data: [MAX_FILE_BYTES]u8 = undefined;
-        const len = c.fread(&data, 1, data.len, file);
+        const len = file.readPositionalAll(io, &data, 0) catch return error.InvalidProject;
         if (len < HEADER_BYTES) return error.InvalidProject;
         if (!std.mem.eql(u8, data[0..4], MAGIC)) return error.InvalidProject;
         const file_version = data[4];
@@ -834,29 +834,30 @@ pub const Project = struct {
     }
 
     pub fn save(self: *Project) !void {
-        const file = c.fopen(CONF.PROJECT_FILE, "wb") orelse return error.InvalidProject;
-        defer _ = c.fclose(file);
+        const io = std.Options.debug_io;
+        const file = std.Io.Dir.cwd().createFile(io, CONF.PROJECT_FILE, .{ .truncate = true }) catch return error.InvalidProject;
+        defer file.close(io);
         var header: [HEADER_BYTES]u8 = undefined;
         @memcpy(header[0..4], MAGIC);
         header[4] = VERSION;
         header[5] = CONF.PALETTE_COUNT;
         header[6] = @intFromEnum(self.mode);
-        if (c.fwrite(&header, 1, header.len, file) != header.len) return error.InvalidProject;
+        try file.writeStreamingAll(io, &header);
 
         var active_state = [_]u8{ self.active_palette_bank, self.active_map_bank };
-        if (c.fwrite(&active_state, 1, active_state.len, file) != active_state.len) return error.InvalidProject;
+        try file.writeStreamingAll(io, &active_state);
 
         for (self.palette_banks) |palette_set| {
             for (palette_set) |bank| {
                 for (bank) |palette| {
                     for (palette) |color| {
-                        if (c.fwrite(&color, 1, color.len, file) != color.len) return error.InvalidProject;
+                        try file.writeStreamingAll(io, &color);
                     }
                 }
             }
         }
 
-        if (c.fwrite(&self.tile_flags, 1, self.tile_flags.len, file) != self.tile_flags.len) return error.InvalidProject;
+        try file.writeStreamingAll(io, &self.tile_flags);
 
         for (self.image_banks) |bank| {
             var state: [IMAGE_BANK_STATE_BYTES]u8 = undefined;
@@ -877,14 +878,14 @@ pub const Project = struct {
                 writeU16(state[offset .. offset + 2], slot);
                 offset += 2;
             }
-            if (c.fwrite(&state, 1, state.len, file) != state.len) return error.InvalidProject;
+            try file.writeStreamingAll(io, &state);
 
             var image_buf: [IMAGE_BYTES]u8 = undefined;
             var i: usize = 0;
             while (i < bank.count) : (i += 1) {
                 image_buf[0] = bank.images[i].palette_id;
                 @memcpy(image_buf[1..], bank.images[i].pixels[0..]);
-                if (c.fwrite(&image_buf, 1, image_buf.len, file) != image_buf.len) return error.InvalidProject;
+                try file.writeStreamingAll(io, &image_buf);
             }
         }
 
@@ -893,10 +894,10 @@ pub const Project = struct {
             writeU16(map_header[0..2], map.width);
             writeU16(map_header[2..4], map.height);
             writeU16(map_header[4..6], map.sprite_count);
-            if (c.fwrite(&map_header, 1, map_header.len, file) != map_header.len) return error.InvalidProject;
+            try file.writeStreamingAll(io, &map_header);
             const cell_count = @as(usize, map.width) * @as(usize, map.height);
-            if (c.fwrite(&map.tile_ids, 1, cell_count, file) != cell_count) return error.InvalidProject;
-            if (c.fwrite(&map.tile_attrs, 1, cell_count, file) != cell_count) return error.InvalidProject;
+            try file.writeStreamingAll(io, map.tile_ids[0..cell_count]);
+            try file.writeStreamingAll(io, map.tile_attrs[0..cell_count]);
             var sprite_buf: [MAP_SPRITE_BYTES]u8 = undefined;
             var si: usize = 0;
             while (si < map.sprite_count) : (si += 1) {
@@ -905,7 +906,7 @@ pub const Project = struct {
                 writeU16(sprite_buf[2..4], sprite.y);
                 writeU16(sprite_buf[4..6], sprite.sprite_id);
                 sprite_buf[6] = (MapTileAttr{ .palette = sprite.palette, .hflip = sprite.hflip, .vflip = sprite.vflip }).encode();
-                if (c.fwrite(&sprite_buf, 1, sprite_buf.len, file) != sprite_buf.len) return error.InvalidProject;
+                try file.writeStreamingAll(io, &sprite_buf);
             }
         }
         self.dirty = false;
@@ -1105,16 +1106,11 @@ fn duplicatePaletteSets(shared: [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT]
 fn defaultTilePalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
     return defaultClearPalettes();
 }
-fn pixelTransferPath(buf: *[512]u8) ![:0]u8 {
-    const filename = "p1xel_image_clip.p1xpix";
-    const dir = if (c.getenv("TEMP")) |value| std.mem.span(value) else if (c.getenv("TMPDIR")) |value| std.mem.span(value) else if (c.getenv("TMP")) |value| std.mem.span(value) else "/tmp";
-    const sep: u8 = if (dir.len > 0 and (dir[dir.len - 1] == '/' or dir[dir.len - 1] == '\\')) 0 else '/';
-    if (sep == 0) return std.fmt.bufPrintZ(buf, "{s}{s}", .{ dir, filename });
-    return std.fmt.bufPrintZ(buf, "{s}{c}{s}", .{ dir, sep, filename });
-}
-
-fn writeFileBytes(file: *c.FILE, bytes: []const u8) !void {
-    if (c.fwrite(bytes.ptr, 1, bytes.len, file) != bytes.len) return error.PixelTransferWriteFailed;
+fn pixelTransferPath(buf: *[512]u8) ![]const u8 {
+    return switch (builtin.os.tag) {
+        .windows => std.fmt.bufPrint(buf, "C:\\Windows\\Temp\\p1xel_image_clip.p1xpix", .{}),
+        else => std.fmt.bufPrint(buf, "/tmp/p1xel_image_clip.p1xpix", .{}),
+    };
 }
 
 fn readU16(bytes: []const u8) u16 {

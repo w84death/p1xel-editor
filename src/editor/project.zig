@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @cImport({
     @cInclude("stdio.h");
+    @cInclude("stdlib.h");
 });
 const CONF = @import("../engine/config.zig").CONF;
 
@@ -476,6 +477,61 @@ pub const Project = struct {
             if (slot.* == a) slot.* = b else if (slot.* == b) slot.* = a;
         }
         if (bank.selected == a) bank.selected = b else if (bank.selected == b) bank.selected = a;
+        self.dirty = true;
+        self.bumpVisualRevision();
+    }
+
+    pub fn copyCurrentPixelsToTransferFile(self: *const Project) !void {
+        var path_buf: [512]u8 = undefined;
+        const path = try pixelTransferPath(&path_buf);
+        const file = c.fopen(path.ptr, "wb") orelse return error.PixelTransferOpenFailed;
+        defer _ = c.fclose(file);
+
+        const image = self.currentImage();
+        try writeFileBytes(file, "P1XEL_PIXELS_V1\n");
+        var y: usize = 0;
+        while (y < CONF.TILE_SIDE) : (y += 1) {
+            var row: [CONF.TILE_SIDE + 1]u8 = undefined;
+            var x: usize = 0;
+            while (x < CONF.TILE_SIDE) : (x += 1) {
+                row[x] = '0' + (image.pixels[y * CONF.TILE_SIDE + x] & 3);
+            }
+            row[CONF.TILE_SIDE] = '\n';
+            try writeFileBytes(file, &row);
+        }
+    }
+
+    pub fn pastePixelsFromTransferFile(self: *Project) !void {
+        var path_buf: [512]u8 = undefined;
+        const path = try pixelTransferPath(&path_buf);
+        const file = c.fopen(path.ptr, "rb") orelse return error.PixelTransferOpenFailed;
+        defer _ = c.fclose(file);
+
+        var data: [128]u8 = undefined;
+        const len = c.fread(&data, 1, data.len, file);
+        const header = "P1XEL_PIXELS_V1\n";
+        if (len < header.len or !std.mem.eql(u8, data[0..header.len], header)) return error.InvalidPixelTransfer;
+
+        var pixels: [CONF.TILE_SIDE * CONF.TILE_SIDE]u8 = undefined;
+        var count: usize = 0;
+        var offset: usize = header.len;
+        while (offset < len and count < pixels.len) : (offset += 1) {
+            const ch = data[offset];
+            if (ch >= '0' and ch <= '3') {
+                pixels[count] = ch - '0';
+                count += 1;
+            } else if (ch == '\n' or ch == '\r' or ch == ' ' or ch == '\t') {
+                continue;
+            } else {
+                return error.InvalidPixelTransfer;
+            }
+        }
+        if (count != pixels.len) return error.InvalidPixelTransfer;
+
+        const bank = self.activeBank();
+        const image = &bank.images[bank.selected];
+        if (std.mem.eql(u8, image.pixels[0..], pixels[0..])) return;
+        image.pixels = pixels;
         self.dirty = true;
         self.bumpVisualRevision();
     }
@@ -1049,6 +1105,18 @@ fn duplicatePaletteSets(shared: [Project.PALETTE_BANK_COUNT][CONF.PALETTE_COUNT]
 fn defaultTilePalettes() [CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor {
     return defaultClearPalettes();
 }
+fn pixelTransferPath(buf: *[512]u8) ![:0]u8 {
+    const filename = "p1xel_image_clip.p1xpix";
+    const dir = if (c.getenv("TEMP")) |value| std.mem.span(value) else if (c.getenv("TMPDIR")) |value| std.mem.span(value) else if (c.getenv("TMP")) |value| std.mem.span(value) else "/tmp";
+    const sep: u8 = if (dir.len > 0 and (dir[dir.len - 1] == '/' or dir[dir.len - 1] == '\\')) 0 else '/';
+    if (sep == 0) return std.fmt.bufPrintZ(buf, "{s}{s}", .{ dir, filename });
+    return std.fmt.bufPrintZ(buf, "{s}{c}{s}", .{ dir, sep, filename });
+}
+
+fn writeFileBytes(file: *c.FILE, bytes: []const u8) !void {
+    if (c.fwrite(bytes.ptr, 1, bytes.len, file) != bytes.len) return error.PixelTransferWriteFailed;
+}
+
 fn readU16(bytes: []const u8) u16 {
     return @as(u16, bytes[0]) | (@as(u16, bytes[1]) << 8);
 }

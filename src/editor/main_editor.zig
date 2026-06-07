@@ -50,7 +50,9 @@ const UI = struct {
     const draw_mode_y: i32 = content_y + 18;
     const palette_y: i32 = content_y + 138;
     const preview_y: i32 = content_y + 286;
-    const center_info_h: i32 = 136;
+    const center_info_h: i32 = 176;
+    const canvas_scale: i32 = 56;
+    const canvas_y: i32 = 154;
 
     fn leftX() i32 {
         return side_x;
@@ -169,6 +171,7 @@ pub const MainEditor = struct {
         drawPixelText(fui, renderer, "RMB: LIBRARY", x + 136, UI.preview_y + 176, 1, UI.muted);
 
         drawTileFlags(fui, renderer, project, mouse, x + 16, UI.preview_y + 216, self);
+        drawPixelTransferButtons(fui, renderer, project, mouse, x + 16, UI.preview_y + 282, self);
         drawStatusInfo(fui, renderer, self, x + 16, UI.content_y + UI.side_panel_h - 96);
     }
 
@@ -319,7 +322,7 @@ fn drawCurrentPalette(fui: anytype, renderer: *Render, project: *Project, mouse:
 fn drawCanvasBase(fui: anytype, renderer: *Render, project: *Project) void {
     const tile = project.currentImage();
     const origin = canvasOrigin(fui);
-    const size = CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE;
+    const size = CONF.TILE_SIDE * UI.canvas_scale;
     renderer.draw_rect(origin[0] - 2, origin[1] - 2, size + 4, size + 4, 0xE6F5D8);
 
     var py: usize = 0;
@@ -328,15 +331,15 @@ fn drawCanvasBase(fui: anytype, renderer: *Render, project: *Project) void {
         while (px < CONF.TILE_SIDE) : (px += 1) {
             const idx = tile.pixels[py * CONF.TILE_SIDE + px];
             const color = if (project.isTransparentColor(idx)) checker(px, py) else project.currentColor32(idx);
-            const x = origin[0] + @as(i32, @intCast(px)) * CONF.EDITOR_CANVAS_SCALE;
-            const y = origin[1] + @as(i32, @intCast(py)) * CONF.EDITOR_CANVAS_SCALE;
-            renderer.draw_rect(x, y, CONF.EDITOR_CANVAS_SCALE, CONF.EDITOR_CANVAS_SCALE, color);
+            const x = origin[0] + @as(i32, @intCast(px)) * UI.canvas_scale;
+            const y = origin[1] + @as(i32, @intCast(py)) * UI.canvas_scale;
+            renderer.draw_rect(x, y, UI.canvas_scale, UI.canvas_scale, color);
         }
     }
 
     var grid: usize = 0;
     while (grid <= CONF.TILE_SIDE) : (grid += 1) {
-        const offset = @as(i32, @intCast(grid)) * CONF.EDITOR_CANVAS_SCALE;
+        const offset = @as(i32, @intCast(grid)) * UI.canvas_scale;
         renderer.draw_line(origin[0] + offset, origin[1], origin[0] + offset, origin[1] + size, 0xD7EBCB);
         renderer.draw_line(origin[0], origin[1] + offset, origin[0] + size, origin[1] + offset, 0xD7EBCB);
     }
@@ -346,8 +349,8 @@ fn drawCanvasBase(fui: anytype, renderer: *Render, project: *Project) void {
 fn drawCanvasOverlay(self: *MainEditor, fui: anytype, renderer: *Render, mouse: Mouse) void {
     if (self.tool == .line) if (self.line_start) |start| if (canvasCell(fui, mouse.x, mouse.y)) |end| {
         const origin = canvasOrigin(fui);
-        const half = @divFloor(CONF.EDITOR_CANVAS_SCALE, 2);
-        renderer.draw_line(origin[0] + start[0] * CONF.EDITOR_CANVAS_SCALE + half, origin[1] + start[1] * CONF.EDITOR_CANVAS_SCALE + half, origin[0] + end[0] * CONF.EDITOR_CANVAS_SCALE + half, origin[1] + end[1] * CONF.EDITOR_CANVAS_SCALE + half, 0x202020);
+        const half = @divFloor(UI.canvas_scale, 2);
+        renderer.draw_line(origin[0] + start[0] * UI.canvas_scale + half, origin[1] + start[1] * UI.canvas_scale + half, origin[0] + end[0] * UI.canvas_scale + half, origin[1] + end[1] * UI.canvas_scale + half, 0x202020);
     };
 }
 
@@ -410,6 +413,24 @@ fn drawTileFlags(fui: anytype, renderer: *Render, project: *Project, mouse: Mous
     if (pillButton(fui, renderer, mouse, x, y + 24, 112, 28, "WALK", traversable)) {
         project.setSelectedTileTraversable(!traversable);
         editor.setInfo(if (traversable) "Tile blocked" else "Tile walkable", UI.accent);
+    }
+}
+
+fn drawPixelTransferButtons(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32, editor: *MainEditor) void {
+    drawPixelText(fui, renderer, "PIXEL TRANSFER", x, y, 2, UI.text);
+    if (pillButton(fui, renderer, mouse, x, y + 30, 112, 30, "COPY PIX", false)) {
+        project.copyCurrentPixelsToTransferFile() catch {
+            editor.setInfo("Copy pixels failed", UI.danger);
+            return;
+        };
+        editor.setInfo("Pixels copied", UI.accent);
+    }
+    if (pillButton(fui, renderer, mouse, x + 124, y + 30, 112, 30, "PASTE PIX", false)) {
+        project.pastePixelsFromTransferFile() catch {
+            editor.setInfo("Paste pixels failed", UI.danger);
+            return;
+        };
+        editor.setInfo("Pixels pasted", UI.accent);
     }
 }
 
@@ -490,15 +511,15 @@ fn rgbToU32(rgb: [3]u8) u32 {
 
 fn canvasCell(fui: anytype, x: i32, y: i32) ?[2]i32 {
     const origin = canvasOrigin(fui);
-    const size = CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE;
+    const size = CONF.TILE_SIDE * UI.canvas_scale;
     if (!views.hover(.{ .x = x, .y = y, .left_down = false, .right_down = false, .just_pressed = false, .just_right_pressed = false }, origin[0], origin[1], size, size)) return null;
-    return .{ @divFloor(x - origin[0], CONF.EDITOR_CANVAS_SCALE), @divFloor(y - origin[1], CONF.EDITOR_CANVAS_SCALE) };
+    return .{ @divFloor(x - origin[0], UI.canvas_scale), @divFloor(y - origin[1], UI.canvas_scale) };
 }
 
 fn canvasOrigin(fui: anytype) [2]i32 {
     _ = fui;
-    const size = CONF.TILE_SIDE * CONF.EDITOR_CANVAS_SCALE;
-    return .{ UI.centerX() + @divFloor(UI.centerW() - size, 2), 170 };
+    const size = CONF.TILE_SIDE * UI.canvas_scale;
+    return .{ UI.centerX() + @divFloor(UI.centerW() - size, 2), UI.canvas_y };
 }
 
 fn checker(x: usize, y: usize) u32 {

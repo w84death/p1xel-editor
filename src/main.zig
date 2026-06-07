@@ -7,8 +7,6 @@ const c = @cImport({
 
 const CONF = @import("engine/config.zig").CONF;
 const Render = @import("engine/render.zig").Render;
-const Sprite = @import("engine/sprites.zig").Sprite;
-const SpriteSheet = @import("engine/sprites.zig").SpriteSheet;
 const Fui = @import("engine/fui.zig").Fui(EditorTheme);
 const Mouse = @import("engine/mouse.zig").Mouse;
 const MouseButtons = @import("engine/mouse.zig").MouseButtons;
@@ -80,40 +78,6 @@ const AppState = struct {
     }
 };
 
-const SpriteAssets = struct {
-    icon_sheet: ?*SpriteSheet = null,
-    icon: ?Sprite = null,
-
-    fn load(allocator: std.mem.Allocator) SpriteAssets {
-        var assets = SpriteAssets{};
-        if (SpriteSheet.load(allocator, .{
-            .name = "borowik.bmp",
-            .source = @embedFile("sprites/borowik.bmp"),
-            .tile_w = 32,
-            .tile_h = 32,
-        })) |sheet| {
-            assets.icon_sheet = sheet;
-            var sprite = Sprite.init(sheet, 0.12);
-            sprite.set_animation(0, @min(@as(usize, 3), sheet.frame_count()), 0.12, true) catch {};
-            assets.icon = sprite;
-        } else |err| {
-            std.log.err("failed to load borowik icon sprite: {s}", .{@errorName(err)});
-        }
-        return assets;
-    }
-
-    fn deinit(self: *SpriteAssets, allocator: std.mem.Allocator) void {
-        if (self.icon_sheet) |sheet| {
-            sheet.deinit();
-            allocator.destroy(sheet);
-        }
-    }
-
-    fn update(self: *SpriteAssets, dt: f32) void {
-        if (self.icon) |*sprite| sprite.update(dt);
-    }
-};
-
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
     const window_w = CONF.SCREEN_W * CONF.PIXEL_SCALE;
@@ -138,36 +102,31 @@ pub fn main() !void {
     var renderer = Render.init_scaled(raw_buf, CONF.SCREEN_W, CONF.SCREEN_H, CONF.PIXEL_SCALE);
     defer renderer.deinit();
 
-    var assets = SpriteAssets.load(allocator);
-    defer assets.deinit(allocator);
-
     var app = AppState.init();
 
     while (c.fenster_loop(&window) == 0) {
-        const mouse = beginFrame(&renderer, &assets, &app.mouse_buttons, &window);
+        const mouse = beginFrame(&renderer, &app.mouse_buttons, &window);
         handleEscape(&app.sm, &app.esc_lock, window.keys[27] != 0);
 
         renderer.perf_begin_draw();
         const previous_state = app.sm.current;
-        if (!drawCurrentState(&app, &renderer, &assets, mouse)) break;
+        if (!drawCurrentState(&app, &renderer, mouse)) break;
 
         app.sm.update();
         handleStateTransition(previous_state, &app);
         if (app.sm.current == .quit) break;
 
-        if (app.sm.current != .splash) drawGlobalOverlay(&app.fui, &renderer, &assets);
+        if (app.sm.current != .splash) drawGlobalOverlay(&app.fui, &renderer);
         presentFrame(&renderer);
     }
 
     try app.project.save();
 }
 
-fn beginFrame(renderer: *Render, assets: *SpriteAssets, mouse_buttons: *MouseButtons, window: *const c.fenster) Mouse {
+fn beginFrame(renderer: *Render, mouse_buttons: *MouseButtons, window: *const c.fenster) Mouse {
     renderer.perf_begin_sim();
     renderer.begin_frame();
-    const mouse = mouse_buttons.update(@divFloor(window.x, CONF.PIXEL_SCALE), @divFloor(window.y, CONF.PIXEL_SCALE), @intCast(window.mouse));
-    assets.update(renderer.dt);
-    return mouse;
+    return mouse_buttons.update(@divFloor(window.x, CONF.PIXEL_SCALE), @divFloor(window.y, CONF.PIXEL_SCALE), @intCast(window.mouse));
 }
 
 fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) void {
@@ -181,9 +140,9 @@ fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) vo
     sm.go_to(if (sm.current == .editor or sm.current == .map_editor) .quit else .editor);
 }
 
-fn drawCurrentState(app: *AppState, renderer: *Render, assets: *SpriteAssets, mouse: Mouse) bool {
+fn drawCurrentState(app: *AppState, renderer: *Render, mouse: Mouse) bool {
     switch (app.sm.current) {
-        .splash => drawSplash(&app.fui, renderer, assets, &app.editor, mouse, &app.sm),
+        .splash => drawSplash(&app.fui, renderer, &app.editor, mouse, &app.sm),
         .editor => app.editor.draw(&app.fui, renderer, &app.project, mouse, &app.sm),
         .tile_library => app.library.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
         .map_editor => app.map_editor.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
@@ -212,7 +171,7 @@ fn presentFrame(renderer: *Render) void {
     renderer.cap_frame(CONF.TARGET_FPS);
 }
 
-fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, editor: *MainEditor, mouse: Mouse, sm: anytype) void {
+fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, sm: anytype) void {
     const cx = @divFloor(CONF.SCREEN_W, 2);
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
@@ -222,10 +181,9 @@ fn drawSplash(fui: *Fui, renderer: *Render, assets: *SpriteAssets, editor: *Main
     drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, SplashStyle.warn);
     drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 82, 3, SplashStyle.accent);
 
-    const start_clicked = drawSplashButton(fui, renderer, mouse, cx, CONF.SCREEN_H - 122);
+    const start_clicked = drawSplashButton(fui, renderer, mouse, cx, cy + 130);
 
     drawCenteredText(fui, renderer, "Powered by Borowik Engine", cx, CONF.SCREEN_H - 58, 1, SplashStyle.warn);
-    if (assets.icon) |*icon| icon.draw(renderer, cx - 16, CONF.SCREEN_H - 42);
 
     if (start_clicked) {
         editor.suppress_canvas_paint_until_mouse_up = true;
@@ -247,12 +205,9 @@ fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y
     return hovered and (mouse.just_pressed or mouse.just_right_pressed);
 }
 
-fn drawGlobalOverlay(fui: *Fui, renderer: *Render, assets: *SpriteAssets) void {
+fn drawGlobalOverlay(fui: *Fui, renderer: *Render) void {
     const save_button_x: i32 = CONF.SCREEN_W - 14 - 192;
-    const icon_x = save_button_x - 44;
-    const icon_y: i32 = 50;
-    if (assets.icon) |*icon| icon.draw(renderer, icon_x, icon_y);
-    renderer.draw_fps_overlay_at(fui, EditorTheme, icon_x - 76, icon_y + 12);
+    renderer.draw_fps_overlay_at(fui, EditorTheme, save_button_x - 120, 62);
 }
 
 fn drawCenteredText(fui: *Fui, renderer: *Render, text: []const u8, center_x: i32, y: i32, scale: i32, color: u32) void {

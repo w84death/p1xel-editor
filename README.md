@@ -23,6 +23,7 @@ Exported to GameBoy Color Engine:
 - Per-tile palette assignment within the active biome palette bank.
 - Tile/sprite library with add, duplicate, delete, paging, and visible-slot selection.
 - Map editor with 4 independent map banks, background tile stamping, fill, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
+- Game Boy Color-oriented export to `engine_export.p1xb` plus RGBDS include data; see `GBC.md`.
 - Copy/paste transfer for the selected 8×8 tile/sprite pixel indices via a temporary text file.
 - Persistent project storage in `art_data.p1x`.
 - Built-in default project data with a shared base tileset and imported biome palette sets.
@@ -313,6 +314,15 @@ The UI notes “double click to crop” because changing to a smaller size may r
 
 Directional buttons pan the map viewport.
 
+## Game Boy Color export
+
+The map editor can export engine-ready data for a Game Boy Color-style runtime:
+
+- `engine_export.p1xb` — binary export data containing palettes, 2bpp tiles, maps, attributes, logic/collision data, and sprite placements.
+- `P1X-GBC-ENGINE/SRC/p1xel_export.inc` — generated RGBDS include file that maps the binary data to labels/constants for a GBC engine.
+
+For the full import format, RGBDS workflow, direct parser notes, and current exporter limits, see [`GBC.md`](GBC.md).
+
 ## Persistence
 
 The project is saved to:
@@ -442,6 +452,8 @@ Important files:
 | `src/editor/main_editor.zig` | Tile/sprite pixel editor UI and tools. |
 | `src/editor/map_editor.zig` | Map editor UI, placement tools, map rendering. |
 | `src/editor/tile_library.zig` | Tile/sprite library screen. |
+| `src/editor/exporter.zig` | Game Boy Color export writer for `engine_export.p1xb` and RGBDS include data. |
+| `GBC.md` | Export format and import guide for GBC/RGBDS and other engines. |
 | `src/editor/views.zig` | Shared drawing helpers for tiles/images. |
 | `src/engine/render.zig` | Framebuffers, drawing primitives, presentation. |
 | `src/engine/config.zig` | Editor/engine constants. |
@@ -461,7 +473,7 @@ Important files:
 
 ## Current limitations
 
-- Export UI exists, but export is not implemented yet.
+- Export is currently GBC-oriented and uses fixed `32×32` runtime maps, two named exported levels, 6 OBJ tile slots, and uncompressed map data.
 - Art is constrained to 8×8 indexed images.
 - Each image can reference one 4-colour palette ID; the displayed colours come from the active palette bank.
 - The built-in map size presets are fixed.

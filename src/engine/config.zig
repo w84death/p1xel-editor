@@ -5,7 +5,7 @@
 // *************************************
 
 pub const CONF = struct {
-    pub const VERSION = "2.6";
+    pub const VERSION = "2.7";
     pub const ENGINE = "1.2";
     pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";

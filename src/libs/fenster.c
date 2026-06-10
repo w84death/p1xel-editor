@@ -142,6 +142,8 @@ static int FENSTER_KEYCODES[124] = {XK_BackSpace,8,XK_Delete,127,XK_Down,18,XK_E
 // clang-format on
 int fenster_open(struct fenster *f) {
   f->dpy = XOpenDisplay(NULL);
+  if (f->dpy == NULL)
+    return -1;
   int screen = DefaultScreen(f->dpy);
   int x = f->fullscreen ? 0 : (DisplayWidth(f->dpy, screen) - f->width) / 2;
   int y = f->fullscreen ? 0 : (DisplayHeight(f->dpy, screen) - f->height) / 2;

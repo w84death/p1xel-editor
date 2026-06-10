@@ -13,6 +13,7 @@ const editor_ui = @import("ui.zig");
 
 const UI = struct {
     const bg = editor_ui.Theme.bg;
+    const panel = editor_ui.Theme.panel;
     const panel_hi = editor_ui.Theme.panel_hi;
     const border_dark = editor_ui.Theme.border_dark;
     const text = editor_ui.Theme.text;
@@ -343,7 +344,6 @@ pub const MapEditor = struct {
 
     fn drawCanvas(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
         panel(renderer, UI.canvas_x, UI.canvas_y, UI.canvas_w, UI.canvas_h);
-        self.drawCanvasHeader(fui, renderer, project, mouse);
         const scale = self.canvasScale(project);
         const cell_px = @as(i32, CONF.TILE_SIDE) * scale;
         const origin = self.canvasOrigin(project);
@@ -364,6 +364,8 @@ pub const MapEditor = struct {
             const sy = origin[1] + @as(i32, cell[1]) * cell_px;
             renderer.draw_rect_lines(sx + 1, sy + 1, cell_px - 2, cell_px - 2, UI.accent);
         }
+
+        self.drawCanvasHeader(fui, renderer, project, mouse);
     }
 
     fn ensureMapCache(self: *MapEditor, renderer: *Render, project: *Project, origin: [2]i32, scale: i32, cell_px: i32, map_w: i32, map_h: i32) void {
@@ -418,6 +420,7 @@ pub const MapEditor = struct {
         _ = self;
         _ = mouse;
         const map = project.activeMap();
+        renderer.draw_rect(UI.canvas_x + 1, UI.canvas_y + 1, UI.canvas_w - 2, 56, UI.panel);
         var buf: [80]u8 = undefined;
         const text = std.fmt.bufPrint(&buf, "MAP {d}  {d} x {d}   L: DRAW   R: PICK", .{ project.activeMapBank() + 1, map.width, map.height }) catch "MAP CANVAS";
         drawText(fui, renderer, text, UI.canvas_x + 18, UI.canvas_y + 18, 2, UI.text);
@@ -448,7 +451,7 @@ pub const MapEditor = struct {
         const map = project.activeMap();
         const map_w = @as(i32, map.width) * cell_px;
         const map_h = @as(i32, map.height) * cell_px;
-        if (mx < UI.canvas_x + 1 or my < UI.canvas_y + 1 or mx >= UI.canvas_x + UI.canvas_w - 1 or my >= UI.canvas_y + UI.canvas_h - 1) return null;
+        if (mx < UI.canvas_x + 1 or my < UI.canvas_y + 58 or mx >= UI.canvas_x + UI.canvas_w - 1 or my >= UI.canvas_y + UI.canvas_h - 1) return null;
         if (mx < origin[0] or my < origin[1] or mx >= origin[0] + map_w or my >= origin[1] + map_h) return null;
         return .{ @intCast(@divFloor(mx - origin[0], cell_px)), @intCast(@divFloor(my - origin[1], cell_px)) };
     }

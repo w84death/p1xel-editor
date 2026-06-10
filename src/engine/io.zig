@@ -50,7 +50,7 @@ fn default_settings() Settings {
     return .{
         .width = CONF.SCREEN_W,
         .height = CONF.SCREEN_H,
-        .fullscreen = false,
+        .fullscreen = CONF.FULLSCREEN != 0,
     };
 }
 

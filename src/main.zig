@@ -96,7 +96,7 @@ pub fn main() !void {
         .fullscreen = CONF.FULLSCREEN,
     });
 
-    _ = c.fenster_open(&window);
+    if (c.fenster_open(&window) != 0) return error.WindowOpenFailed;
     defer c.fenster_close(&window);
 
     var renderer = Render.init_scaled(raw_buf, CONF.SCREEN_W, CONF.SCREEN_H, CONF.PIXEL_SCALE);

@@ -100,9 +100,10 @@ pub const Render = struct {
     }
 
     pub fn begin_frame(self: *Render) void {
-        const d: f32 = @floatFromInt(c.fenster_time() - self.now);
-        self.dt = @as(f32, d / 1000.0);
-        self.now = c.fenster_time();
+        const now_ms = c.fenster_time();
+        const d: f32 = @floatFromInt(now_ms - self.now);
+        self.dt = d / 1000.0;
+        self.now = now_ms;
     }
 
     pub fn cap_frame(self: *Render, target_fps: f64) void {
@@ -129,15 +130,18 @@ pub const Render = struct {
         while (y < logical_h) : (y += 1) {
             const src_row = y * logical_w;
             const dst_row = y * scale * window_w;
+
             var x: usize = 0;
             while (x < logical_w) : (x += 1) {
                 const color = self.frame_buf[src_row + x];
-                const dst_x = x * scale;
-                var sy: usize = 0;
-                while (sy < scale) : (sy += 1) {
-                    const dst = dst_row + sy * window_w + dst_x;
-                    @memset(self.window_buf[dst .. dst + scale], color);
-                }
+                const dst = dst_row + x * scale;
+                @memset(self.window_buf[dst .. dst + scale], color);
+            }
+
+            var sy: usize = 1;
+            while (sy < scale) : (sy += 1) {
+                const dst = dst_row + sy * window_w;
+                @memcpy(self.window_buf[dst .. dst + window_w], self.window_buf[dst_row .. dst_row + window_w]);
             }
         }
     }
@@ -199,10 +203,7 @@ pub const Render = struct {
     }
 
     pub fn clear_buffer(self: *Render, target: Framebuffer, color: u32) void {
-        const buf = self.buffer_ptr(target);
-        for (buf) |*px| {
-            px.* = color;
-        }
+        @memset(self.buffer_ptr(target), color);
     }
 
     pub fn copy_buffer(self: *Render, src: Framebuffer, dst: Framebuffer) void {
@@ -232,6 +233,19 @@ pub const Render = struct {
     }
 
     pub fn draw_line(self: *Render, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) void {
+        if (y0 == y1) {
+            const x = @min(x0, x1);
+            const w: i32 = @intCast(@abs(x1 - x0) + 1);
+            self.draw_hline(x, y0, w, color);
+            return;
+        }
+        if (x0 == x1) {
+            const y = @min(y0, y1);
+            const h: i32 = @intCast(@abs(y1 - y0) + 1);
+            self.draw_vline(x0, y, h, color);
+            return;
+        }
+
         var x = x0;
         var y = y0;
         const dx: i32 = @intCast(@abs(x1 - x0));
@@ -301,37 +315,78 @@ pub const Render = struct {
     pub fn draw_rect_trans(self: *Render, x: i32, y: i32, w: i32, h: i32, color: u32) void {
         const clipped = self.clip_rect(x, y, w, h) orelse return;
 
-        const ix: u32 = @intCast(clipped.x);
-        const iy: u32 = @intCast(clipped.y);
-        const iw: u32 = @intCast(clipped.w);
-        const ih: u32 = @intCast(clipped.h);
+        const screen_w: usize = @intCast(self.width);
+        const sx: usize = @intCast(clipped.x);
+        const sy: usize = @intCast(clipped.y);
+        const sw: usize = @intCast(clipped.w);
+        const sh: usize = @intCast(clipped.h);
+        const buf = self.active_buffer_ptr();
 
-        for (iy..(iy + ih)) |row| {
-            for (ix..(ix + iw)) |col| {
-                const local_row = row - iy;
-                if (local_row % 4 != 1) {
-                    self.put_pixel(@intCast(col), @intCast(row), color);
-                }
-            }
+        var row: usize = 0;
+        while (row < sh) : (row += 1) {
+            if (row % 4 == 1) continue;
+            const start = (sy + row) * screen_w + sx;
+            @memset(buf[start .. start + sw], color);
         }
     }
 
     pub fn draw_rect_lines(self: *Render, x: i32, y: i32, w: i32, h: i32, color: u32) void {
         if (w <= 0 or h <= 0) return;
-        self.draw_line(x, y, x + w - 1, y, color);
-        self.draw_line(x, y + h - 1, x + w - 1, y + h - 1, color);
-        self.draw_line(x, y, x, y + h - 1, color);
-        self.draw_line(x + w - 1, y, x + w - 1, y + h - 1, color);
+        self.draw_hline(x, y, w, color);
+        if (h > 1) self.draw_hline(x, y + h - 1, w, color);
+        if (h > 2) {
+            self.draw_vline(x, y + 1, h - 2, color);
+            if (w > 1) self.draw_vline(x + w - 1, y + 1, h - 2, color);
+        }
     }
 
     pub fn draw_hline(self: *Render, x: i32, y: i32, w: i32, color: u32) void {
-        if (w <= 0) return;
-        self.draw_line(x, y, x + w - 1, y, color);
+        if (w <= 0 or y < 0 or y >= self.height) return;
+
+        var rx = x;
+        var rw = w;
+        if (rx < 0) {
+            rw += rx;
+            rx = 0;
+        }
+        if (rx + rw > self.width) rw = self.width - rx;
+        if (rw <= 0) return;
+
+        const screen_w: usize = @intCast(self.width);
+        const sx: usize = @intCast(rx);
+        const sy: usize = @intCast(y);
+        const sw: usize = @intCast(rw);
+        const start = sy * screen_w + sx;
+        @memset(self.active_buffer_ptr()[start .. start + sw], color);
+    }
+
+    pub fn draw_vline(self: *Render, x: i32, y: i32, h: i32, color: u32) void {
+        if (h <= 0 or x < 0 or x >= self.width) return;
+
+        var ry = y;
+        var rh = h;
+        if (ry < 0) {
+            rh += ry;
+            ry = 0;
+        }
+        if (ry + rh > self.height) rh = self.height - ry;
+        if (rh <= 0) return;
+
+        const screen_w: usize = @intCast(self.width);
+        const sx: usize = @intCast(x);
+        var row: usize = @intCast(ry);
+        const end: usize = @intCast(ry + rh);
+        const buf = self.active_buffer_ptr();
+        while (row < end) : (row += 1) {
+            buf[row * screen_w + sx] = color;
+        }
     }
 
     pub fn draw_circle(self: *Render, x: i32, y: i32, r: u32, color: u32) void {
         const rr = @as(i64, r) * r;
         const ir: i32 = @intCast(r);
+        const screen_w: usize = @intCast(self.width);
+        const buf = self.active_buffer_ptr();
         var dy: i32 = -ir;
         while (dy <= ir) : (dy += 1) {
             var dx: i32 = -ir;
@@ -341,8 +396,8 @@ pub const Render = struct {
                 if (px >= 0 and px < self.width and py >= 0 and py < self.height) {
                     const dist = @as(i64, dx) * dx + @as(i64, dy) * dy;
                     if (dist <= rr) {
-                        const index = (@as(usize, @intCast(py)) * @as(usize, @intCast(self.width))) + @as(usize, @intCast(px));
-                        self.active_buffer_ptr()[index] = color;
+                        const index = @as(usize, @intCast(py)) * screen_w + @as(usize, @intCast(px));
+                        buf[index] = color;
                     }
                 }
             }
@@ -350,19 +405,33 @@ pub const Render = struct {
     }
 
     pub fn fill(self: *Render, x: i32, y: i32, old_color: u32, new_color: u32) void {
-        if (old_color == new_color) {
-            return;
+        if (old_color == new_color) return;
+        if (x < 0 or y < 0 or x >= self.width or y >= self.height) return;
+        if (self.get_pixel(x, y) != old_color) return;
+
+        var stack = std.ArrayListUnmanaged([2]i32).empty;
+        defer stack.deinit(self.allocator);
+
+        self.put_pixel(x, y, new_color);
+        stack.append(self.allocator, .{ x, y }) catch return;
+
+        while (stack.items.len > 0) {
+            const point = stack.items[stack.items.len - 1];
+            stack.items.len -= 1;
+
+            if (!self.pushFillPixel(&stack, point[0] - 1, point[1], old_color, new_color)) return;
+            if (!self.pushFillPixel(&stack, point[0] + 1, point[1], old_color, new_color)) return;
+            if (!self.pushFillPixel(&stack, point[0], point[1] - 1, old_color, new_color)) return;
+            if (!self.pushFillPixel(&stack, point[0], point[1] + 1, old_color, new_color)) return;
         }
-        if (x < 0 or y < 0 or x >= self.width or y >= self.height) {
-            return;
-        }
-        if (self.get_pixel(x, y) == old_color) {
-            self.put_pixel(x, y, new_color);
-            self.fill(x - 1, y, old_color, new_color);
-            self.fill(x + 1, y, old_color, new_color);
-            self.fill(x, y - 1, old_color, new_color);
-            self.fill(x, y + 1, old_color, new_color);
-        }
+    }
+
+    fn pushFillPixel(self: *Render, stack: *std.ArrayListUnmanaged([2]i32), x: i32, y: i32, old_color: u32, new_color: u32) bool {
+        if (x < 0 or y < 0 or x >= self.width or y >= self.height) return true;
+        if (self.get_pixel(x, y) != old_color) return true;
+        self.put_pixel(x, y, new_color);
+        stack.append(self.allocator, .{ x, y }) catch return false;
+        return true;
     }
 
     fn clip_rect(self: *Render, x: i32, y: i32, w: i32, h: i32) ?ClippedRect {
@@ -402,11 +471,6 @@ pub const Render = struct {
             .frame => self.frame_buf,
             .terrain => self.terrain_buf,
         };
-    }
-
-    fn sub_sat(a: u8, b: u8) u8 {
-        if (a <= b) return 0;
-        return a - b;
     }
 
     fn smooth(current: f32, next: f32) f32 {

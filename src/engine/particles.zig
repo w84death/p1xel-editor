@@ -8,6 +8,7 @@ pub const Particle = struct {
     frame_count: u8,
 
     pub fn lifetime(self: Particle) f32 {
+        if (self.frame_count == 0 or self.frame_duration <= 0.0) return 0.0;
         return @as(f32, @floatFromInt(self.frame_count)) * self.frame_duration;
     }
 
@@ -16,7 +17,7 @@ pub const Particle = struct {
     }
 
     pub fn frame_index(self: Particle) usize {
-        if (self.frame_count == 0) return 0;
+        if (self.frame_count == 0 or self.frame_duration <= 0.0) return 0;
         const idx: usize = @intFromFloat(self.age / self.frame_duration);
         const max_idx = @as(usize, self.frame_count - 1);
         return @min(idx, max_idx);
@@ -44,7 +45,7 @@ pub const ParticleSystem = struct {
         if (self.max_particles == 0) return;
 
         if (self.particles.items.len >= self.max_particles) {
-            _ = self.particles.orderedRemove(0);
+            _ = self.particles.swapRemove(0);
         }
 
         try self.particles.append(self.allocator, particle);

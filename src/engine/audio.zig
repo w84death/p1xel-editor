@@ -188,7 +188,8 @@ pub const Audio = struct {
     rng_state: u64 = 12345, // Random state for analog effects
     vibrato_phase: f32 = 0.0, // For vibrato LFO
     drift_phase: f32 = 0.0, // For slow drift LFO
-    current_note_id: usize = 0, // Track which note ID we're currently playing
+    cached_tied_duration: f32 = 0.0,
+    cached_is_last_in_tied_group: bool = true,
 
     pub fn init() Audio {
         const fa_buf = std.heap.page_allocator.alloc(u8, FA_SIZE) catch unreachable;
@@ -207,7 +208,8 @@ pub const Audio = struct {
             .rng_state = 12345,
             .vibrato_phase = 0.0,
             .drift_phase = 0.0,
-            .current_note_id = 0,
+            .cached_tied_duration = 0.0,
+            .cached_is_last_in_tied_group = true,
         };
     }
     pub fn deinit(self: *Audio) void {
@@ -253,25 +255,27 @@ pub const Audio = struct {
         }
     }
 
-    // Check if we're the last note in a tied group
-    fn isLastInTiedGroup(self: *Audio) bool {
-        if (self.tune == null) return true;
-        const current_idx = self.current_note;
-        if (current_idx + 1 >= self.tune.?.len) return true;
-        // We're last in group if next note is different
-        return self.tune.?[current_idx].id != self.tune.?[current_idx + 1].id;
-    }
+    fn refreshTiedGroupCache(self: *Audio) void {
+        const tune = self.tune orelse {
+            self.cached_tied_duration = 0.0;
+            self.cached_is_last_in_tied_group = true;
+            return;
+        };
+        if (self.current_note >= tune.len) {
+            self.cached_tied_duration = 0.0;
+            self.cached_is_last_in_tied_group = true;
+            return;
+        }
 
-    // Calculate total duration of current tied note group
-    fn calculateTiedGroupDuration(self: *Audio) f32 {
-        if (self.tune == null) return 0.0;
-        const current_id = self.tune.?[self.current_note].id;
+        const current_id = tune[self.current_note].id;
         var total_dur: f32 = 0.0;
         var idx = self.current_note;
-        while (idx < self.tune.?.len and self.tune.?[idx].id == current_id) : (idx += 1) {
-            total_dur += self.tune.?[idx].dur;
+        while (idx < tune.len and tune[idx].id == current_id) : (idx += 1) {
+            total_dur += tune[idx].dur;
         }
-        return total_dur;
+
+        self.cached_tied_duration = total_dur;
+        self.cached_is_last_in_tied_group = self.current_note + 1 >= tune.len or current_id != tune[self.current_note + 1].id;
     }
 
     pub fn update_audio(self: *Audio, dt: f32) void {
@@ -285,8 +289,8 @@ pub const Audio = struct {
 
             while (i < to_write) : (i += 1) {
                 if (!self.playing or self.tune == null) {
-                    buf[i] = 0.0;
-                    continue;
+                    @memset(buf[i..to_write], 0.0);
+                    break;
                 }
 
                 // Advance note if time is up
@@ -306,8 +310,8 @@ pub const Audio = struct {
                     if (next_note.id != prev_note_id) {
                         // Different note - reset envelope for new attack
                         self.note_start_time = 0.0;
-                        self.current_note_id = next_note.id;
                     }
+                    self.refreshTiedGroupCache();
                     // If same note: continue with accumulated note_start_time (legato)
                 }
 
@@ -323,10 +327,7 @@ pub const Audio = struct {
                 if (base_freq == 0.0) {
                     buf[i] = 0.0;
                 } else {
-                    // Calculate envelope - check if we're in a tied group
-                    const is_last = self.isLastInTiedGroup();
-                    const tied_dur = self.calculateTiedGroupDuration();
-                    const envelope = self.calculateEnvelope(self.note_start_time, tied_dur, is_last);
+                    const envelope = self.calculateEnvelope(self.note_start_time, self.cached_tied_duration, self.cached_is_last_in_tied_group);
 
                     // Calculate analog pitch drift
                     self.vibrato_phase += VIBRATO_RATE / self.sample_rate;
@@ -369,6 +370,11 @@ pub const Audio = struct {
         }
     }
     pub fn play_tune(self: *Audio, tune: Tune) void {
+        if (tune.len == 0) {
+            self.stop_tune();
+            return;
+        }
+
         self.tune = tune;
         self.current_note = 0;
         self.current_time = 0.0;
@@ -376,8 +382,8 @@ pub const Audio = struct {
         self.phase = 0.0;
         self.vibrato_phase = 0.0;
         self.drift_phase = 0.0;
-        self.current_note_id = 0;
         self.playing = true;
+        self.refreshTiedGroupCache();
     }
     pub fn stop_tune(self: *Audio) void {
         self.playing = false;

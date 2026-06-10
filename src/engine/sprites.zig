@@ -26,6 +26,7 @@ pub const SpriteSheet = struct {
     row_span_offsets: []u32,
     spans: []Span,
     frame_pixels_per_frame: usize,
+    frames: usize,
 
     pub const LoadSettings = struct {
         name: []const u8,
@@ -199,6 +200,7 @@ pub const SpriteSheet = struct {
             .row_span_offsets = row_span_offsets,
             .spans = spans,
             .frame_pixels_per_frame = frame_pixels_per_frame,
+            .frames = decoded_frame_count,
         };
     }
 
@@ -220,10 +222,14 @@ pub const SpriteSheet = struct {
         self.allocator.free(self.spans);
     }
 
+    pub fn destroy(self: *SpriteSheet) void {
+        const allocator = self.allocator;
+        self.deinit();
+        allocator.destroy(self);
+    }
+
     pub fn frame_count(self: *const SpriteSheet) usize {
-        const cols: usize = @intCast(self.columns);
-        const rows: usize = @intCast(self.rows);
-        return cols * rows;
+        return self.frames;
     }
 
     pub fn draw_frame(self: *const SpriteSheet, renderer: *Render, frame_index: usize, x: i32, y: i32) void {
@@ -344,9 +350,10 @@ pub const Sprite = struct {
     }
 
     pub fn set_animation(self: *Sprite, start_frame: usize, frame_count: usize, frame_duration: f32, looping: bool) SpriteError!void {
+        const total_frames = self.sheet.frame_count();
         if (frame_count == 0) return SpriteError.InvalidAnimation;
-        if (start_frame >= self.sheet.frame_count()) return SpriteError.InvalidAnimation;
-        if (start_frame + frame_count > self.sheet.frame_count()) return SpriteError.InvalidAnimation;
+        if (start_frame >= total_frames) return SpriteError.InvalidAnimation;
+        if (start_frame + frame_count > total_frames) return SpriteError.InvalidAnimation;
 
         self.anim_start = start_frame;
         self.anim_len = frame_count;

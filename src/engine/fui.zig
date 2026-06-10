@@ -57,21 +57,34 @@ pub fn Fui(comptime Theme: type) type {
 
         pub fn draw_text(self: *Self, renderer: *Render, s: []const u8, x: i32, y: i32, scale: i32, color: u32) void {
             _ = self;
+            if (scale <= 0) return;
+
             var px = x;
             for (s) |chr| {
                 if (chr >= 32 and chr < 95 + 32) {
                     const bmh = Font[chr - 32];
                     var dy: i32 = 0;
                     while (dy < CONF.FONT_HEIGHT) : (dy += 1) {
+                        const row_offset = dy * CONF.FONT_WIDTH;
+                        const ry = y + dy * scale;
                         var dx: i32 = 0;
-                        while (dx < CONF.FONT_WIDTH) : (dx += 1) {
-                            const bit: u6 = @intCast(dy * CONF.FONT_WIDTH + dx);
-                            if ((bmh >> bit) & 1 != 0) {
-                                const rx: i32 = @intCast(dx * scale);
-                                const ry: i32 = @intCast(dy * scale);
-                                renderer.draw_rect(px + rx + 2, y + ry + 2, scale, scale, Theme.SHADOW_COLOR);
-                                renderer.draw_rect(px + rx, y + ry, scale, scale, color);
+                        while (dx < CONF.FONT_WIDTH) {
+                            while (dx < CONF.FONT_WIDTH) : (dx += 1) {
+                                const bit: u6 = @intCast(row_offset + dx);
+                                if ((bmh >> bit) & 1 != 0) break;
                             }
+                            if (dx >= CONF.FONT_WIDTH) break;
+
+                            const run_start = dx;
+                            while (dx < CONF.FONT_WIDTH) : (dx += 1) {
+                                const bit: u6 = @intCast(row_offset + dx);
+                                if ((bmh >> bit) & 1 == 0) break;
+                            }
+
+                            const run_w = (dx - run_start) * scale;
+                            const rx = px + run_start * scale;
+                            renderer.draw_rect(rx + 2, ry + 2, run_w, scale, Theme.SHADOW_COLOR);
+                            renderer.draw_rect(rx, ry, run_w, scale, color);
                         }
                     }
                 }

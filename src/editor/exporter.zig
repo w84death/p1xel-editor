@@ -10,7 +10,8 @@ const Map = project_mod.Map;
 const PaletteColor = project_mod.PaletteColor;
 
 pub const ENGINE_EXPORT_PATH = "engine_export.p1xb";
-pub const ENGINE_EXPORT_INC_PATH = "P1X-GBC-ENGINE/SRC/p1xel_export.inc";
+pub const ENGINE_EXPORT_INC_DIR = "P1X-GBC-ENGINE/SRC";
+pub const ENGINE_EXPORT_INC_PATH = ENGINE_EXPORT_INC_DIR ++ "/p1xel_export.inc";
 
 pub fn errorMessage(err: anyerror) []const u8 {
     return switch (err) {
@@ -257,6 +258,10 @@ fn exportTileCount(project: *const Project) u16 {
 
 fn writeRgbdsInclude(project: *const Project) !void {
     std.debug.print("[export] writing RGBDS include to {s}\n", .{ENGINE_EXPORT_INC_PATH});
+    std.Io.Dir.cwd().createDirPath(std.Options.debug_io, ENGINE_EXPORT_INC_DIR) catch |err| {
+        std.debug.print("[export] failed to create {s}: {s}\n", .{ ENGINE_EXPORT_INC_DIR, @errorName(err) });
+        return error.ExportOpenFailed;
+    };
 
     const tile_count = exportTileCount(project);
     const bg_tile_bytes: usize = @as(usize, tile_count) * 16;

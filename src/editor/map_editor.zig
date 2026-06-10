@@ -39,6 +39,8 @@ const UI = struct {
 
 const Tool = enum { bg_stamp, bg_fill, sprite_stamp, sprite_remove };
 const PendingSize = enum { none, s32x32, s64x16, s128x16 };
+const GBC_SCREEN_W_TILES: i32 = 20;
+const GBC_SCREEN_H_TILES: i32 = 18;
 
 pub const MapEditor = struct {
     tool: Tool = .bg_stamp,
@@ -60,6 +62,8 @@ pub const MapEditor = struct {
     zoom_extra: i32 = 0,
     pan_x: i32 = 0,
     pan_y: i32 = 0,
+    show_grid: bool = true,
+    show_gbc_screen: bool = false,
 
     pub fn invalidateCache(self: *MapEditor) void {
         self.cache_dirty = true;
@@ -150,7 +154,8 @@ pub const MapEditor = struct {
         const size_y = UI.canvas_y + 94;
         const zoom_y = UI.canvas_y + 226;
         const pan_y = UI.canvas_y + 342;
-        const file_y = UI.canvas_y + 514;
+        const view_y = UI.canvas_y + 500;
+        const file_y = UI.canvas_y + 590;
 
         drawText(fui, renderer, "MAP BANK", x, bank_y, 2, UI.text);
         for (0..Project.MAP_BANK_COUNT) |bank| {
@@ -199,6 +204,16 @@ pub const MapEditor = struct {
         }
         if (button(fui, renderer, mouse, x + 134, pan_y + 72, 54, 34, ">", false)) self.pan_x -= step;
         if (button(fui, renderer, mouse, x + 67, pan_y + 114, 54, 34, "DN", false)) self.pan_y -= step;
+
+        drawText(fui, renderer, "VIEW", x, view_y, 2, UI.text);
+        if (button(fui, renderer, mouse, x, view_y + 32, 86, 34, "GRID", self.show_grid)) {
+            self.show_grid = !self.show_grid;
+            self.setInfo(if (self.show_grid) "Grid on" else "Grid off", UI.accent);
+        }
+        if (button(fui, renderer, mouse, x + 102, view_y + 32, 86, 34, "GBC VIEW", self.show_gbc_screen)) {
+            self.show_gbc_screen = !self.show_gbc_screen;
+            self.setInfo(if (self.show_gbc_screen) "GBC screen on" else "GBC screen off", UI.accent);
+        }
 
         drawText(fui, renderer, "FILE", x, file_y, 2, UI.text);
         if (button(fui, renderer, mouse, x, file_y + 32, 86, 34, "SAVE", project.dirty)) {
@@ -354,6 +369,9 @@ pub const MapEditor = struct {
         self.ensureMapCache(renderer, project, origin, scale, cell_px, map_w, map_h);
         copyTerrainRectToFrame(renderer, origin[0], origin[1], map_w, map_h, UI.canvas_x + 1, UI.canvas_y + 1, UI.canvas_w - 2, UI.canvas_h - 2);
 
+        if (self.show_grid) self.drawGridOverlay(renderer, project, origin, cell_px, map_w, map_h);
+        if (self.show_gbc_screen) self.drawGameBoyScreenOverlay(renderer, project, mouse, origin, cell_px);
+
         if (self.canvasCell(project, mouse.x, mouse.y)) |cell| {
             const hx = origin[0] + @as(i32, cell[0]) * cell_px;
             const hy = origin[1] + @as(i32, cell[1]) * cell_px;
@@ -395,17 +413,6 @@ pub const MapEditor = struct {
             }
         }
 
-        var gx: u16 = 0;
-        while (gx <= map.width) : (gx += 1) {
-            const x = origin[0] + @as(i32, gx) * cell_px;
-            renderer.draw_line(x, origin[1], x, origin[1] + map_h, 0x2B323A);
-        }
-        var gy: u16 = 0;
-        while (gy <= map.height) : (gy += 1) {
-            const yline = origin[1] + @as(i32, gy) * cell_px;
-            renderer.draw_line(origin[0], yline, origin[0] + map_w, yline, 0x2B323A);
-        }
-
         renderer.set_target(previous_target);
         self.cached_map_revision = revision;
         self.cached_map_scale = scale;
@@ -414,6 +421,44 @@ pub const MapEditor = struct {
         self.cached_origin_x = origin[0];
         self.cached_origin_y = origin[1];
         self.cache_dirty = false;
+    }
+
+    fn drawGridOverlay(self: *MapEditor, renderer: *Render, project: *const Project, origin: [2]i32, cell_px: i32, map_w: i32, map_h: i32) void {
+        _ = self;
+        const map = project.activeMap();
+        const clip = canvasContentClip();
+        var gx: u16 = 0;
+        while (gx <= map.width) : (gx += 1) {
+            const x = origin[0] + @as(i32, gx) * cell_px;
+            drawClippedVLine(renderer, x, origin[1], map_h, clip, 0x2B323A);
+        }
+        var gy: u16 = 0;
+        while (gy <= map.height) : (gy += 1) {
+            const yline = origin[1] + @as(i32, gy) * cell_px;
+            drawClippedHLine(renderer, origin[0], yline, map_w, clip, 0x2B323A);
+        }
+    }
+
+    fn drawGameBoyScreenOverlay(self: *MapEditor, renderer: *Render, project: *const Project, mouse: Mouse, origin: [2]i32, cell_px: i32) void {
+        const map = project.activeMap();
+        const view_w_cells = @min(GBC_SCREEN_W_TILES, @as(i32, map.width));
+        const view_h_cells = @min(GBC_SCREEN_H_TILES, @as(i32, map.height));
+        if (view_w_cells <= 0 or view_h_cells <= 0) return;
+
+        const focus = self.selected_cell orelse self.canvasCell(project, mouse.x, mouse.y);
+        const max_x = @as(i32, map.width) - view_w_cells;
+        const max_y = @as(i32, map.height) - view_h_cells;
+        const left_cell = if (focus) |cell| @max(0, @min(max_x, @as(i32, cell[0]) - @divFloor(view_w_cells, 2))) else @divFloor(max_x, 2);
+        const top_cell = if (focus) |cell| @max(0, @min(max_y, @as(i32, cell[1]) - @divFloor(view_h_cells, 2))) else @divFloor(max_y, 2);
+
+        const x = origin[0] + left_cell * cell_px;
+        const y = origin[1] + top_cell * cell_px;
+        const w = view_w_cells * cell_px;
+        const h = view_h_cells * cell_px;
+        const clip = canvasContentClip();
+
+        drawClippedRectLines(renderer, x, y, w, h, clip, UI.warn);
+        drawClippedRectLines(renderer, x + 1, y + 1, w - 2, h - 2, clip, UI.text);
     }
 
     fn drawCanvasHeader(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
@@ -461,6 +506,48 @@ pub const MapEditor = struct {
         self.info_color = color;
     }
 };
+
+const ClipRect = struct {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+};
+
+fn canvasContentClip() ClipRect {
+    return .{
+        .x = UI.canvas_x + 1,
+        .y = UI.canvas_y + 58,
+        .w = UI.canvas_w - 2,
+        .h = UI.canvas_h - 59,
+    };
+}
+
+fn drawClippedHLine(renderer: *Render, x: i32, y: i32, w: i32, clip: ClipRect, color: u32) void {
+    if (w <= 0 or y < clip.y or y >= clip.y + clip.h) return;
+    const x0 = @max(x, clip.x);
+    const x1 = @min(x + w, clip.x + clip.w);
+    if (x0 >= x1) return;
+    renderer.draw_hline(x0, y, x1 - x0, color);
+}
+
+fn drawClippedVLine(renderer: *Render, x: i32, y: i32, h: i32, clip: ClipRect, color: u32) void {
+    if (h <= 0 or x < clip.x or x >= clip.x + clip.w) return;
+    const y0 = @max(y, clip.y);
+    const y1 = @min(y + h, clip.y + clip.h);
+    if (y0 >= y1) return;
+    renderer.draw_vline(x, y0, y1 - y0, color);
+}
+
+fn drawClippedRectLines(renderer: *Render, x: i32, y: i32, w: i32, h: i32, clip: ClipRect, color: u32) void {
+    if (w <= 0 or h <= 0) return;
+    drawClippedHLine(renderer, x, y, w, clip, color);
+    if (h > 1) drawClippedHLine(renderer, x, y + h - 1, w, clip, color);
+    if (h > 2) {
+        drawClippedVLine(renderer, x, y + 1, h - 2, clip, color);
+        if (w > 1) drawClippedVLine(renderer, x + w - 1, y + 1, h - 2, clip, color);
+    }
+}
 
 fn copyTerrainRectToFrame(renderer: *Render, x: i32, y: i32, w: i32, h: i32, clip_x: i32, clip_y: i32, clip_w: i32, clip_h: i32) void {
     if (w <= 0 or h <= 0) return;

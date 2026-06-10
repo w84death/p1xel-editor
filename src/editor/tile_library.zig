@@ -193,8 +193,9 @@ fn drawBackground(renderer: *Render) void {
 fn drawTopPanel(fui: anytype, renderer: *Render, project: *const Project) void {
     panel(renderer, UI.side_x, UI.top_y, CONF.SCREEN_W - UI.side_x * 2, UI.top_h);
     const title = if (project.mode == .tiles) "TILES LIBRARY" else "SPRITES LIBRARY";
-    drawText(fui, renderer, title, 38, 42, 3, UI.text);
-    drawText(fui, renderer, "L: SELECT TILE", 38, 78, 1, UI.muted);
+    const title_x = UI.side_x + 24;
+    drawText(fui, renderer, title, title_x, UI.top_y + 20, 3, UI.text);
+    drawText(fui, renderer, "L: SELECT TILE", title_x, UI.top_y + 56, 1, UI.muted);
 }
 
 fn drawLeftInfo(fui: anytype, renderer: *Render, project: *const Project) void {

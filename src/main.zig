@@ -18,6 +18,7 @@ const State = editor_mod.State;
 const TileLibrary = @import("editor/tile_library.zig").TileLibrary;
 const MapEditor = @import("editor/map_editor.zig").MapEditor;
 const views = @import("editor/views.zig");
+const editor_ui = @import("editor/ui.zig");
 
 const EditorTheme = struct {
     pub const PIVOT_PADDING = 4;
@@ -206,8 +207,8 @@ fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y
 }
 
 fn drawGlobalOverlay(fui: *Fui, renderer: *Render) void {
-    const save_button_x: i32 = CONF.SCREEN_W - 14 - 192;
-    renderer.draw_fps_overlay_at(fui, EditorTheme, save_button_x - 120, 62);
+    const save_button_x: i32 = CONF.SCREEN_W - editor_ui.Layout.side_x - 192;
+    renderer.draw_fps_overlay_at(fui, EditorTheme, save_button_x - 120, editor_ui.Layout.top_y + 38);
 }
 
 fn drawCenteredText(fui: *Fui, renderer: *Render, text: []const u8, center_x: i32, y: i32, scale: i32, color: u32) void {

@@ -7,14 +7,14 @@ pub const TopTab = enum { tiles, sprites, map_editor };
 pub const TopAction = enum { tiles, sprites, map_editor, save, quit };
 
 pub const Theme = struct {
-    pub const bg = 0x121619;
-    pub const panel = 0x1B2026;
-    pub const panel_dark = 0x14191E;
-    pub const panel_hi = 0x2B323A;
-    pub const border = 0x3B434C;
-    pub const border_dark = 0x090B0D;
-    pub const text = 0xF0F0F0;
-    pub const muted = 0xB7BBC0;
+    pub const bg = 0x171C20;
+    pub const panel = 0x222A31;
+    pub const panel_dark = 0x1B2228;
+    pub const panel_hi = 0x33404A;
+    pub const border = 0x4A5661;
+    pub const border_dark = 0x12171B;
+    pub const text = 0xF4F4F4;
+    pub const muted = 0xC2C7CC;
     pub const accent = 0x7EDB1E;
     pub const accent_dark = 0x486E10;
     pub const danger = 0xFF4040;
@@ -24,13 +24,13 @@ pub const Theme = struct {
 };
 
 pub const Layout = struct {
-    pub const side_x: i32 = 14;
-    pub const top_y: i32 = 24;
+    pub const side_x: i32 = 8;
+    pub const top_y: i32 = 12;
     pub const top_h: i32 = 82;
-    pub const gap: i32 = 10;
+    pub const gap: i32 = 8;
     pub const left_w: i32 = 276;
     pub const right_w: i32 = 220;
-    pub const content_y: i32 = 110;
+    pub const content_y: i32 = top_y + top_h + 6;
 
     pub fn leftX() i32 {
         return side_x;
@@ -49,7 +49,7 @@ pub const Layout = struct {
     }
 
     pub fn contentH() i32 {
-        return CONF.SCREEN_H - content_y - 22;
+        return CONF.SCREEN_H - content_y - 12;
     }
 };
 
@@ -59,9 +59,7 @@ pub fn drawText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i3
 
 pub fn panel(renderer: *Render, x: i32, y: i32, w: i32, h: i32) void {
     if (w <= 0 or h <= 0) return;
-    renderer.draw_rect(x + 3, y + 3, w, h, Theme.border_dark);
     renderer.draw_rect(x, y, w, h, Theme.panel);
-    renderer.draw_rect_lines(x, y, w, h, Theme.border);
 }
 
 pub fn button(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: []const u8, active: bool) bool {
@@ -81,16 +79,17 @@ pub fn drawTopBar(
     dirty: bool,
     right_x: i32,
 ) ?TopAction {
-    panel(renderer, 14, 24, CONF.SCREEN_W - 28, 82);
-    drawText(fui, renderer, title, 38, 44, 3, Theme.text);
+    panel(renderer, Layout.side_x, Layout.top_y, CONF.SCREEN_W - Layout.side_x * 2, Layout.top_h);
+    drawText(fui, renderer, title, Layout.side_x + 24, Layout.top_y + 20, 3, Theme.text);
 
-    if (button(fui, renderer, mouse, 396, 43, 144, 46, "TILES", active_tab == .tiles)) return .tiles;
-    if (button(fui, renderer, mouse, 548, 43, 156, 46, "SPRITES", active_tab == .sprites)) return .sprites;
-    if (button(fui, renderer, mouse, 712, 43, 190, 46, "MAP EDITOR", active_tab == .map_editor)) return .map_editor;
+    const button_y = Layout.top_y + 19;
+    if (button(fui, renderer, mouse, 396, button_y, 144, 46, "TILES", active_tab == .tiles)) return .tiles;
+    if (button(fui, renderer, mouse, 548, button_y, 156, 46, "SPRITES", active_tab == .sprites)) return .sprites;
+    if (button(fui, renderer, mouse, 712, button_y, 190, 46, "MAP EDITOR", active_tab == .map_editor)) return .map_editor;
 
-    const tx = right_x + 220 - 192;
-    if (button(fui, renderer, mouse, tx, 43, 86, 46, "SAVE", dirty)) return .save;
-    if (button(fui, renderer, mouse, tx + 98, 43, 86, 46, "QUIT", false)) return .quit;
+    const tx = right_x + Layout.right_w - 192;
+    if (button(fui, renderer, mouse, tx, button_y, 86, 46, "SAVE", dirty)) return .save;
+    if (button(fui, renderer, mouse, tx + 98, button_y, 86, 46, "QUIT", false)) return .quit;
 
     return null;
 }

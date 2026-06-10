@@ -93,7 +93,7 @@ pub fn main() !void {
         .height = window_h,
         .title = CONF.THE_NAME,
         .buf = raw_buf.ptr,
-        .fullscreen = 0,
+        .fullscreen = CONF.FULLSCREEN,
     });
 
     _ = c.fenster_open(&window);

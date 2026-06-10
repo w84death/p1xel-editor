@@ -47,10 +47,10 @@ const UI = struct {
     const right_w: i32 = editor_ui.Layout.right_w;
     const content_y: i32 = editor_ui.Layout.content_y;
     const side_panel_h: i32 = editor_ui.Layout.contentH();
-    const draw_mode_y: i32 = content_y + 18;
-    const palette_y: i32 = content_y + 138;
-    const preview_y: i32 = content_y + 286;
-    const center_info_h: i32 = 176;
+    const draw_mode_y: i32 = content_y + 16;
+    const palette_y: i32 = content_y + 124;
+    const preview_y: i32 = content_y + 260;
+    const center_info_h: i32 = 160;
     const canvas_scale: i32 = 56;
     const canvas_y: i32 = 154;
 
@@ -170,9 +170,9 @@ pub const MainEditor = struct {
         drawPixelText(fui, renderer, "LMB: SELECT", x + 20, UI.preview_y + 176, 1, UI.muted);
         drawPixelText(fui, renderer, "RMB: LIBRARY", x + 136, UI.preview_y + 176, 1, UI.muted);
 
-        drawTileFlags(fui, renderer, project, mouse, x + 16, UI.preview_y + 216, self);
-        drawPixelTransferButtons(fui, renderer, project, mouse, x + 16, UI.preview_y + 282, self);
-        drawStatusInfo(fui, renderer, self, x + 16, UI.content_y + UI.side_panel_h - 96);
+        drawTileFlags(fui, renderer, project, mouse, x + 16, UI.preview_y + 200, self);
+        drawPixelTransferButtons(fui, renderer, project, mouse, x + 16, UI.preview_y + 262, self);
+        drawStatusInfo(fui, renderer, self, x + 16, UI.content_y + UI.side_panel_h - 44);
     }
 
     fn drawCenterPanel(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype) void {
@@ -205,10 +205,10 @@ pub const MainEditor = struct {
             }
         }
 
-        drawPixelText(fui, renderer, "PALETTES", x, UI.content_y + 100, 2, UI.text);
-        drawPalettes(fui, renderer, project, mouse, x + 48, UI.content_y + 134, self);
-        drawPixelText(fui, renderer, "EDIT COLOUR", x, UI.content_y + 536, 2, UI.text);
-        drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 574, self);
+        drawPixelText(fui, renderer, "PALETTES", x, UI.content_y + 92, 2, UI.text);
+        drawPalettes(fui, renderer, project, mouse, x + 42, UI.content_y + 124, self);
+        drawPixelText(fui, renderer, "EDIT COLOUR", x, UI.content_y + 444, 2, UI.text);
+        drawColorEditor(fui, renderer, project, mouse, x, UI.content_y + 478, self);
     }
 
     pub fn setInfo(self: *MainEditor, text: []const u8, color: u32) void {
@@ -249,10 +249,10 @@ fn drawStatusInfo(fui: anytype, renderer: *Render, editor: *const MainEditor, x:
 
 fn drawGlobalPalettePicker(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, editor: *MainEditor) void {
     const cols: usize = 16;
-    const sw: i32 = 34;
-    const gap: i32 = 8;
+    const sw: i32 = 30;
+    const gap: i32 = 6;
     const x0 = UI.centerX() + 24;
-    const y0 = UI.centerInfoY() + 56;
+    const y0 = UI.centerInfoY() + 54;
     const selected = rgbToU32(project.selectedRgb());
 
     for (DAWNBRINGER_32, 0..) |color, i| {
@@ -275,7 +275,8 @@ fn drawGlobalPalettePicker(fui: anytype, renderer: *Render, project: *Project, m
         }
     }
 
-    const hint_x = x0 + 706;
+    const grid_w = @as(i32, @intCast(cols)) * sw + @as(i32, @intCast(cols - 1)) * gap;
+    const hint_x = x0 + grid_w + 18;
     drawPixelText(fui, renderer, "Click colour", hint_x, y0 + 2, 1, UI.muted);
     drawPixelText(fui, renderer, "to replace", hint_x, y0 + 18, 1, UI.muted);
     drawPixelText(fui, renderer, "selected slot", hint_x, y0 + 34, 1, UI.muted);
@@ -379,9 +380,9 @@ fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
 }
 
 fn drawPalettes(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x0: i32, y0: i32, editor: *MainEditor) void {
-    const sw: i32 = 38;
-    const sh: i32 = 34;
-    const row_h: i32 = 44;
+    const sw: i32 = 34;
+    const sh: i32 = 30;
+    const row_h: i32 = 38;
     for (0..CONF.PALETTE_COUNT) |p| {
         const y = y0 + @as(i32, @intCast(p)) * row_h;
         var label_buf: [4]u8 = undefined;

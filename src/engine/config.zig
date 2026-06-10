@@ -5,13 +5,14 @@
 // *************************************
 
 pub const CONF = struct {
-    pub const VERSION = "2.5";
+    pub const VERSION = "2.6";
     pub const ENGINE = "1.1";
     pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";
-    pub const SCREEN_W = 1440;
-    pub const SCREEN_H = 900;
+    pub const SCREEN_W = 1280;
+    pub const SCREEN_H = 800;
     pub const PIXEL_SCALE = 1;
+    pub const FULLSCREEN = 1;
     pub const TARGET_FPS = 60.0;
     pub const FONT_WIDTH = 8;
     pub const FONT_HEIGHT = 8;

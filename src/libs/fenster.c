@@ -143,8 +143,8 @@ static int FENSTER_KEYCODES[124] = {XK_BackSpace,8,XK_Delete,127,XK_Down,18,XK_E
 int fenster_open(struct fenster *f) {
   f->dpy = XOpenDisplay(NULL);
   int screen = DefaultScreen(f->dpy);
-  int x = (DisplayWidth(f->dpy, screen) - f->width) / 2;
-  int y = (DisplayHeight(f->dpy, screen) - f->height) / 2;
+  int x = f->fullscreen ? 0 : (DisplayWidth(f->dpy, screen) - f->width) / 2;
+  int y = f->fullscreen ? 0 : (DisplayHeight(f->dpy, screen) - f->height) / 2;
   if (x < 0)
     x = 0;
   if (y < 0)
@@ -157,6 +157,27 @@ int fenster_open(struct fenster *f) {
                ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
                    ButtonReleaseMask | PointerMotionMask);
   XStoreName(f->dpy, f->w, f->title);
+
+  if (f->fullscreen) {
+    Atom wm_state = XInternAtom(f->dpy, "_NET_WM_STATE", False);
+    Atom fullscreen = XInternAtom(f->dpy, "_NET_WM_STATE_FULLSCREEN", False);
+    XChangeProperty(f->dpy, f->w, wm_state, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *)&fullscreen, 1);
+
+    typedef struct {
+      unsigned long flags;
+      unsigned long functions;
+      unsigned long decorations;
+      long input_mode;
+      unsigned long status;
+    } MotifWmHints;
+    MotifWmHints motif_hints = {0};
+    motif_hints.flags = 1L << 1;
+    motif_hints.decorations = 0;
+    Atom motif_wm_hints = XInternAtom(f->dpy, "_MOTIF_WM_HINTS", False);
+    XChangeProperty(f->dpy, f->w, motif_wm_hints, motif_wm_hints, 32,
+                    PropModeReplace, (unsigned char *)&motif_hints, 5);
+  }
 
   XSizeHints hints = {0};
   hints.flags = PMinSize | PMaxSize;

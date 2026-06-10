@@ -128,86 +128,86 @@ pub const MapEditor = struct {
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 116, 34, "PLACE SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 142, tool_y + 72, 110, 34, "REM SPR", self.tool == .sprite_remove)) self.tool = .sprite_remove;
 
-        drawText(fui, renderer, "BG TILES", UI.left_x + 16, UI.canvas_y + 138, 2, UI.text);
-        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .tiles, UI.left_x + 36, UI.canvas_y + 166, 50);
+        drawText(fui, renderer, "BG TILES", UI.left_x + 16, UI.canvas_y + 132, 2, UI.text);
+        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .tiles, UI.left_x + 50, UI.canvas_y + 160, 40);
 
-        drawText(fui, renderer, "SPRITES", UI.left_x + 16, UI.canvas_y + 348, 2, UI.text);
-        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .sprites, UI.left_x + 36, UI.canvas_y + 376, 50);
-        drawText(fui, renderer, "LMB: SELECT", UI.left_x + 20, UI.canvas_y + 556, 1, UI.muted);
-        drawText(fui, renderer, "RMB: LIBRARY", UI.left_x + 136, UI.canvas_y + 556, 1, UI.muted);
+        drawText(fui, renderer, "SPRITES", UI.left_x + 16, UI.canvas_y + 310, 2, UI.text);
+        self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .sprites, UI.left_x + 50, UI.canvas_y + 338, 40);
+        drawText(fui, renderer, "LMB: SELECT", UI.left_x + 20, UI.canvas_y + 496, 1, UI.muted);
+        drawText(fui, renderer, "RMB: LIBRARY", UI.left_x + 136, UI.canvas_y + 496, 1, UI.muted);
 
-        const attr_y = UI.canvas_y + 588;
+        const attr_y = UI.canvas_y + 516;
         drawText(fui, renderer, "SELECTED TILE", UI.left_x + 20, attr_y, 2, UI.text);
         self.drawAttrEditor(fui, renderer, mouse, attr_y + 36);
-        drawText(fui, renderer, self.info_text, UI.left_x + 20, UI.canvas_y + UI.canvas_h - 30, 1, self.info_color);
+        drawText(fui, renderer, self.info_text, UI.left_x + 20, UI.canvas_y + UI.canvas_h - 14, 1, self.info_color);
     }
 
     fn drawRightPanel(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
         panel(renderer, UI.right_x, UI.canvas_y, UI.right_w, UI.canvas_h);
         const x = UI.right_x + 16;
-        var y = UI.canvas_y + 18;
+        const bank_y = UI.canvas_y + 16;
+        const size_y = UI.canvas_y + 94;
+        const zoom_y = UI.canvas_y + 226;
+        const pan_y = UI.canvas_y + 342;
+        const file_y = UI.canvas_y + 514;
 
-        drawText(fui, renderer, "MAP BANK", x, y, 2, UI.text);
+        drawText(fui, renderer, "MAP BANK", x, bank_y, 2, UI.text);
         for (0..Project.MAP_BANK_COUNT) |bank| {
             const bx = x + @as(i32, @intCast(bank)) * 48;
             var label_buf: [2]u8 = undefined;
             const label = std.fmt.bufPrint(&label_buf, "{d}", .{bank + 1}) catch "?";
-            if (button(fui, renderer, mouse, bx, y + 34, 38, 34, label, project.activeMapBank() == bank)) {
+            if (button(fui, renderer, mouse, bx, bank_y + 32, 38, 32, label, project.activeMapBank() == bank)) {
                 project.setMapBank(@intCast(bank));
                 self.invalidateCache();
                 self.setInfo("Map bank selected", UI.accent);
             }
         }
 
-        y += 90;
-        drawText(fui, renderer, "MAP SIZE", x, y, 2, UI.text);
-        drawText(fui, renderer, "DOUBLE CLICK TO CROP", x, y + 30, 1, UI.muted);
-        self.sizeButton(fui, renderer, project, mouse, x, y + 52, 86, 34, "32x32", .s32x32, 32, 32);
-        self.sizeButton(fui, renderer, project, mouse, x + 102, y + 52, 86, 34, "64x16", .s64x16, 64, 16);
-        self.sizeButton(fui, renderer, project, mouse, x, y + 94, 188, 34, "128x16", .s128x16, 128, 16);
+        drawText(fui, renderer, "MAP SIZE", x, size_y, 2, UI.text);
+        drawText(fui, renderer, "DOUBLE CLICK TO CROP", x, size_y + 26, 1, UI.muted);
+        self.sizeButton(fui, renderer, project, mouse, x, size_y + 48, 86, 32, "32x32", .s32x32, 32, 32);
+        self.sizeButton(fui, renderer, project, mouse, x + 102, size_y + 48, 86, 32, "64x16", .s64x16, 64, 16);
+        self.sizeButton(fui, renderer, project, mouse, x, size_y + 88, 188, 32, "128x16", .s128x16, 128, 16);
 
-        y += 168;
-        drawText(fui, renderer, "ZOOM", x, y, 2, UI.text);
-        if (button(fui, renderer, mouse, x, y + 34, 54, 38, "-", false) and self.zoom_extra > 0) {
+        drawText(fui, renderer, "ZOOM", x, zoom_y, 2, UI.text);
+        if (button(fui, renderer, mouse, x, zoom_y + 32, 54, 34, "-", false) and self.zoom_extra > 0) {
             self.zoom_extra -= 1;
             self.setInfo("Zoom out", UI.accent);
         }
         var zoom_buf: [16]u8 = undefined;
         const zoom_text = std.fmt.bufPrint(&zoom_buf, "+{d}", .{self.zoom_extra}) catch "+?";
-        drawText(fui, renderer, zoom_text, x + 78, y + 46, 1, UI.accent);
-        if (button(fui, renderer, mouse, x + 134, y + 34, 54, 38, "+", false) and self.zoom_extra < 6) {
+        drawText(fui, renderer, zoom_text, x + 78, zoom_y + 44, 1, UI.accent);
+        if (button(fui, renderer, mouse, x + 134, zoom_y + 32, 54, 34, "+", false) and self.zoom_extra < 6) {
             self.zoom_extra += 1;
             self.setInfo("Zoom in", UI.accent);
         }
-        if (button(fui, renderer, mouse, x, y + 82, 188, 34, "RESET VIEW", false)) {
+        if (button(fui, renderer, mouse, x, zoom_y + 74, 188, 32, "RESET VIEW", false)) {
             self.zoom_extra = 0;
             self.pan_x = 0;
             self.pan_y = 0;
             self.setInfo("View reset", UI.accent);
         }
 
-        y += 160;
-        drawText(fui, renderer, "PAN", x, y, 2, UI.text);
+        drawText(fui, renderer, "PAN", x, pan_y, 2, UI.text);
         const step = @as(i32, CONF.TILE_SIDE) * self.canvasScale(project) * 4;
-        if (button(fui, renderer, mouse, x + 67, y + 34, 54, 38, "UP", false)) self.pan_y += step;
-        if (button(fui, renderer, mouse, x, y + 80, 54, 38, "<", false)) self.pan_x += step;
-        if (button(fui, renderer, mouse, x + 67, y + 80, 54, 38, "0", false)) {
+        if (button(fui, renderer, mouse, x + 67, pan_y + 30, 54, 34, "UP", false)) self.pan_y += step;
+        if (button(fui, renderer, mouse, x, pan_y + 72, 54, 34, "<", false)) self.pan_x += step;
+        if (button(fui, renderer, mouse, x + 67, pan_y + 72, 54, 34, "0", false)) {
             self.pan_x = 0;
             self.pan_y = 0;
         }
-        if (button(fui, renderer, mouse, x + 134, y + 80, 54, 38, ">", false)) self.pan_x -= step;
-        if (button(fui, renderer, mouse, x + 67, y + 126, 54, 38, "DN", false)) self.pan_y -= step;
+        if (button(fui, renderer, mouse, x + 134, pan_y + 72, 54, 34, ">", false)) self.pan_x -= step;
+        if (button(fui, renderer, mouse, x + 67, pan_y + 114, 54, 34, "DN", false)) self.pan_y -= step;
 
-        y += 206;
-        drawText(fui, renderer, "FILE", x, y, 2, UI.text);
-        if (button(fui, renderer, mouse, x, y + 34, 86, 36, "SAVE", project.dirty)) {
+        drawText(fui, renderer, "FILE", x, file_y, 2, UI.text);
+        if (button(fui, renderer, mouse, x, file_y + 32, 86, 34, "SAVE", project.dirty)) {
             project.save() catch {
                 self.setInfo("Save failed", UI.danger);
                 return;
             };
             self.setInfo("File saved", UI.accent);
         }
-        if (button(fui, renderer, mouse, x + 102, y + 34, 86, 36, "EXPORT", false)) {
+        if (button(fui, renderer, mouse, x + 102, file_y + 32, 86, 34, "EXPORT", false)) {
             exporter.exportGameBoyEngine(project) catch |err| {
                 std.debug.print("[export] map editor export failed: {s}\n", .{@errorName(err)});
                 self.setInfo(exporter.errorMessage(err), UI.danger);

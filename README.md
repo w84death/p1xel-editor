@@ -21,6 +21,7 @@ Exported to GameBoy Color Engine:
 - Per-tile palette assignment within the active biome palette bank.
 - Tile/sprite library with add, duplicate, delete, paging, and visible-slot selection.
 - Map editor with 4 independent map banks, background tile stamping, fill, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
+- Copy/paste transfer for the selected 8×8 tile/sprite pixel indices via a temporary text file.
 - Persistent project storage in `art_data.p1x`.
 - Built-in default project data with a shared base tileset and imported biome palette sets.
 
@@ -39,7 +40,11 @@ The current editor constants are defined in `src/engine/config.zig`:
 | Image banks | Tiles + Sprites |
 | Default project file | `art_data.p1x` |
 | Map sizes | `32×32`, `64×16`, `128×16` |
-| Window size | `1440×900` |
+| Window size | `1280×800` fullscreen (Steam Deck native) |
+
+## Steam Deck / Steam
+
+P1Xel Editor targets Steam Deck’s native `1280×800` display and starts fullscreen/borderless on Linux/SteamOS so it fills the Deck screen under Steam/gamescope.
 
 ## Indexed editing model
 
@@ -189,6 +194,17 @@ The right panel controls palettes and colour editing:
 - Edit the RGB values of that colour slot.
 - Changing palette colours updates all indexed art using those palette slots.
 
+#### Pixel Transfer
+
+The right panel also includes **PIXEL TRANSFER** controls:
+
+| Action | Description |
+| --- | --- |
+| `COPY PIX` | Writes the currently selected 8×8 tile/sprite pixel indices to a temporary transfer file. |
+| `PASTE PIX` | Reads the temporary transfer file and replaces the selected tile/sprite pixels. |
+
+Pixel transfer copies only the raw indexed pixel pattern. It does **not** copy the image palette ID, RGB palette colours, map data, or the whole project. Pasting marks the project dirty only when the pasted pixels differ from the current image.
+
 ## Tile/Sprite Library
 
 The library is opened from the tile/sprite slot preview with RMB, or from workflows that request choosing/swapping a visible slot.
@@ -317,6 +333,33 @@ The project file stores:
 
 If `art_data.p1x` does not exist or cannot be loaded, the editor starts from its built-in default project data. The current default tile bank contains the embedded grassland base tiles plus tiles imported from `docs/desert_tileset.png`.
 
+### Pixel transfer temp file
+
+`COPY PIX` and `PASTE PIX` use a small temporary text file as the transfer buffer:
+
+```text
+Windows: C:\Windows\Temp\p1xel_image_clip.p1xpix
+Other:   /tmp/p1xel_image_clip.p1xpix
+```
+
+The transfer file is intentionally simple and human-readable. It starts with a version header, followed by the selected 8×8 image’s pixel indices:
+
+```text
+P1XEL_PIXELS_V1
+01230123
+01230123
+01230123
+01230123
+01230123
+01230123
+01230123
+01230123
+```
+
+After the header, there are 8 rows of 8 digits. Each digit is a pixel index from `0` to `3`.
+
+The temp file is separate from `art_data.p1x`; it is only used for short-lived pixel copy/paste transfer.
+
 ### Project format migration
 
 The current project format supports four palette banks and four map banks. Older project files are migrated on load:
@@ -410,8 +453,9 @@ Important files:
 5. Use the visible nine-slot tile map for quick access. RMB on a slot opens the library to swap it.
 6. Open **MAP EDITOR** to stamp tiles, fill regions, and place sprites.
 7. Switch map banks to edit each biome map; the matching palette bank is selected automatically.
-8. In-game, mirror this workflow by selecting the palette bank before loading/rendering the related map/sprites.
-9. Save regularly; the editor writes to `art_data.p1x`.
+8. Use `COPY PIX` / `PASTE PIX` to transfer the selected tile/sprite’s 8×8 pixel pattern without changing palette assignments.
+9. In-game, mirror this workflow by selecting the palette bank before loading/rendering the related map/sprites.
+10. Save regularly; the editor writes to `art_data.p1x`.
 
 ## Current limitations
 

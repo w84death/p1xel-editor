@@ -26,8 +26,8 @@ const UI = struct {
     const grid_x: i32 = editor_ui.Layout.centerX();
     const grid_y: i32 = editor_ui.Layout.content_y;
     const grid_w: i32 = CONF.SCREEN_W - grid_x - side_x;
-    const grid_h: i32 = 670;
-    const bottom_y: i32 = 802;
+    const bottom_y: i32 = CONF.SCREEN_H - 62;
+    const grid_h: i32 = bottom_y - grid_y - 12;
 };
 
 pub const TileLibrary = struct {
@@ -58,8 +58,11 @@ pub const TileLibrary = struct {
         const head_h: i32 = 40;
         const cell_w: i32 = @divFloor(UI.grid_w - label_w - 12, cols);
         const row_h: i32 = @divFloor(UI.grid_h - head_h - 12, rows);
-        const tile_size: i32 = 56;
-        const tile_scale: i32 = @divFloor(tile_size, CONF.TILE_SIDE);
+        const max_tile_w = cell_w - 14;
+        const max_tile_h = row_h - 18;
+        const requested_tile_size: i32 = @max(CONF.TILE_SIDE, @min(56, @min(max_tile_w, max_tile_h)));
+        const tile_scale: i32 = @max(1, @divFloor(requested_tile_size, CONF.TILE_SIDE));
+        const tile_size: i32 = tile_scale * CONF.TILE_SIDE;
         const start = self.page * per_page;
         const col_labels = [_][:0]const u8{ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F" };
 

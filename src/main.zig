@@ -53,7 +53,9 @@ const SplashStyle = struct {
     const button_shadow = 0x050505;
     const button = 0x202020;
     const button_hover = 0x355A35;
+    const button_disabled = 0x151515;
     const button_border = 0x404040;
+    const disabled_text = 0x666666;
 };
 
 const AppState = struct {
@@ -65,6 +67,7 @@ const AppState = struct {
     map_editor: MapEditor,
     library: TileLibrary,
     esc_lock: bool = false,
+    splash_started_ms: i64,
 
     fn init() AppState {
         return .{
@@ -75,6 +78,7 @@ const AppState = struct {
             .editor = .{},
             .map_editor = .{},
             .library = .{},
+            .splash_started_ms = c.fenster_time(),
         };
     }
 };
@@ -138,12 +142,13 @@ fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) vo
     if (esc_lock.* or !esc_pressed) return;
 
     esc_lock.* = true;
+    if (sm.current == .splash) return;
     sm.go_to(if (sm.current == .editor or sm.current == .map_editor) .quit else .editor);
 }
 
 fn drawCurrentState(app: *AppState, renderer: *Render, mouse: Mouse) bool {
     switch (app.sm.current) {
-        .splash => drawSplash(&app.fui, renderer, &app.editor, mouse, &app.sm),
+        .splash => drawSplash(&app.fui, renderer, &app.editor, mouse, &app.sm, app.splash_started_ms),
         .editor => app.editor.draw(&app.fui, renderer, &app.project, mouse, &app.sm),
         .tile_library => app.library.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
         .map_editor => app.map_editor.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
@@ -172,7 +177,7 @@ fn presentFrame(renderer: *Render) void {
     renderer.cap_frame(CONF.TARGET_FPS);
 }
 
-fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, sm: anytype) void {
+fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, sm: anytype, splash_started_ms: i64) void {
     const cx = @divFloor(CONF.SCREEN_W, 2);
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
@@ -180,9 +185,29 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
     drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, SplashStyle.title);
     drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, SplashStyle.muted);
     drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, SplashStyle.warn);
-    drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 82, 3, SplashStyle.accent);
 
-    const start_clicked = drawSplashButton(fui, renderer, mouse, cx, cy + 130);
+    var start_clicked = false;
+    switch (CONF.APP_MODE) {
+        .shareware => {
+            drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 72, 3, SplashStyle.accent);
+            drawCenteredText(fui, renderer, "PLEASE BUY THE FULL VERSION", cx, cy + 106, 1, SplashStyle.warn);
+
+            if (drawSplashButton(fui, renderer, mouse, cx - 126, cy + 140, "BUY", true)) handleBuyClicked();
+
+            const remaining_seconds = sharewareWaitSecondsRemaining(splash_started_ms);
+            var wait_label_buf: [16]u8 = undefined;
+            const start_label = if (remaining_seconds > 0)
+                std.fmt.bufPrint(&wait_label_buf, "WAIT {d} SEK", .{remaining_seconds}) catch "WAIT"
+            else
+                "START";
+            start_clicked = drawSplashButton(fui, renderer, mouse, cx + 126, cy + 140, start_label, remaining_seconds == 0);
+        },
+        .full => {
+            drawCenteredText(fui, renderer, "FULL VERSION", cx, cy + 82, 3, SplashStyle.accent);
+            drawCenteredText(fui, renderer, "THANK YOU FOR REGISTERING", cx, cy + 116, 1, SplashStyle.warn);
+            start_clicked = drawSplashButton(fui, renderer, mouse, cx, cy + 150, "START", true);
+        },
+    }
 
     drawCenteredText(fui, renderer, "Powered by Borowik Engine", cx, CONF.SCREEN_H - 58, 1, SplashStyle.warn);
 
@@ -192,18 +217,40 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
     }
 }
 
-fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y: i32) bool {
+fn sharewareWaitSecondsRemaining(splash_started_ms: i64) i64 {
+    const wait_ms = CONF.SHAREWARE_WAIT_SECONDS * std.time.ms_per_s;
+    const elapsed_ms = c.fenster_time() - splash_started_ms;
+    if (elapsed_ms >= wait_ms) return 0;
+    if (elapsed_ms <= 0) return CONF.SHAREWARE_WAIT_SECONDS;
+
+    const remaining_ms = wait_ms - elapsed_ms;
+    return @divFloor(remaining_ms + std.time.ms_per_s - 1, std.time.ms_per_s);
+}
+
+fn handleBuyClicked() void {
+    if (CONF.BUY_URL.len == 0) {
+        std.debug.print("[shareware] BUY clicked, but CONF.BUY_URL is not configured.\n", .{});
+        return;
+    }
+    std.debug.print("[shareware] Buy full version: {s}\n", .{CONF.BUY_URL});
+}
+
+fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y: i32, label: []const u8, enabled: bool) bool {
     const button_w: i32 = 220;
     const button_h: i32 = 44;
     const x = center_x - @divFloor(button_w, 2);
-    const hovered = views.hover(mouse, x, y, button_w, button_h);
+    const hovered = enabled and views.hover(mouse, x, y, button_w, button_h);
+
+    const bg: u32 = if (!enabled) SplashStyle.button_disabled else if (hovered) SplashStyle.button_hover else SplashStyle.button;
+    const border: u32 = if (hovered) SplashStyle.accent else SplashStyle.button_border;
+    const text_color: u32 = if (!enabled) SplashStyle.disabled_text else if (hovered) SplashStyle.title else SplashStyle.muted;
 
     renderer.draw_rect(x + 3, y + 3, button_w, button_h, SplashStyle.button_shadow);
-    renderer.draw_rect(x, y, button_w, button_h, if (hovered) SplashStyle.button_hover else SplashStyle.button);
-    renderer.draw_rect_lines(x, y, button_w, button_h, if (hovered) SplashStyle.accent else SplashStyle.button_border);
-    drawCenteredText(fui, renderer, "START", center_x, y + 15, 1, if (hovered) SplashStyle.title else SplashStyle.muted);
+    renderer.draw_rect(x, y, button_w, button_h, bg);
+    renderer.draw_rect_lines(x, y, button_w, button_h, border);
+    drawCenteredText(fui, renderer, label, center_x, y + 15, 1, text_color);
 
-    return hovered and (mouse.just_pressed or mouse.just_right_pressed);
+    return enabled and hovered and (mouse.just_pressed or mouse.just_right_pressed);
 }
 
 fn drawGlobalOverlay(fui: *Fui, renderer: *Render) void {

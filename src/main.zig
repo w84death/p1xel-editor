@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @cImport({
     if (builtin.os.tag == .windows and builtin.cpu.arch == .x86) @cDefine("_X86_", "1");
+    @cInclude("stdlib.h");
     @cInclude("fenster.h");
 });
 
@@ -236,22 +237,14 @@ fn handleBuyClicked() void {
 }
 
 fn openBuyUrl() !void {
-    const argv = switch (builtin.os.tag) {
-        .windows => &[_][]const u8{ "rundll32", "url.dll,FileProtocolHandler", CONF.BUY_URL },
-        .macos => &[_][]const u8{ "open", CONF.BUY_URL },
-        .linux => &[_][]const u8{ "xdg-open", CONF.BUY_URL },
+    const command = switch (builtin.os.tag) {
+        .windows => "start \"\" \"" ++ CONF.BUY_URL ++ "\"",
+        .macos => "open \"" ++ CONF.BUY_URL ++ "\" >/dev/null 2>&1 &",
+        .linux => "xdg-open \"" ++ CONF.BUY_URL ++ "\" >/dev/null 2>&1 &",
         else => return error.UnsupportedOpenUrl,
     };
 
-    var child = try std.process.spawn(std.Options.debug_io, .{
-        .argv = argv,
-        .stdin = .ignore,
-        .stdout = .ignore,
-        .stderr = .ignore,
-        .create_no_window = true,
-    });
-    const term = try child.wait(std.Options.debug_io);
-    if (term != .exited or term.exited != 0) return error.OpenUrlFailed;
+    if (c.system(command) != 0) return error.OpenUrlFailed;
 }
 
 fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y: i32, label: []const u8, enabled: bool) bool {

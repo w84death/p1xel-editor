@@ -189,10 +189,12 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
     var start_clicked = false;
     switch (CONF.APP_MODE) {
         .shareware => {
-            drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 72, 3, SplashStyle.accent);
-            drawCenteredText(fui, renderer, "PLEASE BUY THE FULL VERSION", cx, cy + 106, 1, SplashStyle.warn);
+            drawCenteredText(fui, renderer, "SHAREWARE VERSION", cx, cy + 62, 3, SplashStyle.accent);
+            drawCenteredText(fui, renderer, "FULL VERSION IS JUST $5", cx, cy + 96, 1, SplashStyle.warn);
+            drawCenteredText(fui, renderer, "SUPPORT THE CREATOR", cx, cy + 114, 1, SplashStyle.warn);
+            drawCenteredText(fui, renderer, CONF.BUY_URL, cx, cy + 134, 1, SplashStyle.muted);
 
-            if (drawSplashButton(fui, renderer, mouse, cx - 126, cy + 140, "BUY", true)) handleBuyClicked();
+            if (drawSplashButton(fui, renderer, mouse, cx - 126, cy + 170, "BUY", true)) handleBuyClicked();
 
             const remaining_seconds = sharewareWaitSecondsRemaining(splash_started_ms);
             var wait_label_buf: [16]u8 = undefined;
@@ -200,7 +202,7 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
                 std.fmt.bufPrint(&wait_label_buf, "WAIT {d} SEK", .{remaining_seconds}) catch "WAIT"
             else
                 "START";
-            start_clicked = drawSplashButton(fui, renderer, mouse, cx + 126, cy + 140, start_label, remaining_seconds == 0);
+            start_clicked = drawSplashButton(fui, renderer, mouse, cx + 126, cy + 170, start_label, remaining_seconds == 0);
         },
         .full => {
             drawCenteredText(fui, renderer, "FULL VERSION", cx, cy + 82, 3, SplashStyle.accent);
@@ -228,11 +230,28 @@ fn sharewareWaitSecondsRemaining(splash_started_ms: i64) i64 {
 }
 
 fn handleBuyClicked() void {
-    if (CONF.BUY_URL.len == 0) {
-        std.debug.print("[shareware] BUY clicked, but CONF.BUY_URL is not configured.\n", .{});
-        return;
-    }
-    std.debug.print("[shareware] Buy full version: {s}\n", .{CONF.BUY_URL});
+    openBuyUrl() catch |err| {
+        std.debug.print("[shareware] Failed to open buy URL {s}: {s}\n", .{ CONF.BUY_URL, @errorName(err) });
+    };
+}
+
+fn openBuyUrl() !void {
+    const argv = switch (builtin.os.tag) {
+        .windows => &[_][]const u8{ "rundll32", "url.dll,FileProtocolHandler", CONF.BUY_URL },
+        .macos => &[_][]const u8{ "open", CONF.BUY_URL },
+        .linux => &[_][]const u8{ "xdg-open", CONF.BUY_URL },
+        else => return error.UnsupportedOpenUrl,
+    };
+
+    var child = try std.process.spawn(std.Options.debug_io, .{
+        .argv = argv,
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+        .create_no_window = true,
+    });
+    const term = try child.wait(std.Options.debug_io);
+    if (term != .exited or term.exited != 0) return error.OpenUrlFailed;
 }
 
 fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y: i32, label: []const u8, enabled: bool) bool {

@@ -9,13 +9,13 @@ const build_options = @import("build_options");
 pub const CONF = struct {
     pub const AppMode = enum { shareware, full };
 
-    pub const VERSION = "2.7";
+    pub const VERSION = "2.8";
     pub const ENGINE = "1.2";
     pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";
     pub const APP_MODE: AppMode = if (build_options.full_version) .full else .shareware;
     pub const SHAREWARE_WAIT_SECONDS: i64 = 5;
-    pub const BUY_URL = "";
+    pub const BUY_URL = "https://w84death.itch.io/p1xel-editor";
     pub const SCREEN_W = 1280;
     pub const SCREEN_H = 800;
     pub const PIXEL_SCALE = 1;

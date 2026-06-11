@@ -1,0 +1,143 @@
+SUMMARY:
+	ROM0: 13317 bytes used / 3067 free
+	WRAM0: 1044 bytes used / 3052 free
+
+ROM0 bank #0:
+	EMPTY: $0000-$003f ($0040 bytes)
+	SECTION: $0040-$0042 ($0003 bytes) ["VBlank vector"]
+	EMPTY: $0043-$00ff ($00bd bytes)
+	SECTION: $0100-$014f ($0050 bytes) ["Header"]
+	SECTION: $0150-$04f9 ($03aa bytes) ["Main"]
+	         $0150 = Entry
+	         $0162 = Entry.init_camera
+	         $0169 = Entry.init_level_switch
+	         $0172 = Entry.init_player
+	         $018e = Entry.init_vram
+	         $0192 = Entry.init_oamram
+	         $0197 = Entry.clear_oam
+	         $019c = Entry.load_sprite_tiles
+	         $01a8 = Entry.load_palettes
+	         $01b9 = Entry.init_lcd
+	         $01c8 = MainLoop
+	         $01d9 = WaitVBlank
+	         $01d9 = WaitVBlank.wait_vblank_end
+	         $01e0 = WaitVBlank.wait_vblank
+	         $01e8 = WaitFrame
+	         $01f5 = VBlankISR
+	         $01fd = LoadBytes
+	         $01fd = LoadBytes.copy
+	         $0207 = LoadBgPalettesCGB
+	         $020c = LoadBgPalettesCGB.copy
+	         $0217 = LoadObjPalettesCGB
+	         $021c = LoadObjPalettesCGB.copy
+	         $0227 = WaitForAnyDPad.wait
+	         $0227 = WaitForAnyDPad
+	         $022f = UpdateCamera
+	         $022f = UpdateCamera.camera_x_left
+	         $0243 = UpdateCamera.camera_x_right
+	         $0253 = UpdateCamera.keep_camera_x
+	         $0258 = UpdateCamera.camera_x_zero
+	         $025b = UpdateCamera.clamp_camera_x
+	         $0261 = UpdateCamera.store_camera_x
+	         $0267 = UpdateCamera.camera_y_top
+	         $027b = UpdateCamera.camera_y_bottom
+	         $028b = UpdateCamera.keep_camera_y
+	         $0290 = UpdateCamera.camera_y_zero
+	         $0293 = UpdateCamera.clamp_camera_y
+	         $0299 = UpdateCamera.store_camera_y
+	         $029f = UpdateCamera.player_screen_x
+	         $02ae = UpdateCamera.player_screen_y
+	         $02be = HandleDPad
+	         $02db = ReadDPad
+	         $02e9 = HandleLevelSwap
+	         $02ff = ReadButtons
+	         $030d = ToggleLevel
+	         $0318 = ToggleLevel.load_desert
+	         $031f = ToggleLevel.load_grassland
+	         $0326 = MoveRight
+	         $0341 = MoveLeft
+	         $035b = MoveUp
+	         $036e = MoveDown
+	         $0381 = AnimatePlayer
+	         $0396 = AnimatePlayer.move_left
+	         $03a0 = AnimatePlayer.vertical
+	         $03b0 = AnimatePlayer.move_up
+	         $03ba = AnimatePlayer.tick
+	         $03bf = TargetRightWalkable
+	         $03cf = TargetLeftWalkable
+	         $03d6 = TargetLeftWalkable.blocked
+	         $03d8 = TargetLeftWalkable.inside_map
+	         $03e2 = TargetUpWalkable
+	         $03e9 = TargetUpWalkable.blocked
+	         $03eb = TargetUpWalkable.inside_map
+	         $03f5 = TargetDownWalkable
+	         $0405 = TargetWorldWalkable
+	         $0429 = TargetWorldWalkable.blocked
+	         $042b = ApplyPlayerFacingAttr
+	         $0434 = ApplyPlayerFacingAttr.face_right
+	         $0438 = ApplyPlayerFacingAttr.face_left
+	         $043c = InitPlayer
+	         $045c = LoadLevelHot
+	         $046c = RestoreLCD
+	         $0472 = LoadLevel
+	         $0472 = LoadLevel.load_palettes
+	         $047a = LoadLevel.load_tiles
+	         $0489 = LoadLevel.load_tilemap
+	         $0498 = LoadLevel.load_attrmap
+	         $04a8 = LoadLevel.load_logicmap
+	         $04b8 = ReadLevelDataRange
+	         $04c9 = LoadLevelBgPalettes
+	         $04da = LoadLevelBytes
+	SECTION: $04fa-$3501 ($3008 bytes) ["P1Xel Editor Export Data"]
+	         $04fa = SpritesPalettes
+	         $053a = GameTiles
+	         $053a = SpritesPalettesEnd
+	         $0d3a = GameTilesEnd
+	         $0d3a = GrasslandLevelBgPalettes
+	         $0d7a = GrasslandLevelBgPalettesEnd
+	         $0d7a = GrasslandLevelTiles
+	         $150a = GrasslandLevelTilesEnd
+	         $150a = GrasslandLevelTileMap
+	         $190a = GrasslandLevelTileMapEnd
+	         $190a = GrasslandLevelAttrMap
+	         $1d0a = GrasslandLevelAttrMapEnd
+	         $1d0a = GrasslandLevelLogicMap
+	         $210a = GrasslandLevelDescriptor
+	         $210a = GrasslandLevelLogicMapEnd
+	         $211e = DesertLevelBgPalettes
+	         $215e = DesertLevelBgPalettesEnd
+	         $215e = DesertLevelTiles
+	         $28ee = DesertLevelTilesEnd
+	         $28ee = DesertLevelTileMap
+	         $2cee = DesertLevelTileMapEnd
+	         $2cee = DesertLevelAttrMap
+	         $30ee = DesertLevelAttrMapEnd
+	         $30ee = DesertLevelLogicMap
+	         $34ee = DesertLevelDescriptor
+	         $34ee = DesertLevelLogicMapEnd
+	EMPTY: $3502-$3fff ($0afe bytes)
+	TOTAL EMPTY: $0bfb bytes
+
+WRAM0 bank #0:
+	SECTION: $c000-$c413 ($0414 bytes) ["WRAM Data"]
+	         $c000 = FrameCounter
+	         $c001 = FrameReady
+	         $c002 = PlayerAnimTimer
+	         $c003 = PlayerAnimFrame
+	         $c004 = PlayerFacing
+	         $c005 = CameraX
+	         $c006 = CameraY
+	         $c007 = CurrentLevel
+	         $c008 = PrevButtons
+	         $c009 = LevelDataStart
+	         $c00b = LevelDataEnd
+	         $c00d = PlayerTargetX
+	         $c00e = PlayerTargetY
+	         $c00f = PlayerWorldX
+	         $c010 = PlayerWorldY
+	         $c011 = PlayerMoveDX
+	         $c012 = PlayerMoveDY
+	         $c013 = PlayerMoveFrames
+	         $c014 = CollisionMap
+	EMPTY: $c414-$cfff ($0bec bytes)
+	TOTAL EMPTY: $0bec bytes

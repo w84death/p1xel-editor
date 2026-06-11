@@ -37,7 +37,14 @@ const UI = struct {
     const canvas_h: i32 = editor_ui.Layout.contentH();
 };
 
-const Tool = enum { bg_stamp, bg_fill, sprite_stamp, sprite_remove };
+pub const ArrowKeys = struct {
+    up: bool = false,
+    down: bool = false,
+    left: bool = false,
+    right: bool = false,
+};
+
+const Tool = enum { bg_stamp, bg_fill, bg_random_row, sprite_stamp, sprite_remove };
 const PendingSize = enum { none, s32x32, s64x16, s128x16 };
 const GBC_SCREEN_W_TILES: i32 = 20;
 const GBC_SCREEN_H_TILES: i32 = 18;
@@ -62,6 +69,8 @@ pub const MapEditor = struct {
     zoom_extra: i32 = 0,
     pan_x: i32 = 0,
     pan_y: i32 = 0,
+    random_state: u32 = 0xA53C_9E27,
+    random_last_cell: ?[2]u16 = null,
     show_grid: bool = true,
     show_gbc_screen: bool = false,
 
@@ -86,10 +95,12 @@ pub const MapEditor = struct {
         }
     }
 
-    pub fn draw(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype) void {
+    pub fn draw(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, arrows: ArrowKeys, sm: anytype) void {
         const previous_target = renderer.target;
         renderer.set_target(.frame);
         defer renderer.set_target(previous_target);
+
+        self.handleArrowPan(project, arrows);
 
         renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, UI.bg);
         self.drawTopBar(fui, renderer, project, main_editor, mouse, sm);
@@ -128,8 +139,9 @@ pub const MapEditor = struct {
         panel(renderer, UI.left_x, UI.canvas_y, UI.left_w, UI.canvas_h);
         const tool_y = UI.canvas_y + 18;
         drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
-        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 116, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
-        if (button(fui, renderer, mouse, UI.left_x + 142, tool_y + 30, 110, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 74, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 98, tool_y + 30, 62, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
+        if (button(fui, renderer, mouse, UI.left_x + 168, tool_y + 30, 86, 34, "RND ROW", self.tool == .bg_random_row)) self.tool = .bg_random_row;
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 116, 34, "PLACE SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 142, tool_y + 72, 110, 34, "REM SPR", self.tool == .sprite_remove)) self.tool = .sprite_remove;
 
@@ -331,7 +343,18 @@ pub const MapEditor = struct {
         }
     }
 
+    fn handleArrowPan(self: *MapEditor, project: *const Project, arrows: ArrowKeys) void {
+        const cell_px = @as(i32, CONF.TILE_SIDE) * self.canvasScale(project);
+        const step = @max(4, @divFloor(cell_px, 2));
+        if (arrows.left) self.pan_x += step;
+        if (arrows.right) self.pan_x -= step;
+        if (arrows.up) self.pan_y += step;
+        if (arrows.down) self.pan_y -= step;
+    }
+
     fn handleCanvas(self: *MapEditor, project: *Project, mouse: Mouse) void {
+        if (!mouse.left_down) self.random_last_cell = null;
+
         const cell = self.canvasCell(project, mouse.x, mouse.y) orelse return;
         if (mouse.just_right_pressed) {
             if (project.mapCellAt(cell[0], cell[1])) |map_cell| {
@@ -349,12 +372,28 @@ pub const MapEditor = struct {
                 .bg_fill => {
                     if (mouse.just_pressed) _ = project.fillMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
                 },
+                .bg_random_row => self.paintRandomTopRowTile(project, cell),
                 .sprite_stamp => _ = project.addOrUpdateMapSprite(cell[0], cell[1], self.selected_sprite, self.sprite_attr),
                 .sprite_remove => {
                     if (project.removeMapSpriteAt(cell[0], cell[1])) self.setInfo("Sprite removed", UI.accent);
                 },
             }
         }
+    }
+
+    fn paintRandomTopRowTile(self: *MapEditor, project: *Project, cell: [2]u16) void {
+        if (self.random_last_cell) |last| {
+            if (last[0] == cell[0] and last[1] == cell[1]) return;
+        }
+        self.random_last_cell = cell;
+        const tile_id = self.randomTopRowTile(project);
+        _ = project.paintMapTile(cell[0], cell[1], tile_id, self.bg_attr);
+    }
+
+    fn randomTopRowTile(self: *MapEditor, project: *const Project) u8 {
+        self.random_state = self.random_state *% 1664525 +% 1013904223;
+        const slot: usize = @intCast(self.random_state % 3);
+        return @intCast(@min(project.visibleSlotMode(.tiles, slot), 255));
     }
 
     fn drawCanvas(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
@@ -467,7 +506,7 @@ pub const MapEditor = struct {
         const map = project.activeMap();
         renderer.draw_rect(UI.canvas_x + 1, UI.canvas_y + 1, UI.canvas_w - 2, 56, UI.panel);
         var buf: [80]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, "MAP {d}  {d} x {d}   L: DRAW   R: PICK", .{ project.activeMapBank() + 1, map.width, map.height }) catch "MAP CANVAS";
+        const text = std.fmt.bufPrint(&buf, "MAP {d}  {d} x {d}   L: DRAW   R: PICK   ARROWS: PAN", .{ project.activeMapBank() + 1, map.width, map.height }) catch "MAP CANVAS";
         drawText(fui, renderer, text, UI.canvas_x + 18, UI.canvas_y + 18, 2, UI.text);
     }
 

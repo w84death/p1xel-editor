@@ -17,7 +17,9 @@ const editor_mod = @import("editor/main_editor.zig");
 const MainEditor = editor_mod.MainEditor;
 const State = editor_mod.State;
 const TileLibrary = @import("editor/tile_library.zig").TileLibrary;
-const MapEditor = @import("editor/map_editor.zig").MapEditor;
+const map_editor_mod = @import("editor/map_editor.zig");
+const MapEditor = map_editor_mod.MapEditor;
+const ArrowKeys = map_editor_mod.ArrowKeys;
 const views = @import("editor/views.zig");
 const editor_ui = @import("editor/ui.zig");
 
@@ -116,7 +118,7 @@ pub fn main() !void {
 
         renderer.perf_begin_draw();
         const previous_state = app.sm.current;
-        if (!drawCurrentState(&app, &renderer, mouse)) break;
+        if (!drawCurrentState(&app, &renderer, mouse, &window)) break;
 
         app.sm.update();
         handleStateTransition(previous_state, &app);
@@ -147,15 +149,24 @@ fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) vo
     sm.go_to(if (sm.current == .editor or sm.current == .map_editor) .quit else .editor);
 }
 
-fn drawCurrentState(app: *AppState, renderer: *Render, mouse: Mouse) bool {
+fn drawCurrentState(app: *AppState, renderer: *Render, mouse: Mouse, window: *const c.fenster) bool {
     switch (app.sm.current) {
         .splash => drawSplash(&app.fui, renderer, &app.editor, mouse, &app.sm, app.splash_started_ms),
         .editor => app.editor.draw(&app.fui, renderer, &app.project, mouse, &app.sm),
         .tile_library => app.library.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
-        .map_editor => app.map_editor.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
+        .map_editor => app.map_editor.draw(&app.fui, renderer, &app.project, &app.editor, mouse, arrowKeys(window), &app.sm),
         .quit => return false,
     }
     return true;
+}
+
+fn arrowKeys(window: *const c.fenster) ArrowKeys {
+    return .{
+        .up = window.keys[17] != 0,
+        .down = window.keys[18] != 0,
+        .right = window.keys[19] != 0,
+        .left = window.keys[20] != 0,
+    };
 }
 
 fn handleStateTransition(previous_state: State, app: *AppState) void {

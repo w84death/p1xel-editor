@@ -6,18 +6,18 @@ The editor exports two files:
 
 | File | Purpose |
 | --- | --- |
-| `engine_export.p1xb` | Main binary data blob: palettes, OBJ tiles, level tile data, maps, attributes, collision/logic, and sprite placements. |
-| `P1X-GBC-ENGINE/SRC/p1xel_export.inc` | RGBDS include file generated from the binary. It defines offsets, constants, labels, and `INCBIN` blocks for a GBC engine. |
+| `EXAMPLE-GBC-PROJECT/engine_export.p1xb` | Main binary data blob: palettes, OBJ tiles, level tile data, maps, attributes, collision/logic, and sprite placements. |
+| `EXAMPLE-GBC-PROJECT/SRC/p1xel_export.inc` | RGBDS include file generated from the binary. It defines offsets, constants, labels, and `INCBIN` blocks for a GBC engine. |
 
-> Note: the repository path used by the exporter is `P1X-GBC-ENGINE/SRC/p1xel_export.inc`. Make sure `P1X-GBC-ENGINE/SRC/` exists before exporting, or the include-file write will fail.
+> Note: these paths are configured in `src/engine/config.zig` via `CONF.GBC_EXPORT_*` constants.
 
 ## Exporting from the editor
 
 1. Open **MAP EDITOR**.
 2. Press **EXPORT**.
 3. The editor writes:
-   - `engine_export.p1xb`
-   - `P1X-GBC-ENGINE/SRC/p1xel_export.inc`
+   - `EXAMPLE-GBC-PROJECT/engine_export.p1xb`
+   - `EXAMPLE-GBC-PROJECT/SRC/p1xel_export.inc`
 4. Add/include `p1xel_export.inc` from your RGBDS source, or parse `engine_export.p1xb` directly in another engine/tool.
 
 The export currently targets a GBC-style runtime:
@@ -27,8 +27,8 @@ The export currently targets a GBC-style runtime:
 - 4 colours per palette.
 - 8 BG palettes per level.
 - 8 OBJ palettes from the active sprite palette bank.
-- Up to 250 exported BG tiles, because GBC tile IDs `0..5` are reserved for OBJ tiles and the background starts at tile ID `6`.
-- 6 fixed OBJ tile slots.
+- Up to 128 exported BG tiles, using runtime BG tile IDs `128..255`.
+- 128 fixed OBJ tile slots, using runtime OBJ tile IDs `0..127`.
 - 32×32 exported tile maps.
 - Two exported levels:
   - `GrasslandLevel` from map/palette bank `0`.
@@ -84,10 +84,10 @@ LEVEL_BG_TILE_BASE
 Typical GBC load flow:
 
 1. Copy `SpritesPalettes` into OBJ palette RAM.
-2. Copy `GameTiles` into OBJ VRAM tile slots `0..5`.
+2. Copy `GameTiles` into OBJ VRAM tile slots `0..127`.
 3. For the active level:
    - Copy `<Level>BgPalettes` into BG palette RAM.
-   - Copy `<Level>Tiles` into BG VRAM starting at tile slot `LEVEL_BG_TILE_BASE` (`6`).
+   - Copy `<Level>Tiles` into BG VRAM starting at tile slot `LEVEL_BG_TILE_BASE` (`128`).
    - Copy `<Level>TileMap` into BG map memory.
    - Copy `<Level>AttrMap` into BG attribute map memory.
    - Use `<Level>LogicMap` for collision/gameplay.
@@ -102,7 +102,7 @@ Top-level layout:
 ```text
 P1XB header              16 bytes
 Sprite/OBJ palettes      64 bytes
-Sprite/OBJ tiles         6 * 16 bytes
+Sprite/OBJ tiles         128 * 16 bytes
 Level 0 data             variable
 Level 1 data             variable
 ...
@@ -114,11 +114,11 @@ Offset | Size | Type | Meaning
 ---: | ---: | --- | ---
 `0` | `4` | bytes | Magic: ASCII `P1XB`
 `4` | `1` | `u8` | Export version. Current version: `1`
-`5` | `1` | `u8` | BG tile base. Current value: `6`
+`5` | `1` | `u8` | BG tile base. Current value: `128`
 `6` | `1` | `u8` | Level count. Current value: `2`
 `7` | `1` | `u8` | Reserved, currently `0`
-`8` | `2` | `u16` | Usable/exported OBJ sprite count, max `6`. The OBJ tile block still contains `BG_TILE_BASE` fixed slots.
-`10` | `2` | `u16` | Exported BG tile count, max `250`
+`8` | `2` | `u16` | Usable/exported OBJ sprite count, max `128`. The OBJ tile block still contains `BG_TILE_BASE` fixed slots.
+`10` | `2` | `u16` | Exported BG tile count, max `128`
 `12` | `2` | `u16` | Exported map width, currently `32`
 `14` | `2` | `u16` | Exported map height, currently `32`
 
@@ -187,15 +187,15 @@ for (row = 0; row < 8; row++) {
 
 OBJ/sprite tiles:
 
-- The exporter always writes `6` fixed OBJ tile slots (`BG_TILE_BASE * 16` bytes).
+- The exporter always writes `128` fixed OBJ tile slots (`BG_TILE_BASE * 16` bytes).
 - The header’s OBJ count tells you how many of those slots are valid/usable sprite images.
-- If the project has fewer than 6 sprites, missing slots are blank.
+- If the project has fewer than 128 sprites, missing slots are blank.
 - Map sprite placements must reference sprite IDs lower than the usable OBJ count, or export fails.
 
 BG tiles:
 
-- The exporter writes up to `250` BG tiles.
-- Runtime BG tile IDs start at `6`, so map cells store `tile_id + 6`.
+- The exporter writes up to `128` BG tiles.
+- Runtime BG tile IDs start at `128`, so map cells store `tile_id + 128`.
 
 ## Level layout
 
@@ -239,7 +239,7 @@ runtime_tile_id = editor_tile_id + BG_TILE_BASE
 With the current exporter:
 
 ```text
-BG_TILE_BASE = 6
+BG_TILE_BASE = 128
 ```
 
 If a source map cell references a tile outside the exported tile count, it is clamped to the last exported tile.
@@ -362,7 +362,7 @@ bool load_p1xb(const uint8_t *data, size_t len) {
     cursor += 8 * 4 * 2;
 
     const uint8_t *obj_tiles = data + cursor;
-    cursor += bg_tile_base * 16; // fixed OBJ tile block, currently 6 slots
+    cursor += bg_tile_base * 16; // fixed OBJ tile block, currently 128 slots
 
     for (uint8_t level = 0; level < level_count; level++) {
         const uint8_t *level_header = data + cursor;
@@ -424,9 +424,9 @@ A common GBC loading sequence for each level:
 ```text
 1. Disable LCD or enter a safe VRAM-copy window.
 2. Load OBJ palettes from SpritesPalettes into OBJ palette RAM.
-3. Load OBJ tiles from GameTiles into VRAM tile slots 0..5.
+3. Load OBJ tiles from GameTiles into VRAM tile slots 0..127.
 4. Load BG palettes for the selected level into BG palette RAM.
-5. Load BG tile graphics into VRAM starting at tile slot 6.
+5. Load BG tile graphics into VRAM starting at tile slot 128.
 6. Select VRAM bank 0 and copy the tile map.
 7. Select VRAM bank 1 and copy the attribute map.
 8. Restore VRAM bank 0.
@@ -452,9 +452,9 @@ The current exporter is intentionally simple and GBC-oriented:
 - Only map banks `0` and `1` are exported by name:
   - `GrasslandLevel`
   - `DesertLevel`
-- BG tile IDs reserve `0..5`; exported BG tiles start at `6`.
-- Exactly 6 OBJ tile slots are written.
-- The header records how many of those 6 slots are valid sprite images.
+- BG tile IDs reserve `0..127`; exported BG tiles start at `128`.
+- Exactly 128 OBJ tile slots are written.
+- The header records how many of those 128 slots are valid sprite images.
 - Sprite placements must reference one of the valid OBJ slots.
 - Tile maps, attr maps, and logic maps are uncompressed.
 - Colour index `0` is transparent in sprite editing, but OBJ tile bytes are still standard 2bpp data.
@@ -469,23 +469,20 @@ If your engine needs more maps, compressed maps, more sprites, metatiles, animat
 Check that the output directory exists:
 
 ```text
-P1X-GBC-ENGINE/SRC/
+EXAMPLE-GBC-PROJECT/SRC/
 ```
 
 The exporter writes `p1xel_export.inc` there. If the directory is missing, file creation fails.
 
 ### Sprite export fails with “Sprite ID exceeds export limit”
 
-Only the first 6 sprite images are exported as OBJ tiles. Any map sprite placement referencing sprite ID `6` or higher fails validation.
+The exporter now supports the editor's full sprite bank (`0..127`). This error should only happen if map data references a sprite ID that is outside the current project sprite count.
 
-Fix it by either:
-
-- Moving important sprite art into sprite slots `0..5`, or
-- Increasing `BG_TILE_BASE` / changing OBJ tile export policy in `src/editor/exporter.zig`.
+Fix it by selecting/replacing the invalid map sprite, or by restoring the missing sprite image in the sprite bank.
 
 ### Tile IDs look shifted in-game
 
-This is expected: runtime BG tile IDs are editor tile IDs plus `BG_TILE_BASE` (`6`). Your engine must load exported BG tiles into VRAM starting at tile slot `6`.
+This is expected: runtime BG tile IDs are editor tile IDs plus `BG_TILE_BASE` (`128`). Your engine must load exported BG tiles into VRAM starting at tile slot `128`.
 
 ### Palettes look wrong
 

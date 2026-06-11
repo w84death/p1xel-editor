@@ -372,7 +372,7 @@ pub const MapEditor = struct {
                 .bg_fill => {
                     if (mouse.just_pressed) _ = project.fillMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
                 },
-                .bg_random_row => self.paintRandomTopRowTile(project, cell),
+                .bg_random_row => self.paintRandomSelectedRowTile(project, cell),
                 .sprite_stamp => _ = project.addOrUpdateMapSprite(cell[0], cell[1], self.selected_sprite, self.sprite_attr),
                 .sprite_remove => {
                     if (project.removeMapSpriteAt(cell[0], cell[1])) self.setInfo("Sprite removed", UI.accent);
@@ -381,19 +381,29 @@ pub const MapEditor = struct {
         }
     }
 
-    fn paintRandomTopRowTile(self: *MapEditor, project: *Project, cell: [2]u16) void {
+    fn paintRandomSelectedRowTile(self: *MapEditor, project: *Project, cell: [2]u16) void {
         if (self.random_last_cell) |last| {
             if (last[0] == cell[0] and last[1] == cell[1]) return;
         }
         self.random_last_cell = cell;
-        const tile_id = self.randomTopRowTile(project);
-        _ = project.paintMapTile(cell[0], cell[1], tile_id, self.bg_attr);
+        const tile_id = self.randomSelectedRowTile(project);
+        var attr = self.bg_attr;
+        attr.palette = project.imageAtMode(.tiles, tile_id).palette_id;
+        _ = project.paintMapTile(cell[0], cell[1], @intCast(@min(tile_id, 255)), attr);
     }
 
-    fn randomTopRowTile(self: *MapEditor, project: *const Project) u8 {
+    fn randomSelectedRowTile(self: *MapEditor, project: *const Project) u16 {
         self.random_state = self.random_state *% 1664525 +% 1013904223;
-        const slot: usize = @intCast(self.random_state % 3);
-        return @intCast(@min(project.visibleSlotMode(.tiles, slot), 255));
+        const row = self.selectedTileRow(project);
+        const slot = row * 3 + @as(usize, @intCast(self.random_state % 3));
+        return project.visibleSlotMode(.tiles, slot);
+    }
+
+    fn selectedTileRow(self: *const MapEditor, project: *const Project) usize {
+        for (0..9) |slot| {
+            if (project.visibleSlotMode(.tiles, slot) == @as(u16, self.selected_tile)) return slot / 3;
+        }
+        return 0;
     }
 
     fn drawCanvas(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {

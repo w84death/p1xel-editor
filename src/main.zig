@@ -271,7 +271,8 @@ fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y
     renderer.draw_rect(x + 3, y + 3, button_w, button_h, SplashStyle.button_shadow);
     renderer.draw_rect(x, y, button_w, button_h, bg);
     renderer.draw_rect_lines(x, y, button_w, button_h, border);
-    drawCenteredText(fui, renderer, label, center_x, y + 15, 1, text_color);
+    const label_y = y + @divFloor(button_h - CONF.FONT_HEIGHT, 2);
+    drawCenteredText(fui, renderer, label, center_x, label_y, 1, text_color);
 
     return enabled and hovered and (mouse.just_pressed or mouse.just_right_pressed);
 }

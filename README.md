@@ -318,8 +318,8 @@ Directional buttons pan the map viewport.
 
 The map editor can export engine-ready data for a Game Boy Color-style runtime:
 
-- `engine_export.p1xb` — binary export data containing palettes, 2bpp tiles, maps, attributes, logic/collision data, and sprite placements.
-- `P1X-GBC-ENGINE/SRC/p1xel_export.inc` — generated RGBDS include file that maps the binary data to labels/constants for a GBC engine.
+- `EXAMPLE-GBC-PROJECT/engine_export.p1xb` — binary export data containing palettes, 2bpp tiles, maps, attributes, logic/collision data, and sprite placements.
+- `EXAMPLE-GBC-PROJECT/SRC/p1xel_export.inc` — generated RGBDS include file that maps the binary data to labels/constants for a GBC engine.
 
 For the full import format, RGBDS workflow, direct parser notes, and current exporter limits, see [`GBC.md`](GBC.md).
 

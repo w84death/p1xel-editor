@@ -25,6 +25,10 @@ pub const CONF = struct {
     pub const FONT_HEIGHT = 8;
 
     pub const PROJECT_FILE = "art_data.p1x";
+    pub const GBC_EXPORT_PROJECT_DIR = "EXAMPLE-GBC-PROJECT";
+    pub const GBC_EXPORT_BINARY_PATH = GBC_EXPORT_PROJECT_DIR ++ "/engine_export.p1xb";
+    pub const GBC_EXPORT_INC_DIR = GBC_EXPORT_PROJECT_DIR ++ "/SRC";
+    pub const GBC_EXPORT_INC_PATH = GBC_EXPORT_INC_DIR ++ "/p1xel_export.inc";
     pub const TILE_SIDE = 8;
     pub const COLORS_PER_PALETTE = 4;
     pub const PALETTE_COUNT = 8;

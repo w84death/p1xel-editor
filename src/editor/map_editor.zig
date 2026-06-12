@@ -62,14 +62,16 @@ const Path9Placement = struct {
     attr: MapTileAttr,
 };
 
-const Path9MirrorSlots = struct {
-    const top_edge: usize = 1; // 2x1
-    const top_left_corner: usize = 2; // 3x1, hflip for top-right
-    const left_edge: usize = 3; // 1x2, hflip for right edge
-    const filler_a: usize = 4; // 2x2
-    const filler_b: usize = 5; // 3x2
-    const bottom_edge: usize = 7; // 2x3
-    const bottom_left_corner: usize = 8; // 3x3, hflip for bottom-right
+const Path9Slots = struct {
+    const top_left_corner: usize = 0; // row 1 col 1, hflip for top-right
+    const top_edge: usize = 1; // row 1 col 2
+    const top_inner_corner: usize = 2; // row 1 col 3, hflip for opposite top inner corner
+    const left_edge: usize = 3; // row 2 col 1, hflip for right edge
+    const filler_a: usize = 4; // row 2 col 2
+    const filler_b: usize = 5; // row 2 col 3
+    const bottom_left_corner: usize = 6; // row 3 col 1, hflip for bottom-right
+    const bottom_edge: usize = 7; // row 3 col 2
+    const bottom_inner_corner: usize = 8; // row 3 col 3, hflip for opposite bottom inner corner
 };
 
 pub const MapEditor = struct {
@@ -95,7 +97,6 @@ pub const MapEditor = struct {
     pan_y: i32 = 0,
     random_state: u32 = 0xA53C_9E27,
     random_last_cell: ?[2]u16 = null,
-    path9_mirror_right: bool = true,
     selection: ?MapSelectionRect = null,
     selection_drag_anchor: ?[2]u16 = null,
     clipboard_tile_ids: [project_mod.MAX_MAP_CELLS]u8 = [_]u8{0} ** project_mod.MAX_MAP_CELLS,
@@ -228,11 +229,7 @@ pub const MapEditor = struct {
         self.brushSizeButton(fui, renderer, mouse, x, brush_y + 32, "1x1", 1);
         self.brushSizeButton(fui, renderer, mouse, x + 66, brush_y + 32, "2x2", 2);
         self.brushSizeButton(fui, renderer, mouse, x + 132, brush_y + 32, "3x3", 3);
-        if (button(fui, renderer, mouse, x, brush_y + 74, 188, 30, "PATH9 MIR/FILL", self.path9_mirror_right)) {
-            self.path9_mirror_right = !self.path9_mirror_right;
-            if (self.refreshPath9Region(project, 0, 0, project.activeMap().width, project.activeMap().height)) self.invalidateCache();
-            self.setInfo(if (self.path9_mirror_right) "Path9 mirror/fill on" else "Path9 mirror/fill off", UI.accent);
-        }
+        drawText(fui, renderer, "PATH9: 9-PIECE", x, brush_y + 84, 1, UI.muted);
 
         drawText(fui, renderer, "PAN", x, pan_y, 2, UI.text);
         drawText(fui, renderer, "ARROWS: PAN MAP", x, pan_y + 32, 1, UI.muted);
@@ -612,8 +609,7 @@ pub const MapEditor = struct {
                 const x = origin[0] + bx;
                 if (x < 0 or x >= map.width) continue;
                 if (add) {
-                    const seed_slot = if (self.path9_mirror_right) self.randomPath9FillerSlot() else @as(usize, 4);
-                    const seed = self.path9PlacementForSlot(project, seed_slot, false);
+                    const seed = self.path9PlacementForSlot(project, self.randomPath9FillerSlot(), false);
                     changed = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(seed.tile_id, 255)), seed.attr) or changed;
                 } else if (self.isPath9Tile(project, map.tile_ids[@as(usize, @intCast(y)) * @as(usize, map.width) + @as(usize, @intCast(x))])) {
                     changed = project.paintMapTile(@intCast(x), @intCast(y), 0, .{}) or changed;
@@ -647,21 +643,30 @@ pub const MapEditor = struct {
     }
 
     fn path9PlacementForCell(self: *MapEditor, project: *const Project, x: u16, y: u16) Path9Placement {
-        const row: usize = if (!self.path9Neighbor(project, x, y, 0, -1)) 0 else if (!self.path9Neighbor(project, x, y, 0, 1)) 2 else 1;
-        const col: usize = if (!self.path9Neighbor(project, x, y, -1, 0)) 0 else if (!self.path9Neighbor(project, x, y, 1, 0)) 2 else 1;
-        if (!self.path9_mirror_right) return self.path9PlacementForSlot(project, row * 3 + col, false);
+        const north = self.path9Neighbor(project, x, y, 0, -1);
+        const south = self.path9Neighbor(project, x, y, 0, 1);
+        const west = self.path9Neighbor(project, x, y, -1, 0);
+        const east = self.path9Neighbor(project, x, y, 1, 0);
 
-        if (row == 0 and col == 0) return self.path9PlacementForSlot(project, Path9MirrorSlots.top_left_corner, false);
-        if (row == 0 and col == 1) return self.path9PlacementForSlot(project, Path9MirrorSlots.top_edge, false);
-        if (row == 0 and col == 2) return self.path9PlacementForSlot(project, Path9MirrorSlots.top_left_corner, true);
-        if (row == 1 and col == 0) return self.path9PlacementForSlot(project, Path9MirrorSlots.left_edge, false);
-        if (row == 1 and col == 1) return self.path9InteriorPlacement(project, x, y);
-        if (row == 1 and col == 2) return self.path9PlacementForSlot(project, Path9MirrorSlots.left_edge, true);
-        if (row == 2 and col == 0) return self.path9PlacementForSlot(project, Path9MirrorSlots.bottom_left_corner, false);
-        if (row == 2 and col == 1) return self.path9PlacementForSlot(project, Path9MirrorSlots.bottom_edge, false);
-        if (row == 2 and col == 2) return self.path9PlacementForSlot(project, Path9MirrorSlots.bottom_left_corner, true);
+        if (!north) {
+            if (!west) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, false);
+            if (!east) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, true);
+            return self.path9PlacementForSlot(project, Path9Slots.top_edge, false);
+        }
+        if (!south) {
+            if (!west) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, false);
+            if (!east) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, true);
+            return self.path9PlacementForSlot(project, Path9Slots.bottom_edge, false);
+        }
+        if (!west) return self.path9PlacementForSlot(project, Path9Slots.left_edge, false);
+        if (!east) return self.path9PlacementForSlot(project, Path9Slots.left_edge, true);
 
-        return self.path9PlacementForSlot(project, Path9MirrorSlots.filler_a, false);
+        if (!self.path9Neighbor(project, x, y, -1, -1)) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, false);
+        if (!self.path9Neighbor(project, x, y, 1, -1)) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, true);
+        if (!self.path9Neighbor(project, x, y, -1, 1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, false);
+        if (!self.path9Neighbor(project, x, y, 1, 1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, true);
+
+        return self.path9InteriorPlacement(project, x, y);
     }
 
     fn path9InteriorPlacement(self: *MapEditor, project: *const Project, x: u16, y: u16) Path9Placement {
@@ -674,13 +679,13 @@ pub const MapEditor = struct {
         const map = project.activeMap();
         const idx = @as(usize, y) * @as(usize, map.width) + x;
         const current_id = map.tile_ids[idx];
-        if (current_id == project.visibleSlotMode(.tiles, Path9MirrorSlots.filler_a)) return Path9MirrorSlots.filler_a;
-        if (current_id == project.visibleSlotMode(.tiles, Path9MirrorSlots.filler_b)) return Path9MirrorSlots.filler_b;
+        if (current_id == project.visibleSlotMode(.tiles, Path9Slots.filler_a)) return Path9Slots.filler_a;
+        if (current_id == project.visibleSlotMode(.tiles, Path9Slots.filler_b)) return Path9Slots.filler_b;
         return null;
     }
 
     fn randomPath9FillerSlot(self: *MapEditor) usize {
-        const filler_slots = [_]usize{ Path9MirrorSlots.filler_a, Path9MirrorSlots.filler_b };
+        const filler_slots = [_]usize{ Path9Slots.filler_a, Path9Slots.filler_b };
         self.random_state = self.random_state *% 1664525 +% 1013904223;
         const choice: usize = @intCast(self.random_state % @as(u32, @intCast(filler_slots.len)));
         return filler_slots[choice];
@@ -704,21 +709,7 @@ pub const MapEditor = struct {
     }
 
     fn isPath9Tile(self: *const MapEditor, project: *const Project, tile_id: u8) bool {
-        if (self.path9_mirror_right) {
-            const active_slots = [_]usize{
-                Path9MirrorSlots.top_edge,
-                Path9MirrorSlots.top_left_corner,
-                Path9MirrorSlots.left_edge,
-                Path9MirrorSlots.filler_a,
-                Path9MirrorSlots.filler_b,
-                Path9MirrorSlots.bottom_edge,
-                Path9MirrorSlots.bottom_left_corner,
-            };
-            for (active_slots) |slot| {
-                if (project.visibleSlotMode(.tiles, slot) == tile_id) return true;
-            }
-            return false;
-        }
+        _ = self;
         for (0..9) |slot| {
             if (project.visibleSlotMode(.tiles, slot) == tile_id) return true;
         }

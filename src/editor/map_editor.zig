@@ -45,7 +45,8 @@ pub const ArrowKeys = struct {
     right: bool = false,
 };
 
-const Tool = enum { bg_stamp, bg_fill, bg_random_row, bg_path9, sprite_stamp, sprite_remove, select };
+const Tool = enum { bg_stamp, bg_fill, bg_random_row, bg_path9, bg_lake9, sprite_stamp, sprite_remove, select };
+const Path9Mode = enum { island, lake };
 const PendingSize = enum { none, s32x32, s64x16, s128x16 };
 const GBC_SCREEN_W_TILES: i32 = 20;
 const GBC_SCREEN_H_TILES: i32 = 18;
@@ -175,9 +176,10 @@ pub const MapEditor = struct {
         panel(renderer, UI.left_x, UI.canvas_y, UI.left_w, UI.canvas_h);
         const tool_y = UI.canvas_y + 18;
         drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
-        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 70, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
-        if (button(fui, renderer, mouse, UI.left_x + 94, tool_y + 30, 58, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
-        if (button(fui, renderer, mouse, UI.left_x + 160, tool_y + 30, 94, 34, "PATH9", self.tool == .bg_path9)) self.tool = .bg_path9;
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 58, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 82, tool_y + 30, 50, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
+        if (button(fui, renderer, mouse, UI.left_x + 140, tool_y + 30, 58, 34, "PATH9", self.tool == .bg_path9)) self.tool = .bg_path9;
+        if (button(fui, renderer, mouse, UI.left_x + 206, tool_y + 30, 62, 34, "LAKE9", self.tool == .bg_lake9)) self.tool = .bg_lake9;
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 62, 34, "RND", self.tool == .bg_random_row)) self.tool = .bg_random_row;
         if (button(fui, renderer, mouse, UI.left_x + 86, tool_y + 72, 58, 34, "SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 152, tool_y + 72, 50, 34, "REM", self.tool == .sprite_remove)) self.tool = .sprite_remove;
@@ -229,7 +231,7 @@ pub const MapEditor = struct {
         self.brushSizeButton(fui, renderer, mouse, x, brush_y + 32, "1x1", 1);
         self.brushSizeButton(fui, renderer, mouse, x + 66, brush_y + 32, "2x2", 2);
         self.brushSizeButton(fui, renderer, mouse, x + 132, brush_y + 32, "3x3", 3);
-        drawText(fui, renderer, "PATH9: 9-PIECE", x, brush_y + 84, 1, UI.muted);
+        drawText(fui, renderer, "PATH9/LAKE9: 9-PIECE", x, brush_y + 84, 1, UI.muted);
 
         drawText(fui, renderer, "PAN", x, pan_y, 2, UI.text);
         drawText(fui, renderer, "ARROWS: PAN MAP", x, pan_y + 32, 1, UI.muted);
@@ -426,9 +428,11 @@ pub const MapEditor = struct {
             }
             return;
         }
-        if (self.tool == .bg_path9 and mouse.right_down) {
-            self.erasePath9Brush(project, cell);
-            return;
+        if (self.activePath9Mode()) |mode| {
+            if (mouse.right_down) {
+                self.erasePath9Brush(project, cell, mode);
+                return;
+            }
         }
         if (mouse.just_right_pressed) {
             if (project.mapCellAt(cell[0], cell[1])) |map_cell| {
@@ -445,7 +449,8 @@ pub const MapEditor = struct {
                     if (mouse.just_pressed) _ = project.fillMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
                 },
                 .bg_random_row => self.paintRandomSelectedRowBrush(project, cell),
-                .bg_path9 => self.paintPath9Brush(project, cell),
+                .bg_path9 => self.paintPath9Brush(project, cell, .island),
+                .bg_lake9 => self.paintPath9Brush(project, cell, .lake),
                 .sprite_stamp => _ = project.addOrUpdateMapSprite(cell[0], cell[1], self.selected_sprite, self.sprite_attr),
                 .sprite_remove => {
                     if (project.removeMapSpriteAt(cell[0], cell[1])) self.setInfo("Sprite removed", UI.accent);
@@ -586,17 +591,17 @@ pub const MapEditor = struct {
         self.paintBrushCells(project, origin, true);
     }
 
-    fn paintPath9Brush(self: *MapEditor, project: *Project, cell: [2]u16) void {
+    fn paintPath9Brush(self: *MapEditor, project: *Project, cell: [2]u16, mode: Path9Mode) void {
         const origin = self.brushOrigin(cell);
-        self.paintPath9Cells(project, origin, true);
+        self.paintPath9Cells(project, origin, true, mode);
     }
 
-    fn erasePath9Brush(self: *MapEditor, project: *Project, cell: [2]u16) void {
+    fn erasePath9Brush(self: *MapEditor, project: *Project, cell: [2]u16, mode: Path9Mode) void {
         const origin = self.brushOrigin(cell);
-        self.paintPath9Cells(project, origin, false);
+        self.paintPath9Cells(project, origin, false, mode);
     }
 
-    fn paintPath9Cells(self: *MapEditor, project: *Project, origin: [2]i32, add: bool) void {
+    fn paintPath9Cells(self: *MapEditor, project: *Project, origin: [2]i32, add: bool, mode: Path9Mode) void {
         const map = project.activeMap();
         var changed = false;
 
@@ -617,11 +622,17 @@ pub const MapEditor = struct {
             }
         }
 
-        changed = self.refreshPath9Region(project, origin[0] - 1, origin[1] - 1, @as(i32, self.brush_size) + 2, @as(i32, self.brush_size) + 2) or changed;
-        if (changed) self.setInfo(if (add) "Path9 painted" else "Path9 erased", UI.accent);
+        changed = self.refreshPath9Region(project, origin[0] - 1, origin[1] - 1, @as(i32, self.brush_size) + 2, @as(i32, self.brush_size) + 2, mode) or changed;
+        if (changed) {
+            const message = switch (mode) {
+                .island => if (add) "Path9 painted" else "Path9 erased",
+                .lake => if (add) "Lake9 painted" else "Lake9 erased",
+            };
+            self.setInfo(message, UI.accent);
+        }
     }
 
-    fn refreshPath9Region(self: *MapEditor, project: *Project, x0: i32, y0: i32, w: i32, h: i32) bool {
+    fn refreshPath9Region(self: *MapEditor, project: *Project, x0: i32, y0: i32, w: i32, h: i32, mode: Path9Mode) bool {
         const map = project.activeMap();
         var changed = false;
         const min_x = @max(0, x0);
@@ -635,36 +646,61 @@ pub const MapEditor = struct {
             while (x < max_x) : (x += 1) {
                 const idx = @as(usize, @intCast(y)) * @as(usize, map.width) + @as(usize, @intCast(x));
                 if (!self.isPath9Tile(project, map.tile_ids[idx])) continue;
-                const placement = self.path9PlacementForCell(project, @intCast(x), @intCast(y));
+                const placement = self.path9PlacementForCell(project, @intCast(x), @intCast(y), mode);
                 changed = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(placement.tile_id, 255)), placement.attr) or changed;
             }
         }
         return changed;
     }
 
-    fn path9PlacementForCell(self: *MapEditor, project: *const Project, x: u16, y: u16) Path9Placement {
+    fn path9PlacementForCell(self: *MapEditor, project: *const Project, x: u16, y: u16, mode: Path9Mode) Path9Placement {
         const north = self.path9Neighbor(project, x, y, 0, -1);
         const south = self.path9Neighbor(project, x, y, 0, 1);
         const west = self.path9Neighbor(project, x, y, -1, 0);
         const east = self.path9Neighbor(project, x, y, 1, 0);
 
-        if (!north) {
-            if (!west) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, false);
-            if (!east) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, true);
-            return self.path9PlacementForSlot(project, Path9Slots.top_edge, false);
-        }
-        if (!south) {
-            if (!west) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, false);
-            if (!east) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, true);
-            return self.path9PlacementForSlot(project, Path9Slots.bottom_edge, false);
-        }
-        if (!west) return self.path9PlacementForSlot(project, Path9Slots.left_edge, false);
-        if (!east) return self.path9PlacementForSlot(project, Path9Slots.left_edge, true);
+        switch (mode) {
+            .island => {
+                if (!north) {
+                    if (!west) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, false);
+                    if (!east) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, true);
+                    return self.path9PlacementForSlot(project, Path9Slots.top_edge, false);
+                }
+                if (!south) {
+                    if (!west) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, false);
+                    if (!east) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, true);
+                    return self.path9PlacementForSlot(project, Path9Slots.bottom_edge, false);
+                }
+                if (!west) return self.path9PlacementForSlot(project, Path9Slots.left_edge, false);
+                if (!east) return self.path9PlacementForSlot(project, Path9Slots.left_edge, true);
 
-        if (!self.path9Neighbor(project, x, y, -1, -1)) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, false);
-        if (!self.path9Neighbor(project, x, y, 1, -1)) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, true);
-        if (!self.path9Neighbor(project, x, y, -1, 1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, false);
-        if (!self.path9Neighbor(project, x, y, 1, 1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, true);
+                if (!self.path9Neighbor(project, x, y, -1, -1)) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, false);
+                if (!self.path9Neighbor(project, x, y, 1, -1)) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, true);
+                if (!self.path9Neighbor(project, x, y, -1, 1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, false);
+                if (!self.path9Neighbor(project, x, y, 1, 1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, true);
+            },
+            .lake => {
+                // Lake mode uses the island 9-piece set inside-out: edges face the opposite side,
+                // and convex lake corners use the corresponding island inner-corner tiles.
+                if (!north) {
+                    if (!west) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, true);
+                    if (!east) return self.path9PlacementForSlot(project, Path9Slots.bottom_inner_corner, false);
+                    return self.path9PlacementForSlot(project, Path9Slots.bottom_edge, false);
+                }
+                if (!south) {
+                    if (!west) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, true);
+                    if (!east) return self.path9PlacementForSlot(project, Path9Slots.top_inner_corner, false);
+                    return self.path9PlacementForSlot(project, Path9Slots.top_edge, false);
+                }
+                if (!west) return self.path9PlacementForSlot(project, Path9Slots.left_edge, true);
+                if (!east) return self.path9PlacementForSlot(project, Path9Slots.left_edge, false);
+
+                if (!self.path9Neighbor(project, x, y, -1, -1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, true);
+                if (!self.path9Neighbor(project, x, y, 1, -1)) return self.path9PlacementForSlot(project, Path9Slots.bottom_left_corner, false);
+                if (!self.path9Neighbor(project, x, y, -1, 1)) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, true);
+                if (!self.path9Neighbor(project, x, y, 1, 1)) return self.path9PlacementForSlot(project, Path9Slots.top_left_corner, false);
+            },
+        }
 
         return self.path9InteriorPlacement(project, x, y);
     }
@@ -689,6 +725,14 @@ pub const MapEditor = struct {
         self.random_state = self.random_state *% 1664525 +% 1013904223;
         const choice: usize = @intCast(self.random_state % @as(u32, @intCast(filler_slots.len)));
         return filler_slots[choice];
+    }
+
+    fn activePath9Mode(self: *const MapEditor) ?Path9Mode {
+        return switch (self.tool) {
+            .bg_path9 => .island,
+            .bg_lake9 => .lake,
+            else => null,
+        };
     }
 
     fn path9PlacementForSlot(self: *const MapEditor, project: *const Project, slot: usize, hflip: bool) Path9Placement {
@@ -759,7 +803,7 @@ pub const MapEditor = struct {
 
     fn effectiveBrushSize(self: *const MapEditor) u8 {
         return switch (self.tool) {
-            .bg_stamp, .bg_random_row, .bg_path9 => self.brush_size,
+            .bg_stamp, .bg_random_row, .bg_path9, .bg_lake9 => self.brush_size,
             else => 1,
         };
     }

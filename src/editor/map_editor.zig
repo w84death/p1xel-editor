@@ -591,7 +591,7 @@ pub const MapEditor = struct {
         return .{ @intCast(@divFloor(mx - origin[0], cell_px)), @intCast(@divFloor(my - origin[1], cell_px)) };
     }
 
-    fn setInfo(self: *MapEditor, text: []const u8, color: u32) void {
+    pub fn setInfo(self: *MapEditor, text: []const u8, color: u32) void {
         self.info_text = text;
         self.info_color = color;
     }

@@ -25,6 +25,7 @@ const ArrowKeys = map_editor_mod.ArrowKeys;
 const views = @import("editor/views.zig");
 const editor_ui = @import("editor/ui.zig");
 const logo_project_bytes = @embedFile("logo.p1x");
+const PROJECT_SLOT_KEYS = [_]usize{ 112, 113, 114, 115 };
 
 const EditorTheme = struct {
     pub const PIVOT_PADDING = 4;
@@ -94,6 +95,7 @@ const AppState = struct {
     logo_project: Project,
     logo_available: bool,
     esc_lock: bool = false,
+    project_slot_key_lock: [Project.FILE_SLOT_COUNT]bool = [_]bool{false} ** Project.FILE_SLOT_COUNT,
     splash_started_ms: i64,
 
     fn init() AppState {
@@ -150,6 +152,7 @@ pub fn main() !void {
     while (c.fenster_loop(&window) == 0) {
         const mouse = beginFrame(&renderer, &app.mouse_buttons, &window);
         handleEscape(&app.sm, &app.esc_lock, window.keys[27] != 0);
+        handleProjectSlotKeys(&app, &window);
 
         renderer.perf_begin_draw();
         const previous_state = app.sm.current;
@@ -159,7 +162,7 @@ pub fn main() !void {
         handleStateTransition(previous_state, &app);
         if (app.sm.current == .quit) break;
 
-        if (app.sm.current != .splash) drawGlobalOverlay(&app.fui, &renderer);
+        if (app.sm.current != .splash) drawGlobalOverlay(&app.fui, &renderer, &app.project);
         presentFrame(&renderer);
     }
 
@@ -185,6 +188,67 @@ fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) vo
         return;
     }
     sm.go_to(if (sm.current == .editor or sm.current == .map_editor) .quit else .editor);
+}
+
+fn handleProjectSlotKeys(app: *AppState, window: *const c.fenster) void {
+    for (PROJECT_SLOT_KEYS, 0..) |key, index| {
+        const pressed = window.keys[key] != 0;
+        if (app.project_slot_key_lock[index]) {
+            if (!pressed) app.project_slot_key_lock[index] = false;
+            continue;
+        }
+        if (!pressed) continue;
+
+        app.project_slot_key_lock[index] = true;
+        switchProjectSlot(app, @intCast(index + 1));
+        return;
+    }
+}
+
+fn switchProjectSlot(app: *AppState, slot: u8) void {
+    if (slot == app.project.activeFileSlot()) return;
+
+    if (app.project.dirty) {
+        app.project.save() catch {
+            setProjectSlotInfo(app, projectSlotSaveFailedLabel(app.project.activeFileSlot()), editor_ui.Theme.danger);
+            return;
+        };
+    }
+
+    app.project = Project.loadOrDefaultSlot(slot);
+    app.editor.line_start = null;
+    app.editor.library_request = null;
+    app.editor.suppress_canvas_paint_until_mouse_up = true;
+    app.editor.ui_cache_dirty = true;
+    app.editor.cached_canvas_revision = std.math.maxInt(u64);
+    app.library.active = false;
+    app.map_editor.syncLibrarySelection(&app.project);
+    app.map_editor.invalidateCache();
+    Project.rememberFileSlot(slot);
+    setProjectSlotInfo(app, projectSlotLoadedLabel(slot), editor_ui.Theme.accent);
+}
+
+fn setProjectSlotInfo(app: *AppState, text: []const u8, color: u32) void {
+    app.editor.setInfo(text, color);
+    app.map_editor.setInfo(text, color);
+}
+
+fn projectSlotLoadedLabel(slot: u8) []const u8 {
+    return switch (slot) {
+        1 => "Project F1 loaded",
+        2 => "Project F2 loaded",
+        3 => "Project F3 loaded",
+        else => "Project F4 loaded",
+    };
+}
+
+fn projectSlotSaveFailedLabel(slot: u8) []const u8 {
+    return switch (slot) {
+        1 => "Save F1 failed",
+        2 => "Save F2 failed",
+        3 => "Save F3 failed",
+        else => "Save F4 failed",
+    };
 }
 
 fn drawCurrentState(app: *AppState, renderer: *Render, mouse: Mouse, window: *const c.fenster) bool {
@@ -430,9 +494,16 @@ fn drawSplashButton(fui: *Fui, renderer: *Render, mouse: Mouse, center_x: i32, y
     return enabled and hovered and (mouse.just_pressed or mouse.just_right_pressed);
 }
 
-fn drawGlobalOverlay(fui: *Fui, renderer: *Render) void {
+fn drawGlobalOverlay(fui: *Fui, renderer: *Render, project: *const Project) void {
     const save_button_x: i32 = CONF.SCREEN_W - editor_ui.Layout.side_x - 192;
     renderer.draw_fps_overlay_at(fui, EditorTheme, save_button_x - 120, editor_ui.Layout.top_y + 38);
+    drawProjectSlotOverlay(fui, renderer, project);
+}
+
+fn drawProjectSlotOverlay(fui: *Fui, renderer: *Render, project: *const Project) void {
+    var label_buf: [64]u8 = undefined;
+    const label = std.fmt.bufPrint(&label_buf, "PROJECT F{d}: {s}", .{ project.activeFileSlot(), project.activeFileName() }) catch "PROJECT";
+    fui.draw_text(renderer, label, editor_ui.Layout.side_x + 24, editor_ui.Layout.top_y + 58, 1, editor_ui.Theme.warn);
 }
 
 fn drawCenteredText(fui: *Fui, renderer: *Render, text: []const u8, center_x: i32, y: i32, scale: i32, color: u32) void {

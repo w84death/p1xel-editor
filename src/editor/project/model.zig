@@ -65,6 +65,8 @@ pub const Project = struct {
     const MAP_BYTES = MAP_HEADER_BYTES + MAX_MAP_CELLS * 2 + MAX_MAP_SPRITES * MAP_SPRITE_BYTES;
     const TILE_FLAGS_BYTES = CONF.MAX_TILES;
     const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + TILE_FLAGS_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
+    pub const FILE_SLOT_COUNT: u8 = 4;
+    const LAST_FILE_SLOT_PATH = "art_data-last-slot.cfg";
 
     palette_banks: [IMAGE_BANK_COUNT][PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaults.paletteSets(IMAGE_BANK_COUNT, PALETTE_BANK_COUNT),
     active_palette_bank: u8 = 0,
@@ -75,6 +77,7 @@ pub const Project = struct {
     mode: ProjectMode = .tiles,
     dirty: bool = false,
     visual_revision: u64 = 0,
+    file_slot: u8 = 1,
 
     pub fn init() Project {
         var project = Project{};
@@ -84,10 +87,58 @@ pub const Project = struct {
     }
 
     pub fn loadOrDefault() Project {
+        return loadOrDefaultSlot(lastOpenedFileSlot());
+    }
+
+    pub fn loadOrDefaultSlot(slot: u8) Project {
         var project = Project.init();
-        project.load() catch return project;
+        project.file_slot = clampFileSlot(slot);
+        project.load() catch {
+            if (project.file_slot == 1) project.loadLegacy() catch {};
+        };
         project.ensureBankBounds();
+        rememberFileSlot(project.file_slot);
         return project;
+    }
+
+    pub fn activeFileSlot(self: *const Project) u8 {
+        return clampFileSlot(self.file_slot);
+    }
+
+    pub fn activeFileName(self: *const Project) []const u8 {
+        return fileNameForSlot(self.activeFileSlot());
+    }
+
+    pub fn fileNameForSlot(slot: u8) []const u8 {
+        return switch (clampFileSlot(slot)) {
+            1 => "art_data-f1.p1x",
+            2 => "art_data-f2.p1x",
+            3 => "art_data-f3.p1x",
+            else => "art_data-f4.p1x",
+        };
+    }
+
+    pub fn lastOpenedFileSlot() u8 {
+        const io = std.Options.debug_io;
+        const file = std.Io.Dir.cwd().openFile(io, LAST_FILE_SLOT_PATH, .{ .mode = .read_only }) catch return 1;
+        defer file.close(io);
+
+        var data: [16]u8 = undefined;
+        const len = file.readPositionalAll(io, &data, 0) catch return 1;
+        for (data[0..len]) |byte| {
+            if (byte >= '1' and byte <= '4') return byte - '0';
+        }
+        return 1;
+    }
+
+    pub fn rememberFileSlot(slot: u8) void {
+        const io = std.Options.debug_io;
+        const file = std.Io.Dir.cwd().createFile(io, LAST_FILE_SLOT_PATH, .{ .truncate = true }) catch return;
+        defer file.close(io);
+
+        const active = clampFileSlot(slot);
+        var data = [_]u8{ @as(u8, '0') + active, '\n' };
+        file.writeStreamingAll(io, &data) catch return;
     }
 
     pub fn setMode(self: *Project, mode: ProjectMode) void {
@@ -614,8 +665,16 @@ pub const Project = struct {
     }
 
     pub fn load(self: *Project) !void {
+        try self.loadFile(self.activeFileName());
+    }
+
+    fn loadLegacy(self: *Project) !void {
+        try self.loadFile(CONF.PROJECT_FILE);
+    }
+
+    fn loadFile(self: *Project, path: []const u8) !void {
         const io = std.Options.debug_io;
-        const file = std.Io.Dir.cwd().openFile(io, CONF.PROJECT_FILE, .{ .mode = .read_only }) catch return error.InvalidProject;
+        const file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only }) catch return error.InvalidProject;
         defer file.close(io);
         var data: [MAX_FILE_BYTES]u8 = undefined;
         const len = file.readPositionalAll(io, &data, 0) catch return error.InvalidProject;
@@ -764,7 +823,7 @@ pub const Project = struct {
 
     pub fn save(self: *Project) !void {
         const io = std.Options.debug_io;
-        const file = std.Io.Dir.cwd().createFile(io, CONF.PROJECT_FILE, .{ .truncate = true }) catch return error.InvalidProject;
+        const file = std.Io.Dir.cwd().createFile(io, self.activeFileName(), .{ .truncate = true }) catch return error.InvalidProject;
         defer file.close(io);
         var header: [HEADER_BYTES]u8 = undefined;
         @memcpy(header[0..4], MAGIC);
@@ -839,6 +898,7 @@ pub const Project = struct {
             }
         }
         self.dirty = false;
+        rememberFileSlot(self.file_slot);
     }
 
     fn applyDefaultTileset(self: *Project) void {
@@ -872,6 +932,11 @@ pub const Project = struct {
         self.dirty = false;
         self.visual_revision = 0;
     }
+
+    fn clampFileSlot(slot: u8) u8 {
+        return if (slot >= 1 and slot <= FILE_SLOT_COUNT) slot else 1;
+    }
+
     fn activeBank(self: *Project) *ImageBank {
         return &self.image_banks[self.modeIndex()];
     }

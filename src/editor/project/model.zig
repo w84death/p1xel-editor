@@ -603,6 +603,22 @@ pub const Project = struct {
         return true;
     }
 
+    pub fn clearActiveMap(self: *Project) bool {
+        const map = self.activeMap();
+        var changed = map.sprite_count != 0;
+        var i: usize = 0;
+        while (i < MAX_MAP_CELLS) : (i += 1) {
+            if (map.tile_ids[i] != 0 or map.tile_attrs[i] != 0) changed = true;
+        }
+        if (!changed) return false;
+        map.tile_ids = [_]u8{0} ** MAX_MAP_CELLS;
+        map.tile_attrs = [_]u8{0} ** MAX_MAP_CELLS;
+        map.sprites = [_]MapSprite{.{}} ** MAX_MAP_SPRITES;
+        map.sprite_count = 0;
+        self.markDataChanged();
+        return true;
+    }
+
     pub fn resizeMap(self: *Project, width: u16, height: u16) bool {
         if (width == self.activeMap().width and height == self.activeMap().height) return false;
         if (width == 0 or height == 0 or width > MAX_MAP_W or height > MAX_MAP_H) return false;

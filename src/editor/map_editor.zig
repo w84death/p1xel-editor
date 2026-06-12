@@ -70,6 +70,7 @@ pub const MapEditor = struct {
     sprite_attr: MapTileAttr = .{},
     brush_size: u8 = 1,
     pending_size: PendingSize = .none,
+    pending_clear_map: bool = false,
     info_text: []const u8 = "Ready",
     info_color: u32 = UI.muted,
     cached_map_revision: u64 = std.math.maxInt(u64),
@@ -191,7 +192,7 @@ pub const MapEditor = struct {
         const pan_y = UI.canvas_y + 334;
         const selection_y = UI.canvas_y + 394;
         const file_y = UI.canvas_y + 486;
-        const info_y = UI.canvas_y + 570;
+        const info_y = UI.canvas_y + 614;
 
         drawText(fui, renderer, "MAP BANK", x, bank_y, 2, UI.text);
         for (0..Project.MAP_BANK_COUNT) |bank| {
@@ -241,11 +242,31 @@ pub const MapEditor = struct {
             };
             self.setInfo("Engine data exported", UI.accent);
         }
+        const clear_label: [:0]const u8 = if (self.pending_clear_map) "CONFIRM CLEAR" else "CLEAR MAP";
+        if (button(fui, renderer, mouse, x, file_y + 74, 188, 34, clear_label, self.pending_clear_map)) self.clearMapButton(project);
 
         drawText(fui, renderer, "INFO", x, info_y, 2, UI.text);
         renderer.draw_rect(x, info_y + 30, UI.right_w - 32, 58, UI.panel_hi);
         renderer.draw_rect_lines(x, info_y + 30, UI.right_w - 32, 58, UI.border_dark);
         drawText(fui, renderer, self.info_text, x + 10, info_y + 52, 1, self.info_color);
+    }
+
+    fn clearMapButton(self: *MapEditor, project: *Project) void {
+        if (!self.pending_clear_map) {
+            self.pending_clear_map = true;
+            self.pending_size = .none;
+            self.setInfo("Click clear again to confirm", UI.warn);
+            return;
+        }
+        self.pending_clear_map = false;
+        self.selection = null;
+        self.selection_drag_anchor = null;
+        if (project.clearActiveMap()) {
+            self.invalidateCache();
+            self.setInfo("Map cleared", UI.warn);
+        } else {
+            self.setInfo("Map already clear", UI.muted);
+        }
     }
 
     fn drawSelectionControls(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32) void {
@@ -350,8 +371,10 @@ pub const MapEditor = struct {
             if (confirm) {
                 _ = project.resizeMap(width, height);
                 self.pending_size = .none;
+                self.pending_clear_map = false;
                 self.setInfo("Map resized and cropped", UI.warn);
             } else {
+                self.pending_clear_map = false;
                 self.pending_size = pending;
                 self.setInfo("Click same size again to confirm crop", UI.warn);
             }

@@ -174,10 +174,7 @@ pub const MapEditor = struct {
         drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 70, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 94, tool_y + 30, 58, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
-        if (button(fui, renderer, mouse, UI.left_x + 160, tool_y + 30, 94, 34, "PATH9", self.tool == .bg_path9)) {
-            self.tool = .bg_path9;
-            if (self.path9_mirror_right and self.refreshPath9Region(project, 0, 0, project.activeMap().width, project.activeMap().height)) self.invalidateCache();
-        }
+        if (button(fui, renderer, mouse, UI.left_x + 160, tool_y + 30, 94, 34, "PATH9", self.tool == .bg_path9)) self.tool = .bg_path9;
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 62, 34, "RND", self.tool == .bg_random_row)) self.tool = .bg_random_row;
         if (button(fui, renderer, mouse, UI.left_x + 86, tool_y + 72, 58, 34, "SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 152, tool_y + 72, 50, 34, "REM", self.tool == .sprite_remove)) self.tool = .sprite_remove;

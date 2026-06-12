@@ -73,9 +73,8 @@ pub const Render = struct {
         @memset(frame_buf, 0);
         @memset(terrain_buf, 0);
 
-        std.debug.print("[init] Borowik Engine {s}\n", .{CONF.ENGINE});
-        std.debug.print("[init] {s} {s}\n", .{ CONF.THE_NAME, CONF.VERSION });
-        std.debug.print("[init] by Krzysztof Krystian Jankowski - github.com/w84death/borowik-engine\n", .{});
+        std.debug.print("[init] Borowik Engine {s} - https://github.com/w84death/borowik-engine\n", .{CONF.ENGINE});
+        std.debug.print("[init] {s} {s} - https://github.com/w84death/p1xel-editor\n", .{ CONF.THE_NAME, CONF.VERSION });
         std.debug.print("[init] renderer initialized\n", .{});
 
         return .{

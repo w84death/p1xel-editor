@@ -45,7 +45,7 @@ pub const ArrowKeys = struct {
     right: bool = false,
 };
 
-const Tool = enum { bg_stamp, bg_fill, bg_random_row, sprite_stamp, sprite_remove, select };
+const Tool = enum { bg_stamp, bg_fill, bg_random_row, bg_path9, sprite_stamp, sprite_remove, select };
 const PendingSize = enum { none, s32x32, s64x16, s128x16 };
 const GBC_SCREEN_W_TILES: i32 = 20;
 const GBC_SCREEN_H_TILES: i32 = 18;
@@ -55,6 +55,11 @@ const MapSelectionRect = struct {
     y: u16 = 0,
     w: u16 = 1,
     h: u16 = 1,
+};
+
+const Path9Placement = struct {
+    tile_id: u16,
+    attr: MapTileAttr,
 };
 
 pub const MapEditor = struct {
@@ -79,6 +84,7 @@ pub const MapEditor = struct {
     pan_y: i32 = 0,
     random_state: u32 = 0xA53C_9E27,
     random_last_cell: ?[2]u16 = null,
+    path9_mirror_right: bool = false,
     selection: ?MapSelectionRect = null,
     selection_drag_anchor: ?[2]u16 = null,
     clipboard_tile_ids: [project_mod.MAX_MAP_CELLS]u8 = [_]u8{0} ** project_mod.MAX_MAP_CELLS,
@@ -155,12 +161,13 @@ pub const MapEditor = struct {
         panel(renderer, UI.left_x, UI.canvas_y, UI.left_w, UI.canvas_h);
         const tool_y = UI.canvas_y + 18;
         drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
-        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 74, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
-        if (button(fui, renderer, mouse, UI.left_x + 98, tool_y + 30, 62, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
-        if (button(fui, renderer, mouse, UI.left_x + 168, tool_y + 30, 86, 34, "RND ROW", self.tool == .bg_random_row)) self.tool = .bg_random_row;
-        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 78, 34, "SPRITE", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
-        if (button(fui, renderer, mouse, UI.left_x + 102, tool_y + 72, 62, 34, "REM", self.tool == .sprite_remove)) self.tool = .sprite_remove;
-        if (button(fui, renderer, mouse, UI.left_x + 172, tool_y + 72, 82, 34, "SELECT", self.tool == .select)) self.tool = .select;
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 70, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 94, tool_y + 30, 58, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
+        if (button(fui, renderer, mouse, UI.left_x + 160, tool_y + 30, 94, 34, "PATH9", self.tool == .bg_path9)) self.tool = .bg_path9;
+        if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 62, 34, "RND", self.tool == .bg_random_row)) self.tool = .bg_random_row;
+        if (button(fui, renderer, mouse, UI.left_x + 86, tool_y + 72, 58, 34, "SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
+        if (button(fui, renderer, mouse, UI.left_x + 152, tool_y + 72, 50, 34, "REM", self.tool == .sprite_remove)) self.tool = .sprite_remove;
+        if (button(fui, renderer, mouse, UI.left_x + 210, tool_y + 72, 52, 34, "SEL", self.tool == .select)) self.tool = .select;
 
         drawText(fui, renderer, "BG TILES", UI.left_x + 16, UI.canvas_y + 132, 2, UI.text);
         self.drawSelector(fui, renderer, project, main_editor, mouse, sm, .tiles, UI.left_x + 50, UI.canvas_y + 160, 40);
@@ -181,8 +188,8 @@ pub const MapEditor = struct {
         const bank_y = UI.canvas_y + 16;
         const size_y = UI.canvas_y + 94;
         const brush_y = UI.canvas_y + 226;
-        const pan_y = UI.canvas_y + 306;
-        const selection_y = UI.canvas_y + 374;
+        const pan_y = UI.canvas_y + 334;
+        const selection_y = UI.canvas_y + 394;
         const file_y = UI.canvas_y + 486;
         const info_y = UI.canvas_y + 570;
 
@@ -208,6 +215,10 @@ pub const MapEditor = struct {
         self.brushSizeButton(fui, renderer, mouse, x, brush_y + 32, "1x1", 1);
         self.brushSizeButton(fui, renderer, mouse, x + 66, brush_y + 32, "2x2", 2);
         self.brushSizeButton(fui, renderer, mouse, x + 132, brush_y + 32, "3x3", 3);
+        if (button(fui, renderer, mouse, x, brush_y + 74, 188, 30, "PATH9 MIR/FILL", self.path9_mirror_right)) {
+            self.path9_mirror_right = !self.path9_mirror_right;
+            self.setInfo(if (self.path9_mirror_right) "Path9 mirror/fill on" else "Path9 mirror/fill off", UI.accent);
+        }
 
         drawText(fui, renderer, "PAN", x, pan_y, 2, UI.text);
         drawText(fui, renderer, "ARROWS: PAN MAP", x, pan_y + 32, 1, UI.muted);
@@ -363,6 +374,10 @@ pub const MapEditor = struct {
         }
 
         const cell = self.canvasCell(project, mouse.x, mouse.y) orelse return;
+        if (self.tool == .bg_path9 and mouse.right_down) {
+            self.erasePath9Brush(project, cell);
+            return;
+        }
         if (mouse.just_right_pressed) {
             if (project.mapCellAt(cell[0], cell[1])) |map_cell| {
                 self.selected_tile = map_cell.tile_id;
@@ -378,6 +393,7 @@ pub const MapEditor = struct {
                     if (mouse.just_pressed) _ = project.fillMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
                 },
                 .bg_random_row => self.paintRandomSelectedRowBrush(project, cell),
+                .bg_path9 => self.paintPath9Brush(project, cell),
                 .sprite_stamp => _ = project.addOrUpdateMapSprite(cell[0], cell[1], self.selected_sprite, self.sprite_attr),
                 .sprite_remove => {
                     if (project.removeMapSpriteAt(cell[0], cell[1])) self.setInfo("Sprite removed", UI.accent);
@@ -497,6 +513,104 @@ pub const MapEditor = struct {
         self.paintBrushCells(project, origin, true);
     }
 
+    fn paintPath9Brush(self: *MapEditor, project: *Project, cell: [2]u16) void {
+        const origin = self.brushOrigin(cell);
+        self.paintPath9Cells(project, origin, true);
+    }
+
+    fn erasePath9Brush(self: *MapEditor, project: *Project, cell: [2]u16) void {
+        const origin = self.brushOrigin(cell);
+        self.paintPath9Cells(project, origin, false);
+    }
+
+    fn paintPath9Cells(self: *MapEditor, project: *Project, origin: [2]i32, add: bool) void {
+        const map = project.activeMap();
+        const center = self.path9PlacementForSlot(project, 4, false);
+        var changed = false;
+
+        var by: u8 = 0;
+        while (by < self.brush_size) : (by += 1) {
+            const y = origin[1] + by;
+            if (y < 0 or y >= map.height) continue;
+            var bx: u8 = 0;
+            while (bx < self.brush_size) : (bx += 1) {
+                const x = origin[0] + bx;
+                if (x < 0 or x >= map.width) continue;
+                if (add) {
+                    changed = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(center.tile_id, 255)), center.attr) or changed;
+                } else if (self.isPath9Tile(project, map.tile_ids[@as(usize, @intCast(y)) * @as(usize, map.width) + @as(usize, @intCast(x))])) {
+                    changed = project.paintMapTile(@intCast(x), @intCast(y), 0, .{}) or changed;
+                }
+            }
+        }
+
+        changed = self.refreshPath9Region(project, origin[0] - 1, origin[1] - 1, @as(i32, self.brush_size) + 2, @as(i32, self.brush_size) + 2) or changed;
+        if (changed) self.setInfo(if (add) "Path9 painted" else "Path9 erased", UI.accent);
+    }
+
+    fn refreshPath9Region(self: *MapEditor, project: *Project, x0: i32, y0: i32, w: i32, h: i32) bool {
+        const map = project.activeMap();
+        var changed = false;
+        const min_x = @max(0, x0);
+        const min_y = @max(0, y0);
+        const max_x = @min(@as(i32, map.width), x0 + w);
+        const max_y = @min(@as(i32, map.height), y0 + h);
+
+        var y = min_y;
+        while (y < max_y) : (y += 1) {
+            var x = min_x;
+            while (x < max_x) : (x += 1) {
+                const idx = @as(usize, @intCast(y)) * @as(usize, map.width) + @as(usize, @intCast(x));
+                if (!self.isPath9Tile(project, map.tile_ids[idx])) continue;
+                const placement = self.path9PlacementForCell(project, @intCast(x), @intCast(y));
+                changed = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(placement.tile_id, 255)), placement.attr) or changed;
+            }
+        }
+        return changed;
+    }
+
+    fn path9PlacementForCell(self: *MapEditor, project: *const Project, x: u16, y: u16) Path9Placement {
+        const row: usize = if (!self.path9Neighbor(project, x, y, 0, -1)) 0 else if (!self.path9Neighbor(project, x, y, 0, 1)) 2 else 1;
+        const col: usize = if (!self.path9Neighbor(project, x, y, -1, 0)) 0 else if (!self.path9Neighbor(project, x, y, 1, 0)) 2 else 1;
+        if (self.path9_mirror_right and row == 1 and col == 1) {
+            return self.path9PlacementForSlot(project, self.randomPath9FillerSlot(), false);
+        }
+        const mirror_right = self.path9_mirror_right and col == 2;
+        const source_col: usize = if (mirror_right) 0 else col;
+        return self.path9PlacementForSlot(project, row * 3 + source_col, mirror_right);
+    }
+
+    fn randomPath9FillerSlot(self: *MapEditor) usize {
+        const filler_slots = [_]usize{ 2, 5, 8 };
+        self.random_state = self.random_state *% 1664525 +% 1013904223;
+        return filler_slots[self.random_state % filler_slots.len];
+    }
+
+    fn path9PlacementForSlot(self: *const MapEditor, project: *const Project, slot: usize, hflip: bool) Path9Placement {
+        _ = self;
+        const tile_id = project.visibleSlotMode(.tiles, slot);
+        var attr = path9AttrForTile(project, tile_id);
+        attr.hflip = hflip;
+        return .{ .tile_id = tile_id, .attr = attr };
+    }
+
+    fn path9Neighbor(self: *const MapEditor, project: *const Project, x: u16, y: u16, dx: i32, dy: i32) bool {
+        const map = project.activeMap();
+        const nx = @as(i32, x) + dx;
+        const ny = @as(i32, y) + dy;
+        if (nx < 0 or ny < 0 or nx >= map.width or ny >= map.height) return false;
+        const idx = @as(usize, @intCast(ny)) * @as(usize, map.width) + @as(usize, @intCast(nx));
+        return self.isPath9Tile(project, map.tile_ids[idx]);
+    }
+
+    fn isPath9Tile(self: *const MapEditor, project: *const Project, tile_id: u8) bool {
+        _ = self;
+        for (0..9) |slot| {
+            if (project.visibleSlotMode(.tiles, slot) == tile_id) return true;
+        }
+        return false;
+    }
+
     fn paintBrushCells(self: *MapEditor, project: *Project, origin: [2]i32, randomize: bool) void {
         const map = project.activeMap();
         var by: u8 = 0;
@@ -540,7 +654,7 @@ pub const MapEditor = struct {
 
     fn effectiveBrushSize(self: *const MapEditor) u8 {
         return switch (self.tool) {
-            .bg_stamp, .bg_random_row => self.brush_size,
+            .bg_stamp, .bg_random_row, .bg_path9 => self.brush_size,
             else => 1,
         };
     }
@@ -737,6 +851,10 @@ pub const MapEditor = struct {
         self.info_color = color;
     }
 };
+
+fn path9AttrForTile(project: *const Project, tile_id: u16) MapTileAttr {
+    return .{ .palette = project.imageAtMode(.tiles, @min(tile_id, project.imageCountMode(.tiles) - 1)).palette_id };
+}
 
 fn rectFromCells(a: [2]u16, b: [2]u16) MapSelectionRect {
     const x0 = @min(a[0], b[0]);

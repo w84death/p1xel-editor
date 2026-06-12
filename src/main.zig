@@ -70,6 +70,8 @@ const SplashLogo = struct {
     const tiles_h: i32 = 6;
     const scale: i32 = 6;
     const sprite_group_offset_tiles_x: i32 = 3;
+    const sprite_group_tiles_w: i32 = 4;
+    const sprite_group_tiles_h: i32 = 4;
 
     fn tilePixelSize() i32 {
         return CONF.TILE_SIDE * scale;
@@ -81,6 +83,14 @@ const SplashLogo = struct {
 
     fn pixelHeight() i32 {
         return tiles_h * tilePixelSize();
+    }
+
+    fn spriteGroupPixelWidth() i32 {
+        return sprite_group_tiles_w * tilePixelSize();
+    }
+
+    fn spriteGroupPixelHeight() i32 {
+        return sprite_group_tiles_h * tilePixelSize();
     }
 };
 
@@ -299,7 +309,7 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
     if (logo_available) {
         const logo_x = cx - @divFloor(SplashLogo.pixelWidth(), 2);
         const logo_y: i32 = 42;
-        drawSplashLogo(renderer, logo_project, logo_x, logo_y, SplashLogo.scale, c.fenster_time() - splash_started_ms);
+        drawSplashLogo(renderer, logo_project, logo_x, logo_y, SplashLogo.scale, c.fenster_time() - splash_started_ms, mouse);
         drawCenteredText(fui, renderer, CONF.THE_NAME, cx, logo_y + SplashLogo.pixelHeight() + 14, 2, SplashStyle.title);
         drawCenteredText(fui, renderer, CONF.VERSION, cx, logo_y + SplashLogo.pixelHeight() + 40, 1, SplashStyle.muted);
         drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, logo_y + SplashLogo.pixelHeight() + 62, 2, SplashStyle.warn);
@@ -342,10 +352,10 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
     }
 }
 
-fn drawSplashLogo(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32, elapsed_ms: i64) void {
+fn drawSplashLogo(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32, elapsed_ms: i64, mouse: Mouse) void {
     if (scale <= 0) return;
     drawSplashLogoTiles(renderer, project, x, y, scale);
-    drawSplashLogoSpriteGroup(renderer, project, x, y, scale, elapsed_ms);
+    drawSplashLogoSpriteGroup(renderer, project, x, y, scale, elapsed_ms, mouse);
 }
 
 fn drawSplashLogoTiles(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32) void {
@@ -414,16 +424,20 @@ fn drawSplashLogoFirstTiles(renderer: *Render, project: *const Project, x: i32, 
     }
 }
 
-fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32, elapsed_ms: i64) void {
+fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32, elapsed_ms: i64, mouse: Mouse) void {
     const map = project.mapAtBank(0);
     if (map.sprite_count == 0) return;
 
     const tile_px = CONF.TILE_SIDE * scale;
-    const group_x = x + SplashLogo.sprite_group_offset_tiles_x * tile_px;
+    const logo_hovered = hoverRect(mouse.x, mouse.y, x, y, SplashLogo.pixelWidth(), SplashLogo.pixelHeight());
+    const idle_group_x = x + SplashLogo.sprite_group_offset_tiles_x * tile_px;
+    const idle_group_y = y;
+    const group_x = if (logo_hovered) mouse.x - @divFloor(SplashLogo.spriteGroupPixelWidth(), 2) else idle_group_x;
+    const group_y = if (logo_hovered) mouse.y - @divFloor(SplashLogo.spriteGroupPixelHeight(), 2) else idle_group_y;
     const phase = @as(f32, @floatFromInt(elapsed_ms)) / 420.0;
     const scale_f = @as(f32, @floatFromInt(scale));
-    const dx: i32 = @intFromFloat(@round(std.math.sin(phase) * scale_f * 0.6));
-    const dy: i32 = @intFromFloat(@round(std.math.cos(phase) * scale_f * 0.7));
+    const dx: i32 = if (logo_hovered) 0 else @intFromFloat(@round(std.math.sin(phase) * scale_f * 0.6));
+    const dy: i32 = if (logo_hovered) 0 else @intFromFloat(@round(std.math.cos(phase) * scale_f * 0.7));
 
     const sprite_count: usize = @intCast(map.sprite_count);
     var i: usize = 0;
@@ -438,10 +452,14 @@ fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32,
             sprite.hflip,
             sprite.vflip,
             group_x + @as(i32, @intCast(sprite.x)) * tile_px + dx,
-            y + @as(i32, @intCast(sprite.y)) * tile_px + dy,
+            group_y + @as(i32, @intCast(sprite.y)) * tile_px + dy,
             scale,
         );
     }
+}
+
+fn hoverRect(px: i32, py: i32, x: i32, y: i32, w: i32, h: i32) bool {
+    return px >= x and py >= y and px < x + w and py < y + h;
 }
 
 fn mapCellIndex(map_width: u16, tile_x: i32, tile_y: i32) usize {

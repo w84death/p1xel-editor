@@ -62,6 +62,16 @@ const Path9Placement = struct {
     attr: MapTileAttr,
 };
 
+const Path9MirrorSlots = struct {
+    const top_edge: usize = 1; // 2x1
+    const top_left_corner: usize = 2; // 3x1, hflip for top-right
+    const left_edge: usize = 3; // 1x2, hflip for right edge
+    const filler_a: usize = 4; // 2x2
+    const filler_b: usize = 5; // 3x2
+    const bottom_edge: usize = 7; // 2x3
+    const bottom_left_corner: usize = 8; // 3x3, hflip for bottom-right
+};
+
 pub const MapEditor = struct {
     tool: Tool = .bg_stamp,
     selected_tile: u8 = 0,
@@ -85,7 +95,7 @@ pub const MapEditor = struct {
     pan_y: i32 = 0,
     random_state: u32 = 0xA53C_9E27,
     random_last_cell: ?[2]u16 = null,
-    path9_mirror_right: bool = false,
+    path9_mirror_right: bool = true,
     selection: ?MapSelectionRect = null,
     selection_drag_anchor: ?[2]u16 = null,
     clipboard_tile_ids: [project_mod.MAX_MAP_CELLS]u8 = [_]u8{0} ** project_mod.MAX_MAP_CELLS,
@@ -164,7 +174,10 @@ pub const MapEditor = struct {
         drawText(fui, renderer, "TOOLS", UI.left_x + 16, tool_y, 2, UI.text);
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 30, 70, 34, "STAMP", self.tool == .bg_stamp)) self.tool = .bg_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 94, tool_y + 30, 58, 34, "FILL", self.tool == .bg_fill)) self.tool = .bg_fill;
-        if (button(fui, renderer, mouse, UI.left_x + 160, tool_y + 30, 94, 34, "PATH9", self.tool == .bg_path9)) self.tool = .bg_path9;
+        if (button(fui, renderer, mouse, UI.left_x + 160, tool_y + 30, 94, 34, "PATH9", self.tool == .bg_path9)) {
+            self.tool = .bg_path9;
+            if (self.path9_mirror_right and self.refreshPath9Region(project, 0, 0, project.activeMap().width, project.activeMap().height)) self.invalidateCache();
+        }
         if (button(fui, renderer, mouse, UI.left_x + 16, tool_y + 72, 62, 34, "RND", self.tool == .bg_random_row)) self.tool = .bg_random_row;
         if (button(fui, renderer, mouse, UI.left_x + 86, tool_y + 72, 58, 34, "SPR", self.tool == .sprite_stamp)) self.tool = .sprite_stamp;
         if (button(fui, renderer, mouse, UI.left_x + 152, tool_y + 72, 50, 34, "REM", self.tool == .sprite_remove)) self.tool = .sprite_remove;
@@ -218,6 +231,7 @@ pub const MapEditor = struct {
         self.brushSizeButton(fui, renderer, mouse, x + 132, brush_y + 32, "3x3", 3);
         if (button(fui, renderer, mouse, x, brush_y + 74, 188, 30, "PATH9 MIR/FILL", self.path9_mirror_right)) {
             self.path9_mirror_right = !self.path9_mirror_right;
+            if (self.refreshPath9Region(project, 0, 0, project.activeMap().width, project.activeMap().height)) self.invalidateCache();
             self.setInfo(if (self.path9_mirror_right) "Path9 mirror/fill on" else "Path9 mirror/fill off", UI.accent);
         }
 
@@ -548,7 +562,6 @@ pub const MapEditor = struct {
 
     fn paintPath9Cells(self: *MapEditor, project: *Project, origin: [2]i32, add: bool) void {
         const map = project.activeMap();
-        const center = self.path9PlacementForSlot(project, 4, false);
         var changed = false;
 
         var by: u8 = 0;
@@ -560,7 +573,9 @@ pub const MapEditor = struct {
                 const x = origin[0] + bx;
                 if (x < 0 or x >= map.width) continue;
                 if (add) {
-                    changed = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(center.tile_id, 255)), center.attr) or changed;
+                    const seed_slot = if (self.path9_mirror_right) self.randomPath9FillerSlot() else @as(usize, 4);
+                    const seed = self.path9PlacementForSlot(project, seed_slot, false);
+                    changed = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(seed.tile_id, 255)), seed.attr) or changed;
                 } else if (self.isPath9Tile(project, map.tile_ids[@as(usize, @intCast(y)) * @as(usize, map.width) + @as(usize, @intCast(x))])) {
                     changed = project.paintMapTile(@intCast(x), @intCast(y), 0, .{}) or changed;
                 }
@@ -595,18 +610,41 @@ pub const MapEditor = struct {
     fn path9PlacementForCell(self: *MapEditor, project: *const Project, x: u16, y: u16) Path9Placement {
         const row: usize = if (!self.path9Neighbor(project, x, y, 0, -1)) 0 else if (!self.path9Neighbor(project, x, y, 0, 1)) 2 else 1;
         const col: usize = if (!self.path9Neighbor(project, x, y, -1, 0)) 0 else if (!self.path9Neighbor(project, x, y, 1, 0)) 2 else 1;
-        if (self.path9_mirror_right and row == 1 and col == 1) {
-            return self.path9PlacementForSlot(project, self.randomPath9FillerSlot(), false);
-        }
-        const mirror_right = self.path9_mirror_right and col == 2;
-        const source_col: usize = if (mirror_right) 0 else col;
-        return self.path9PlacementForSlot(project, row * 3 + source_col, mirror_right);
+        if (!self.path9_mirror_right) return self.path9PlacementForSlot(project, row * 3 + col, false);
+
+        if (row == 0 and col == 0) return self.path9PlacementForSlot(project, Path9MirrorSlots.top_left_corner, false);
+        if (row == 0 and col == 1) return self.path9PlacementForSlot(project, Path9MirrorSlots.top_edge, false);
+        if (row == 0 and col == 2) return self.path9PlacementForSlot(project, Path9MirrorSlots.top_left_corner, true);
+        if (row == 1 and col == 0) return self.path9PlacementForSlot(project, Path9MirrorSlots.left_edge, false);
+        if (row == 1 and col == 1) return self.path9InteriorPlacement(project, x, y);
+        if (row == 1 and col == 2) return self.path9PlacementForSlot(project, Path9MirrorSlots.left_edge, true);
+        if (row == 2 and col == 0) return self.path9PlacementForSlot(project, Path9MirrorSlots.bottom_left_corner, false);
+        if (row == 2 and col == 1) return self.path9PlacementForSlot(project, Path9MirrorSlots.bottom_edge, false);
+        if (row == 2 and col == 2) return self.path9PlacementForSlot(project, Path9MirrorSlots.bottom_left_corner, true);
+
+        return self.path9PlacementForSlot(project, Path9MirrorSlots.filler_a, false);
+    }
+
+    fn path9InteriorPlacement(self: *MapEditor, project: *const Project, x: u16, y: u16) Path9Placement {
+        const slot = self.existingPath9FillerSlot(project, x, y) orelse self.randomPath9FillerSlot();
+        return self.path9PlacementForSlot(project, slot, false);
+    }
+
+    fn existingPath9FillerSlot(self: *const MapEditor, project: *const Project, x: u16, y: u16) ?usize {
+        _ = self;
+        const map = project.activeMap();
+        const idx = @as(usize, y) * @as(usize, map.width) + x;
+        const current_id = map.tile_ids[idx];
+        if (current_id == project.visibleSlotMode(.tiles, Path9MirrorSlots.filler_a)) return Path9MirrorSlots.filler_a;
+        if (current_id == project.visibleSlotMode(.tiles, Path9MirrorSlots.filler_b)) return Path9MirrorSlots.filler_b;
+        return null;
     }
 
     fn randomPath9FillerSlot(self: *MapEditor) usize {
-        const filler_slots = [_]usize{ 2, 5, 8 };
+        const filler_slots = [_]usize{ Path9MirrorSlots.filler_a, Path9MirrorSlots.filler_b };
         self.random_state = self.random_state *% 1664525 +% 1013904223;
-        return filler_slots[self.random_state % filler_slots.len];
+        const choice: usize = @intCast(self.random_state % @as(u32, @intCast(filler_slots.len)));
+        return filler_slots[choice];
     }
 
     fn path9PlacementForSlot(self: *const MapEditor, project: *const Project, slot: usize, hflip: bool) Path9Placement {
@@ -627,7 +665,21 @@ pub const MapEditor = struct {
     }
 
     fn isPath9Tile(self: *const MapEditor, project: *const Project, tile_id: u8) bool {
-        _ = self;
+        if (self.path9_mirror_right) {
+            const active_slots = [_]usize{
+                Path9MirrorSlots.top_edge,
+                Path9MirrorSlots.top_left_corner,
+                Path9MirrorSlots.left_edge,
+                Path9MirrorSlots.filler_a,
+                Path9MirrorSlots.filler_b,
+                Path9MirrorSlots.bottom_edge,
+                Path9MirrorSlots.bottom_left_corner,
+            };
+            for (active_slots) |slot| {
+                if (project.visibleSlotMode(.tiles, slot) == tile_id) return true;
+            }
+            return false;
+        }
         for (0..9) |slot| {
             if (project.visibleSlotMode(.tiles, slot) == tile_id) return true;
         }

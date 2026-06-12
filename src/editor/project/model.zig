@@ -316,16 +316,26 @@ pub const Project = struct {
         return self.tileFlags(self.selectedImageId());
     }
 
+    pub fn selectedTileFlagBit(self: *const Project, bit: u8) bool {
+        if (bit >= 8) return false;
+        return (self.selectedTileFlags() & (@as(u8, 1) << @intCast(bit))) != 0;
+    }
+
     pub fn isTileTraversable(self: *const Project, tile_id: u16) bool {
         return (self.tileFlags(tile_id) & TILE_FLAG_TRAVERSABLE) != 0;
     }
 
     pub fn setSelectedTileTraversable(self: *Project, traversable: bool) void {
-        if (self.mode != .tiles) return;
+        self.setSelectedTileFlagBit(0, traversable);
+    }
+
+    pub fn setSelectedTileFlagBit(self: *Project, bit: u8, enabled: bool) void {
+        if (self.mode != .tiles or bit >= 8) return;
         const tile_id = self.selectedImageId();
         if (tile_id >= CONF.MAX_TILES) return;
+        const mask = @as(u8, 1) << @intCast(bit);
         const old = self.tile_flags[tile_id];
-        const next = if (traversable) old | TILE_FLAG_TRAVERSABLE else old & ~@as(u8, TILE_FLAG_TRAVERSABLE);
+        const next = if (enabled) old | mask else old & ~mask;
         if (next == old) return;
         self.tile_flags[tile_id] = next;
         self.markDataChanged();

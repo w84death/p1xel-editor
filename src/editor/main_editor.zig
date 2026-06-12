@@ -422,11 +422,18 @@ fn drawPalettes(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse
 
 fn drawTileFlags(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32, editor: *MainEditor) void {
     if (project.mode != .tiles) return;
-    drawPixelText(fui, renderer, "TILE FLAGS", x, y, 2, UI.drawing_header);
-    const traversable = project.isTileTraversable(project.selectedImageId());
-    if (pillButton(fui, renderer, mouse, x, y + 24, 112, 28, "WALK", traversable)) {
-        project.setSelectedTileTraversable(!traversable);
-        editor.setInfo(if (traversable) "Tile blocked" else "Tile walkable", UI.accent);
+
+    var title_buf: [24]u8 = undefined;
+    const title = std.fmt.bufPrint(&title_buf, "TILE FLAGS 0x{X}", .{project.selectedTileFlags()}) catch "TILE FLAGS";
+    drawPixelText(fui, renderer, title, x, y, 2, UI.drawing_header);
+
+    const labels = [_][:0]const u8{ "0", "1", "2", "3", "4", "5", "6", "7" };
+    for (labels, 0..) |label, bit| {
+        const active = project.selectedTileFlagBit(@intCast(bit));
+        if (pillButton(fui, renderer, mouse, x + @as(i32, @intCast(bit)) * 30, y + 24, 26, 28, label, active)) {
+            project.setSelectedTileFlagBit(@intCast(bit), !active);
+            editor.setInfo("Tile flag toggled", UI.accent);
+        }
     }
 }
 

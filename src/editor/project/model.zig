@@ -248,7 +248,7 @@ pub const Project = struct {
         const bank = &self.image_banks[@intFromEnum(mode)];
         if (bank.visible_slots[slot] == image_id) return;
         bank.visible_slots[slot] = image_id;
-        self.markViewChanged();
+        self.markDataChanged();
     }
 
     pub fn currentImage(self: *const Project) Image {
@@ -289,7 +289,7 @@ pub const Project = struct {
         const bank = self.activeBank();
         if (bank.visible_slots[slot] == image_id) return;
         bank.visible_slots[slot] = image_id;
-        self.markViewChanged();
+        self.markDataChanged();
     }
 
     pub fn nonEmptyTiles(self: *const Project) u16 {
@@ -374,7 +374,6 @@ pub const Project = struct {
         const id = bank.count;
         bank.images[id] = .{ .palette_id = bank.selected_palette };
         bank.count += 1;
-        bank.visible_slots[id % bank.visible_slots.len] = id;
         bank.selected = id;
         self.markDataChanged();
         return id;
@@ -620,7 +619,12 @@ pub const Project = struct {
         defer file.close(io);
         var data: [MAX_FILE_BYTES]u8 = undefined;
         const len = file.readPositionalAll(io, &data, 0) catch return error.InvalidProject;
-        if (len < HEADER_BYTES) return error.InvalidProject;
+        try self.loadFromBytes(data[0..len]);
+    }
+
+    pub fn loadFromBytes(self: *Project, data: []const u8) !void {
+        if (data.len > MAX_FILE_BYTES) return error.InvalidProject;
+        if (data.len < HEADER_BYTES) return error.InvalidProject;
         if (!std.mem.eql(u8, data[0..4], MAGIC)) return error.InvalidProject;
         const file_version = data[4];
         if (file_version > VERSION or file_version < OLDEST_SUPPORTED_VERSION) return error.InvalidProject;
@@ -633,7 +637,7 @@ pub const Project = struct {
 
         var offset: usize = HEADER_BYTES;
         if (file_version >= 6) {
-            if (offset + 2 > len) return error.InvalidProject;
+            if (offset + 2 > data.len) return error.InvalidProject;
             self.active_palette_bank = @min(data[offset], PALETTE_BANK_COUNT - 1);
             offset += 1;
             self.active_map_bank = @min(data[offset], MAP_BANK_COUNT - 1);
@@ -643,7 +647,7 @@ pub const Project = struct {
                     for (0..PALETTE_BANK_COUNT) |bank| {
                         for (0..CONF.PALETTE_COUNT) |p| {
                             for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
-                                if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                                if (offset + PALETTE_COLOR_BYTES > data.len) return error.InvalidProject;
                                 self.palette_banks[mode_index][bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
                                 offset += PALETTE_COLOR_BYTES;
                             }
@@ -655,7 +659,7 @@ pub const Project = struct {
                 for (0..PALETTE_BANK_COUNT) |bank| {
                     for (0..CONF.PALETTE_COUNT) |p| {
                         for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
-                            if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                            if (offset + PALETTE_COLOR_BYTES > data.len) return error.InvalidProject;
                             shared_palettes[bank][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
                             offset += PALETTE_COLOR_BYTES;
                         }
@@ -668,7 +672,7 @@ pub const Project = struct {
             for (0..IMAGE_BANK_COUNT) |bank| {
                 for (0..CONF.PALETTE_COUNT) |p| {
                     for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
-                        if (offset + PALETTE_COLOR_BYTES > len) return error.InvalidProject;
+                        if (offset + PALETTE_COLOR_BYTES > data.len) return error.InvalidProject;
                         if (bank == 0) legacy_palettes[0][p][color_slot] = .{ data[offset], data[offset + 1], data[offset + 2] };
                         offset += PALETTE_COLOR_BYTES;
                     }
@@ -681,13 +685,13 @@ pub const Project = struct {
 
         self.tile_flags = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES;
         if (file_version >= 9) {
-            if (offset + TILE_FLAGS_BYTES > len) return error.InvalidProject;
+            if (offset + TILE_FLAGS_BYTES > data.len) return error.InvalidProject;
             @memcpy(self.tile_flags[0..], data[offset .. offset + TILE_FLAGS_BYTES]);
             offset += TILE_FLAGS_BYTES;
         }
 
         for (0..IMAGE_BANK_COUNT) |bank_index| {
-            if (offset + IMAGE_BANK_STATE_BYTES > len) return error.InvalidProject;
+            if (offset + IMAGE_BANK_STATE_BYTES > data.len) return error.InvalidProject;
             var bank = &self.image_banks[bank_index];
             bank.count = storage.readU16(data[offset .. offset + 2]);
             offset += 2;
@@ -707,7 +711,7 @@ pub const Project = struct {
             }
             if (bank.count == 0 or bank.count > CONF.MAX_TILES) return error.InvalidProject;
             const images_bytes = @as(usize, bank.count) * IMAGE_BYTES;
-            if (offset + images_bytes > len) return error.InvalidProject;
+            if (offset + images_bytes > data.len) return error.InvalidProject;
             for (0..bank.count) |i| {
                 bank.images[i].palette_id = @min(data[offset], CONF.PALETTE_COUNT - 1);
                 offset += 1;
@@ -721,7 +725,7 @@ pub const Project = struct {
         self.maps = [_]Map{.{}} ** MAP_BANK_COUNT;
         const maps_to_read: usize = if (file_version >= 6) MAP_BANK_COUNT else 1;
         for (0..maps_to_read) |map_bank| {
-            if (offset + MAP_HEADER_BYTES > len) return error.InvalidProject;
+            if (offset + MAP_HEADER_BYTES > data.len) return error.InvalidProject;
             const width = storage.readU16(data[offset .. offset + 2]);
             offset += 2;
             const height = storage.readU16(data[offset .. offset + 2]);
@@ -733,14 +737,14 @@ pub const Project = struct {
             map.width = width;
             map.height = height;
             const cell_count = @as(usize, width) * @as(usize, height);
-            if (offset + cell_count * 2 > len) return error.InvalidProject;
+            if (offset + cell_count * 2 > data.len) return error.InvalidProject;
             @memcpy(map.tile_ids[0..cell_count], data[offset .. offset + cell_count]);
             offset += cell_count;
             @memcpy(map.tile_attrs[0..cell_count], data[offset .. offset + cell_count]);
             for (map.tile_attrs[0..cell_count]) |*attr| attr.* &= 0x67;
             offset += cell_count;
             map.sprite_count = @min(sprite_count, MAX_MAP_SPRITES);
-            if (offset + @as(usize, sprite_count) * MAP_SPRITE_BYTES > len) return error.InvalidProject;
+            if (offset + @as(usize, sprite_count) * MAP_SPRITE_BYTES > data.len) return error.InvalidProject;
             var i: usize = 0;
             while (i < sprite_count) : (i += 1) {
                 const sprite = MapSprite{

@@ -9,7 +9,7 @@ const build_options = @import("build_options");
 pub const CONF = struct {
     pub const AppMode = enum { shareware, full };
 
-    pub const VERSION = "2.9";
+    pub const VERSION = "2.10";
     pub const ENGINE = "1.2";
     pub const THE_NAME = "P1Xel Editor";
     pub const TAG_LINE = "";

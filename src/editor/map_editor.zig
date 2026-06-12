@@ -55,7 +55,6 @@ pub const MapEditor = struct {
     selected_sprite: u16 = 0,
     bg_attr: MapTileAttr = .{},
     sprite_attr: MapTileAttr = .{},
-    selected_cell: ?[2]u16 = null,
     brush_size: u8 = 1,
     pending_size: PendingSize = .none,
     info_text: []const u8 = "Ready",
@@ -322,7 +321,6 @@ pub const MapEditor = struct {
             if (confirm) {
                 _ = project.resizeMap(width, height);
                 self.pending_size = .none;
-                self.selected_cell = null;
                 self.setInfo("Map resized and cropped", UI.warn);
             } else {
                 self.pending_size = pending;
@@ -348,13 +346,11 @@ pub const MapEditor = struct {
             if (project.mapCellAt(cell[0], cell[1])) |map_cell| {
                 self.selected_tile = map_cell.tile_id;
                 self.bg_attr = map_cell.attr;
-                self.selected_cell = cell;
                 self.setInfo("Picked map cell", UI.accent);
             }
             return;
         }
         if (mouse.left_down) {
-            self.selected_cell = cell;
             switch (self.tool) {
                 .bg_stamp => self.paintStampBrush(project, cell),
                 .bg_fill => {
@@ -453,12 +449,6 @@ pub const MapEditor = struct {
             const brush_px = @as(i32, self.effectiveBrushSize()) * cell_px;
             drawClippedRectLines(renderer, hx, hy, brush_px, brush_px, canvasContentClip(), UI.text);
         }
-        if (self.selected_cell) |cell| {
-            const sx = origin[0] + @as(i32, cell[0]) * cell_px;
-            const sy = origin[1] + @as(i32, cell[1]) * cell_px;
-            renderer.draw_rect_lines(sx + 1, sy + 1, cell_px - 2, cell_px - 2, UI.accent);
-        }
-
         self.drawCanvasHeader(fui, renderer, project, mouse);
     }
 
@@ -521,7 +511,7 @@ pub const MapEditor = struct {
         const view_h_cells = @min(GBC_SCREEN_H_TILES, @as(i32, map.height));
         if (view_w_cells <= 0 or view_h_cells <= 0) return;
 
-        const focus = self.selected_cell orelse self.canvasCell(project, mouse.x, mouse.y);
+        const focus = self.canvasCell(project, mouse.x, mouse.y);
         const max_x = @as(i32, map.width) - view_w_cells;
         const max_y = @as(i32, map.height) - view_h_cells;
         const left_cell = if (focus) |cell| @max(0, @min(max_x, @as(i32, cell[0]) - @divFloor(view_w_cells, 2))) else @divFloor(max_x, 2);

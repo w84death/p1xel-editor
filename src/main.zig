@@ -12,7 +12,9 @@ const Fui = @import("engine/fui.zig").Fui(EditorTheme);
 const Mouse = @import("engine/mouse.zig").Mouse;
 const MouseButtons = @import("engine/mouse.zig").MouseButtons;
 const StateMachine = @import("engine/state.zig").StateMachine;
-const Project = @import("editor/project.zig").Project;
+const project_mod = @import("editor/project.zig");
+const Project = project_mod.Project;
+const MapTileAttr = project_mod.MapTileAttr;
 const editor_mod = @import("editor/main_editor.zig");
 const MainEditor = editor_mod.MainEditor;
 const State = editor_mod.State;
@@ -22,6 +24,7 @@ const MapEditor = map_editor_mod.MapEditor;
 const ArrowKeys = map_editor_mod.ArrowKeys;
 const views = @import("editor/views.zig");
 const editor_ui = @import("editor/ui.zig");
+const logo_project_bytes = @embedFile("logo.p1x");
 
 const EditorTheme = struct {
     pub const PIVOT_PADDING = 4;
@@ -61,6 +64,24 @@ const SplashStyle = struct {
     const disabled_text = 0x666666;
 };
 
+const SplashLogo = struct {
+    const tiles_w: i32 = 5;
+    const tiles_h: i32 = 6;
+    const scale: i32 = 6;
+
+    fn tilePixelSize() i32 {
+        return CONF.TILE_SIDE * scale;
+    }
+
+    fn pixelWidth() i32 {
+        return tiles_w * tilePixelSize();
+    }
+
+    fn pixelHeight() i32 {
+        return tiles_h * tilePixelSize();
+    }
+};
+
 const AppState = struct {
     fui: Fui,
     mouse_buttons: MouseButtons,
@@ -69,10 +90,21 @@ const AppState = struct {
     editor: MainEditor,
     map_editor: MapEditor,
     library: TileLibrary,
+    logo_project: Project,
+    logo_available: bool,
     esc_lock: bool = false,
     splash_started_ms: i64,
 
     fn init() AppState {
+        var logo_project = Project.init();
+        const logo_available = blk: {
+            logo_project.loadFromBytes(logo_project_bytes) catch |err| {
+                std.debug.print("[splash] failed to load embedded logo.p1x: {s}\n", .{@errorName(err)});
+                break :blk false;
+            };
+            break :blk true;
+        };
+
         return .{
             .fui = Fui.init(CONF.SCREEN_W, CONF.SCREEN_H),
             .mouse_buttons = MouseButtons.init(),
@@ -81,6 +113,8 @@ const AppState = struct {
             .editor = .{},
             .map_editor = .{},
             .library = .{},
+            .logo_project = logo_project,
+            .logo_available = logo_available,
             .splash_started_ms = c.fenster_time(),
         };
     }
@@ -151,7 +185,7 @@ fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) vo
 
 fn drawCurrentState(app: *AppState, renderer: *Render, mouse: Mouse, window: *const c.fenster) bool {
     switch (app.sm.current) {
-        .splash => drawSplash(&app.fui, renderer, &app.editor, mouse, &app.sm, app.splash_started_ms),
+        .splash => drawSplash(&app.fui, renderer, &app.editor, mouse, &app.sm, &app.logo_project, app.logo_available, app.splash_started_ms),
         .editor => app.editor.draw(&app.fui, renderer, &app.project, mouse, &app.sm),
         .tile_library => app.library.draw(&app.fui, renderer, &app.project, &app.editor, mouse, &app.sm),
         .map_editor => app.map_editor.draw(&app.fui, renderer, &app.project, &app.editor, mouse, arrowKeys(window), &app.sm),
@@ -189,14 +223,23 @@ fn presentFrame(renderer: *Render) void {
     renderer.cap_frame(CONF.TARGET_FPS);
 }
 
-fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, sm: anytype, splash_started_ms: i64) void {
+fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, sm: anytype, logo_project: *const Project, logo_available: bool, splash_started_ms: i64) void {
     const cx = @divFloor(CONF.SCREEN_W, 2);
     const cy = @divFloor(CONF.SCREEN_H, 2);
 
     renderer.draw_rect(0, 0, CONF.SCREEN_W, CONF.SCREEN_H, SplashStyle.bg);
-    drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, SplashStyle.title);
-    drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, SplashStyle.muted);
-    drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, SplashStyle.warn);
+    if (logo_available) {
+        const logo_x = cx - @divFloor(SplashLogo.pixelWidth(), 2);
+        const logo_y: i32 = 42;
+        drawSplashLogo(renderer, logo_project, logo_x, logo_y, SplashLogo.scale, c.fenster_time() - splash_started_ms);
+        drawCenteredText(fui, renderer, CONF.THE_NAME, cx, logo_y + SplashLogo.pixelHeight() + 14, 2, SplashStyle.title);
+        drawCenteredText(fui, renderer, CONF.VERSION, cx, logo_y + SplashLogo.pixelHeight() + 40, 1, SplashStyle.muted);
+        drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, logo_y + SplashLogo.pixelHeight() + 62, 2, SplashStyle.warn);
+    } else {
+        drawCenteredText(fui, renderer, CONF.THE_NAME, cx, cy - 44, 3, SplashStyle.title);
+        drawCenteredText(fui, renderer, CONF.VERSION, cx, cy - 14, 1, SplashStyle.muted);
+        drawCenteredText(fui, renderer, "GameBoy Color Edition", cx, cy + 8, 2, SplashStyle.warn);
+    }
 
     var start_clicked = false;
     switch (CONF.APP_MODE) {
@@ -229,6 +272,111 @@ fn drawSplash(fui: *Fui, renderer: *Render, editor: *MainEditor, mouse: Mouse, s
         editor.suppress_canvas_paint_until_mouse_up = true;
         sm.go_to(.editor);
     }
+}
+
+fn drawSplashLogo(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32, elapsed_ms: i64) void {
+    if (scale <= 0) return;
+    drawSplashLogoTiles(renderer, project, x, y, scale);
+    drawSplashLogoSpriteGroup(renderer, project, x, y, scale, elapsed_ms);
+}
+
+fn drawSplashLogoTiles(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32) void {
+    if (splashLogoUsesMap(project)) {
+        drawSplashLogoMapTiles(renderer, project, x, y, scale);
+    } else {
+        drawSplashLogoFirstTiles(renderer, project, x, y, scale);
+    }
+}
+
+fn splashLogoUsesMap(project: *const Project) bool {
+    const map = project.mapAtBank(0);
+    const max_y = @min(SplashLogo.tiles_h, @as(i32, @intCast(map.height)));
+    const max_x = @min(SplashLogo.tiles_w, @as(i32, @intCast(map.width)));
+
+    var tile_y: i32 = 0;
+    while (tile_y < max_y) : (tile_y += 1) {
+        var tile_x: i32 = 0;
+        while (tile_x < max_x) : (tile_x += 1) {
+            const idx = mapCellIndex(map.width, tile_x, tile_y);
+            if (map.tile_ids[idx] != 0 or map.tile_attrs[idx] != 0) return true;
+        }
+    }
+    return false;
+}
+
+fn drawSplashLogoMapTiles(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32) void {
+    const map = project.mapAtBank(0);
+    const max_y = @min(SplashLogo.tiles_h, @as(i32, @intCast(map.height)));
+    const max_x = @min(SplashLogo.tiles_w, @as(i32, @intCast(map.width)));
+    const tile_px = CONF.TILE_SIDE * scale;
+
+    var tile_y: i32 = 0;
+    while (tile_y < max_y) : (tile_y += 1) {
+        var tile_x: i32 = 0;
+        while (tile_x < max_x) : (tile_x += 1) {
+            const idx = mapCellIndex(map.width, tile_x, tile_y);
+            const attr = MapTileAttr.decode(map.tile_attrs[idx]);
+            views.drawImageWithAttrs(
+                renderer,
+                project,
+                .tiles,
+                @intCast(map.tile_ids[idx]),
+                attr.palette,
+                attr.hflip,
+                attr.vflip,
+                x + tile_x * tile_px,
+                y + tile_y * tile_px,
+                scale,
+            );
+        }
+    }
+}
+
+fn drawSplashLogoFirstTiles(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32) void {
+    const tile_px = CONF.TILE_SIDE * scale;
+
+    var tile_y: i32 = 0;
+    while (tile_y < SplashLogo.tiles_h) : (tile_y += 1) {
+        var tile_x: i32 = 0;
+        while (tile_x < SplashLogo.tiles_w) : (tile_x += 1) {
+            const image_id: u16 = @intCast(tile_y * SplashLogo.tiles_w + tile_x);
+            const palette_id = if (image_id < project.imageCountMode(.tiles)) project.imageAtMode(.tiles, image_id).palette_id else 0;
+            views.drawImageWithAttrs(renderer, project, .tiles, image_id, palette_id, false, false, x + tile_x * tile_px, y + tile_y * tile_px, scale);
+        }
+    }
+}
+
+fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32, y: i32, scale: i32, elapsed_ms: i64) void {
+    const map = project.mapAtBank(0);
+    if (map.sprite_count == 0) return;
+
+    const tile_px = CONF.TILE_SIDE * scale;
+    const phase = @as(f32, @floatFromInt(elapsed_ms)) / 420.0;
+    const scale_f = @as(f32, @floatFromInt(scale));
+    const dx: i32 = @intFromFloat(@round(std.math.sin(phase) * scale_f * 0.6));
+    const dy: i32 = @intFromFloat(@round(std.math.cos(phase) * scale_f * 0.7));
+
+    const sprite_count: usize = @intCast(map.sprite_count);
+    var i: usize = 0;
+    while (i < sprite_count) : (i += 1) {
+        const sprite = map.sprites[i];
+        views.drawImageWithAttrs(
+            renderer,
+            project,
+            .sprites,
+            sprite.sprite_id,
+            sprite.palette,
+            sprite.hflip,
+            sprite.vflip,
+            x + @as(i32, @intCast(sprite.x)) * tile_px + dx,
+            y + @as(i32, @intCast(sprite.y)) * tile_px + dy,
+            scale,
+        );
+    }
+}
+
+fn mapCellIndex(map_width: u16, tile_x: i32, tile_y: i32) usize {
+    return @as(usize, @intCast(tile_y)) * @as(usize, @intCast(map_width)) + @as(usize, @intCast(tile_x));
 }
 
 fn sharewareWaitSecondsRemaining(splash_started_ms: i64) i64 {

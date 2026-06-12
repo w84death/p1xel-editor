@@ -25,7 +25,8 @@ Exported to GameBoy Color Engine:
 - Map editor with 4 independent map banks, background tile stamping, fill, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
 - Game Boy Color-oriented export to `engine_export.p1xb` plus RGBDS include data; see `GBC.md`.
 - Copy/paste transfer for the selected 8×8 tile/sprite pixel indices via a temporary text file.
-- Persistent project storage in `art_data.p1x`.
+- Four quick project slots available with `F1`–`F4`, useful for working on multiple files or keeping a sketch pad for experiments.
+- Persistent project storage in `art_data-f1.p1x` through `art_data-f4.p1x`.
 - Built-in default project data with a shared base tileset and imported biome palette sets.
 
 ## Project limits
@@ -41,7 +42,7 @@ The current editor constants are defined in `src/engine/config.zig`:
 | Map banks | `4` |
 | Max images per bank | `128` |
 | Image banks | Tiles + Sprites |
-| Default project file | `art_data.p1x` |
+| Project file slots | `art_data-f1.p1x` … `art_data-f4.p1x` |
 | Map sizes | `32×32`, `64×16`, `128×16` |
 | Window size | `1280×800` fullscreen (Steam Deck native) |
 
@@ -138,7 +139,7 @@ The **TILES** and **SPRITES** screens share the same editor layout.
 - **TILES** — switch to tile bank.
 - **SPRITES** — switch to sprite bank.
 - **MAP EDITOR** — open the map editor.
-- **SAVE** — save the current project to `art_data.p1x`.
+- **SAVE** — save the current project to the active `art_data-f*.p1x` slot.
 - **QUIT** — exit the application.
 
 ### Left panel
@@ -176,7 +177,7 @@ Shows:
 
 #### File
 
-- `SAVE` writes `art_data.p1x`.
+- `SAVE` writes the active `art_data-f*.p1x` slot.
 - `EXPORT` is currently present as a UI action, but export is not implemented yet.
 
 ### Centre panel
@@ -325,13 +326,22 @@ For the full import format, RGBDS workflow, direct parser notes, and current exp
 
 ## Persistence
 
-The project is saved to:
+P1Xel Editor has four project slots. Use `F1`, `F2`, `F3`, and `F4` to switch between them quickly while working.
+
+The slots are saved as separate files:
 
 ```text
-art_data.p1x
+art_data-f1.p1x
+art_data-f2.p1x
+art_data-f3.p1x
+art_data-f4.p1x
 ```
 
-The project file stores:
+This makes it easy to keep a few projects side by side, test alternate ideas, or use one slot as a sketch pad for quick experiments without disturbing your main file. The editor remembers the last opened slot and starts there next time; if there is no remembered slot yet, it starts with `F1`.
+
+When switching slots, the current project is saved first if it has unsaved changes. If a slot file does not exist yet, that slot starts from the built-in default project data. For compatibility, slot `F1` can still load the older `art_data.p1x` file if `art_data-f1.p1x` has not been created yet.
+
+Each project file stores:
 
 - Four biome palette banks.
 - Active palette bank and active map bank.
@@ -343,7 +353,7 @@ The project file stores:
 - Background tile IDs and per-cell attributes for each map bank.
 - Placed sprite instances and their attributes for each map bank.
 
-If `art_data.p1x` does not exist or cannot be loaded, the editor starts from its built-in default project data. The current default tile bank contains the embedded grassland base tiles plus tiles imported from `docs/desert_tileset.png`.
+If a project slot file does not exist or cannot be loaded, the editor starts that slot from its built-in default project data. The current default tile bank contains the embedded grassland base tiles plus tiles imported from `docs/desert_tileset.png`.
 
 ### Pixel transfer temp file
 
@@ -370,7 +380,7 @@ P1XEL_PIXELS_V1
 
 After the header, there are 8 rows of 8 digits. Each digit is a pixel index from `0` to `3`.
 
-The temp file is separate from `art_data.p1x`; it is only used for short-lived pixel copy/paste transfer.
+The temp file is separate from the `art_data-f*.p1x` project slot files; it is only used for short-lived pixel copy/paste transfer.
 
 ### Project format migration
 
@@ -379,7 +389,7 @@ The current project format supports four palette banks and four map banks. Older
 - Existing tile/sprite data is preserved.
 - Existing map data is loaded into map bank `1`.
 - Desert biome tiles are appended to the shared tile base when needed.
-- Saving writes the new project format back to `art_data.p1x`.
+- Saving writes the new project format back to the active slot file, such as `art_data-f1.p1x`.
 
 ## Source images and docs assets
 
@@ -467,9 +477,10 @@ Important files:
 5. Use the visible nine-slot tile map for quick access. RMB on a slot opens the library to swap it.
 6. Open **MAP EDITOR** to stamp tiles, fill regions, and place sprites.
 7. Switch map banks to edit each biome map; the matching palette bank is selected automatically.
-8. Use `COPY PIX` / `PASTE PIX` to transfer the selected tile/sprite’s 8×8 pixel pattern without changing palette assignments.
-9. In-game, mirror this workflow by selecting the palette bank before loading/rendering the related map/sprites.
-10. Save regularly; the editor writes to `art_data.p1x`.
+8. Use `F1`–`F4` to switch between four project files. Keep one slot as your main work, another for variations, and another as a sketch pad for experiments.
+9. Use `COPY PIX` / `PASTE PIX` to transfer the selected tile/sprite’s 8×8 pixel pattern without changing palette assignments.
+10. In-game, mirror this workflow by selecting the palette bank before loading/rendering the related map/sprites.
+11. Save regularly; the editor writes to the active `art_data-f*.p1x` slot file.
 
 ## Current limitations
 

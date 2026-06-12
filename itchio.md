@@ -28,6 +28,7 @@ Make your art once, then swap palettes for different worlds, biomes, or moods.
   <li><strong>Tile editor</strong> for clean 8×8 background tiles</li>
   <li><strong>Sprite editor</strong> with colour index 0 used as transparency</li>
   <li><strong>Map editor</strong> for building tile maps and placing sprite instances</li>
+  <li><strong>4 project slots</strong> available with F1–F4 for multiple files, variations, or sketch-pad experiments</li>
   <li><strong>4 map banks</strong> for different levels or biomes</li>
   <li><strong>4 palette banks</strong> for biome/theme colour sets</li>
   <li><strong>8 palettes per bank</strong>, each with 4 colours</li>
@@ -44,6 +45,16 @@ Make your art once, then swap palettes for different worlds, biomes, or moods.
   <li><strong>RGBDS include export</strong> for easy GBC engine integration</li>
   <li><strong>Steam Deck-friendly fullscreen layout</strong></li>
 </ul>
+
+<h2>Four project slots</h2>
+
+<p>
+Work on a few files without leaving the editor. P1Xel Editor has four quick project slots mapped to <strong>F1</strong>, <strong>F2</strong>, <strong>F3</strong>, and <strong>F4</strong>.
+</p>
+
+<p>
+Each slot is saved as its own file, from <strong>art_data-f1.p1x</strong> through <strong>art_data-f4.p1x</strong>. Use one slot for your main project, another for alternate versions, and another as a sketch pad for quick experiments.
+</p>
 
 <h2>Copy pixel data between projects</h2>
 

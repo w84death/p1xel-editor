@@ -186,8 +186,9 @@ pub const MainEditor = struct {
         var title_buf: [8]u8 = undefined;
         const id_text = std.fmt.bufPrint(&title_buf, "{d}", .{project.selectedImageId()}) catch "?";
         const title_x = UI.centerX() + @divFloor(UI.centerW() - fui.text_length("TILE ID: 000", 2), 2);
-        drawPixelText(fui, renderer, "TILE ID:", title_x, 134, 2, UI.drawing_header);
-        drawPixelText(fui, renderer, id_text, title_x + 142, 134, 2, UI.accent);
+        const title_y: i32 = 126;
+        drawPixelText(fui, renderer, "TILE ID:", title_x, title_y, 2, UI.drawing_header);
+        drawPixelText(fui, renderer, id_text, title_x + 142, title_y, 2, UI.accent);
 
         drawCanvasOverlay(self, fui, renderer, mouse);
 

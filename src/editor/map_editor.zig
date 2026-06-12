@@ -56,6 +56,7 @@ pub const MapEditor = struct {
     bg_attr: MapTileAttr = .{},
     sprite_attr: MapTileAttr = .{},
     selected_cell: ?[2]u16 = null,
+    brush_size: u8 = 1,
     pending_size: PendingSize = .none,
     info_text: []const u8 = "Ready",
     info_color: u32 = UI.muted,
@@ -156,7 +157,6 @@ pub const MapEditor = struct {
         const attr_y = UI.canvas_y + 516;
         drawText(fui, renderer, "SELECTED TILE", UI.left_x + 20, attr_y, 2, UI.text);
         self.drawAttrEditor(fui, renderer, mouse, attr_y + 36);
-        drawText(fui, renderer, self.info_text, UI.left_x + 20, UI.canvas_y + UI.canvas_h - 14, 1, self.info_color);
     }
 
     fn drawRightPanel(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
@@ -164,10 +164,10 @@ pub const MapEditor = struct {
         const x = UI.right_x + 16;
         const bank_y = UI.canvas_y + 16;
         const size_y = UI.canvas_y + 94;
-        const zoom_y = UI.canvas_y + 226;
-        const pan_y = UI.canvas_y + 342;
-        const view_y = UI.canvas_y + 500;
-        const file_y = UI.canvas_y + 590;
+        const brush_y = UI.canvas_y + 226;
+        const pan_y = UI.canvas_y + 306;
+        const file_y = UI.canvas_y + 486;
+        const info_y = UI.canvas_y + 570;
 
         drawText(fui, renderer, "MAP BANK", x, bank_y, 2, UI.text);
         for (0..Project.MAP_BANK_COUNT) |bank| {
@@ -187,24 +187,10 @@ pub const MapEditor = struct {
         self.sizeButton(fui, renderer, project, mouse, x + 102, size_y + 48, 86, 32, "64x16", .s64x16, 64, 16);
         self.sizeButton(fui, renderer, project, mouse, x, size_y + 88, 188, 32, "128x16", .s128x16, 128, 16);
 
-        drawText(fui, renderer, "ZOOM", x, zoom_y, 2, UI.text);
-        if (button(fui, renderer, mouse, x, zoom_y + 32, 54, 34, "-", false) and self.zoom_extra > 0) {
-            self.zoom_extra -= 1;
-            self.setInfo("Zoom out", UI.accent);
-        }
-        var zoom_buf: [16]u8 = undefined;
-        const zoom_text = std.fmt.bufPrint(&zoom_buf, "+{d}", .{self.zoom_extra}) catch "+?";
-        drawText(fui, renderer, zoom_text, x + 78, zoom_y + 44, 1, UI.accent);
-        if (button(fui, renderer, mouse, x + 134, zoom_y + 32, 54, 34, "+", false) and self.zoom_extra < 6) {
-            self.zoom_extra += 1;
-            self.setInfo("Zoom in", UI.accent);
-        }
-        if (button(fui, renderer, mouse, x, zoom_y + 74, 188, 32, "RESET VIEW", false)) {
-            self.zoom_extra = 0;
-            self.pan_x = 0;
-            self.pan_y = 0;
-            self.setInfo("View reset", UI.accent);
-        }
+        drawText(fui, renderer, "BRUSH SIZE", x, brush_y, 2, UI.text);
+        self.brushSizeButton(fui, renderer, mouse, x, brush_y + 32, "1x1", 1);
+        self.brushSizeButton(fui, renderer, mouse, x + 66, brush_y + 32, "2x2", 2);
+        self.brushSizeButton(fui, renderer, mouse, x + 132, brush_y + 32, "3x3", 3);
 
         drawText(fui, renderer, "PAN", x, pan_y, 2, UI.text);
         const step = @as(i32, CONF.TILE_SIDE) * self.canvasScale(project) * 4;
@@ -216,16 +202,6 @@ pub const MapEditor = struct {
         }
         if (button(fui, renderer, mouse, x + 134, pan_y + 72, 54, 34, ">", false)) self.pan_x -= step;
         if (button(fui, renderer, mouse, x + 67, pan_y + 114, 54, 34, "DN", false)) self.pan_y -= step;
-
-        drawText(fui, renderer, "VIEW", x, view_y, 2, UI.text);
-        if (button(fui, renderer, mouse, x, view_y + 32, 86, 34, "GRID", self.show_grid)) {
-            self.show_grid = !self.show_grid;
-            self.setInfo(if (self.show_grid) "Grid on" else "Grid off", UI.accent);
-        }
-        if (button(fui, renderer, mouse, x + 102, view_y + 32, 86, 34, "GBC VIEW", self.show_gbc_screen)) {
-            self.show_gbc_screen = !self.show_gbc_screen;
-            self.setInfo(if (self.show_gbc_screen) "GBC screen on" else "GBC screen off", UI.accent);
-        }
 
         drawText(fui, renderer, "FILE", x, file_y, 2, UI.text);
         if (button(fui, renderer, mouse, x, file_y + 32, 86, 34, "SAVE", project.dirty)) {
@@ -243,6 +219,11 @@ pub const MapEditor = struct {
             };
             self.setInfo("Engine data exported", UI.accent);
         }
+
+        drawText(fui, renderer, "INFO", x, info_y, 2, UI.text);
+        renderer.draw_rect(x, info_y + 30, UI.right_w - 32, 58, UI.panel_hi);
+        renderer.draw_rect_lines(x, info_y + 30, UI.right_w - 32, 58, UI.border_dark);
+        drawText(fui, renderer, self.info_text, x + 10, info_y + 52, 1, self.info_color);
     }
 
     fn drawSelector(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype, mode: ProjectMode, x0: i32, y0: i32, slot: i32) void {
@@ -283,6 +264,13 @@ pub const MapEditor = struct {
                     sm.go_to(.tile_library);
                 }
             }
+        }
+    }
+
+    fn brushSizeButton(self: *MapEditor, fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, label: []const u8, size: u8) void {
+        if (button(fui, renderer, mouse, x, y, 54, 30, label, self.brush_size == size)) {
+            self.brush_size = size;
+            self.setInfo("Brush size changed", UI.accent);
         }
     }
 
@@ -368,11 +356,11 @@ pub const MapEditor = struct {
         if (mouse.left_down) {
             self.selected_cell = cell;
             switch (self.tool) {
-                .bg_stamp => _ = project.paintMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr),
+                .bg_stamp => self.paintStampBrush(project, cell),
                 .bg_fill => {
                     if (mouse.just_pressed) _ = project.fillMapTile(cell[0], cell[1], self.selected_tile, self.bg_attr);
                 },
-                .bg_random_row => self.paintRandomSelectedRowTile(project, cell),
+                .bg_random_row => self.paintRandomSelectedRowBrush(project, cell),
                 .sprite_stamp => _ = project.addOrUpdateMapSprite(cell[0], cell[1], self.selected_sprite, self.sprite_attr),
                 .sprite_remove => {
                     if (project.removeMapSpriteAt(cell[0], cell[1])) self.setInfo("Sprite removed", UI.accent);
@@ -381,15 +369,40 @@ pub const MapEditor = struct {
         }
     }
 
-    fn paintRandomSelectedRowTile(self: *MapEditor, project: *Project, cell: [2]u16) void {
+    fn paintStampBrush(self: *MapEditor, project: *Project, cell: [2]u16) void {
+        const origin = self.brushOrigin(cell);
+        self.paintBrushCells(project, origin, false);
+    }
+
+    fn paintRandomSelectedRowBrush(self: *MapEditor, project: *Project, cell: [2]u16) void {
         if (self.random_last_cell) |last| {
             if (last[0] == cell[0] and last[1] == cell[1]) return;
         }
         self.random_last_cell = cell;
-        const tile_id = self.randomSelectedRowTile(project);
-        var attr = self.bg_attr;
-        attr.palette = project.imageAtMode(.tiles, tile_id).palette_id;
-        _ = project.paintMapTile(cell[0], cell[1], @intCast(@min(tile_id, 255)), attr);
+        const origin = self.brushOrigin(cell);
+        self.paintBrushCells(project, origin, true);
+    }
+
+    fn paintBrushCells(self: *MapEditor, project: *Project, origin: [2]i32, randomize: bool) void {
+        const map = project.activeMap();
+        var by: u8 = 0;
+        while (by < self.brush_size) : (by += 1) {
+            const y = origin[1] + by;
+            if (y < 0 or y >= map.height) continue;
+            var bx: u8 = 0;
+            while (bx < self.brush_size) : (bx += 1) {
+                const x = origin[0] + bx;
+                if (x < 0 or x >= map.width) continue;
+
+                var tile_id: u16 = self.selected_tile;
+                var attr = self.bg_attr;
+                if (randomize) {
+                    tile_id = self.randomSelectedRowTile(project);
+                    attr.palette = project.imageAtMode(.tiles, tile_id).palette_id;
+                }
+                _ = project.paintMapTile(@intCast(x), @intCast(y), @intCast(@min(tile_id, 255)), attr);
+            }
+        }
     }
 
     fn randomSelectedRowTile(self: *MapEditor, project: *const Project) u16 {
@@ -404,6 +417,18 @@ pub const MapEditor = struct {
             if (project.visibleSlotMode(.tiles, slot) == @as(u16, self.selected_tile)) return slot / 3;
         }
         return 0;
+    }
+
+    fn brushOrigin(self: *const MapEditor, cell: [2]u16) [2]i32 {
+        const offset = @divFloor(@as(i32, self.effectiveBrushSize()) - 1, 2);
+        return .{ @as(i32, cell[0]) - offset, @as(i32, cell[1]) - offset };
+    }
+
+    fn effectiveBrushSize(self: *const MapEditor) u8 {
+        return switch (self.tool) {
+            .bg_stamp, .bg_random_row => self.brush_size,
+            else => 1,
+        };
     }
 
     fn drawCanvas(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
@@ -422,9 +447,11 @@ pub const MapEditor = struct {
         if (self.show_gbc_screen) self.drawGameBoyScreenOverlay(renderer, project, mouse, origin, cell_px);
 
         if (self.canvasCell(project, mouse.x, mouse.y)) |cell| {
-            const hx = origin[0] + @as(i32, cell[0]) * cell_px;
-            const hy = origin[1] + @as(i32, cell[1]) * cell_px;
-            renderer.draw_rect_lines(hx, hy, cell_px, cell_px, UI.text);
+            const brush_origin = self.brushOrigin(cell);
+            const hx = origin[0] + brush_origin[0] * cell_px;
+            const hy = origin[1] + brush_origin[1] * cell_px;
+            const brush_px = @as(i32, self.effectiveBrushSize()) * cell_px;
+            drawClippedRectLines(renderer, hx, hy, brush_px, brush_px, canvasContentClip(), UI.text);
         }
         if (self.selected_cell) |cell| {
             const sx = origin[0] + @as(i32, cell[0]) * cell_px;
@@ -511,13 +538,37 @@ pub const MapEditor = struct {
     }
 
     fn drawCanvasHeader(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse) void {
-        _ = self;
-        _ = mouse;
-        const map = project.activeMap();
+        _ = project;
         renderer.draw_rect(UI.canvas_x + 1, UI.canvas_y + 1, UI.canvas_w - 2, 56, UI.panel);
-        var buf: [80]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, "MAP {d}  {d} x {d}   L: DRAW   R: PICK   ARROWS: PAN", .{ project.activeMapBank() + 1, map.width, map.height }) catch "MAP CANVAS";
-        drawText(fui, renderer, text, UI.canvas_x + 18, UI.canvas_y + 18, 2, UI.text);
+
+        const y = UI.canvas_y + 13;
+        const x = UI.canvas_x + 18;
+        drawText(fui, renderer, "ZOOM", x, y + 10, 1, UI.muted);
+        if (button(fui, renderer, mouse, x + 54, y, 38, 32, "-", false) and self.zoom_extra > 0) {
+            self.zoom_extra -= 1;
+            self.setInfo("Zoom out", UI.accent);
+        }
+        var zoom_buf: [16]u8 = undefined;
+        const zoom_text = std.fmt.bufPrint(&zoom_buf, "+{d}", .{self.zoom_extra}) catch "+?";
+        drawText(fui, renderer, zoom_text, x + 106, y + 12, 1, UI.accent);
+        if (button(fui, renderer, mouse, x + 144, y, 38, 32, "+", false) and self.zoom_extra < 6) {
+            self.zoom_extra += 1;
+            self.setInfo("Zoom in", UI.accent);
+        }
+        if (button(fui, renderer, mouse, x + 202, y, 112, 32, "RESET VIEW", false)) {
+            self.zoom_extra = 0;
+            self.pan_x = 0;
+            self.pan_y = 0;
+            self.setInfo("View reset", UI.accent);
+        }
+        if (button(fui, renderer, mouse, x + 334, y, 74, 32, "GRID", self.show_grid)) {
+            self.show_grid = !self.show_grid;
+            self.setInfo(if (self.show_grid) "Grid on" else "Grid off", UI.accent);
+        }
+        if (button(fui, renderer, mouse, x + 424, y, 104, 32, "GBC VIEW", self.show_gbc_screen)) {
+            self.show_gbc_screen = !self.show_gbc_screen;
+            self.setInfo(if (self.show_gbc_screen) "GBC screen on" else "GBC screen off", UI.accent);
+        }
     }
 
     fn canvasScale(self: *MapEditor, project: *const Project) i32 {

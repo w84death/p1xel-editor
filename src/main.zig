@@ -68,6 +68,7 @@ const SplashLogo = struct {
     const tiles_w: i32 = 5;
     const tiles_h: i32 = 6;
     const scale: i32 = 6;
+    const sprite_group_offset_tiles_x: i32 = 3;
 
     fn tilePixelSize() i32 {
         return CONF.TILE_SIDE * scale;
@@ -179,7 +180,10 @@ fn handleEscape(sm: *StateMachine(State), esc_lock: *bool, esc_pressed: bool) vo
     if (esc_lock.* or !esc_pressed) return;
 
     esc_lock.* = true;
-    if (sm.current == .splash) return;
+    if (sm.current == .splash) {
+        sm.go_to(.quit);
+        return;
+    }
     sm.go_to(if (sm.current == .editor or sm.current == .map_editor) .quit else .editor);
 }
 
@@ -351,6 +355,7 @@ fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32,
     if (map.sprite_count == 0) return;
 
     const tile_px = CONF.TILE_SIDE * scale;
+    const group_x = x + SplashLogo.sprite_group_offset_tiles_x * tile_px;
     const phase = @as(f32, @floatFromInt(elapsed_ms)) / 420.0;
     const scale_f = @as(f32, @floatFromInt(scale));
     const dx: i32 = @intFromFloat(@round(std.math.sin(phase) * scale_f * 0.6));
@@ -368,7 +373,7 @@ fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32,
             sprite.palette,
             sprite.hflip,
             sprite.vflip,
-            x + @as(i32, @intCast(sprite.x)) * tile_px + dx,
+            group_x + @as(i32, @intCast(sprite.x)) * tile_px + dx,
             y + @as(i32, @intCast(sprite.y)) * tile_px + dy,
             scale,
         );

@@ -1,18 +1,12 @@
 # P1Xel Editor
 
+![P1Xel Editor logo](docs/logo.png)
+
 **P1Xel Editor** is a small pixel-art, tile, sprite, palette, and map editor built with Zig on top of the **Borowik Engine** by Krzysztof Krystian Jankowski.
 
 It is designed around a classic indexed-colour workflow: artwork is stored as tiny 8×8 images whose pixels are palette indices, not direct RGB values. Changing a palette updates every tile/sprite that uses that palette, making it easy to build Game Boy Color-style tilesets, sprite sheets, and maps.
 
-![P1Xel Editor - Tiles Editor ](docs/screenshot-tiles.png)
 
-![P1Xel Editor - Sprites Editor ](docs/screenshot-sprites.png)
-
-![P1Xel Editor - Map Editor ](docs/screenshot-map.png)
-
-Exported to GameBoy Color Engine:
-
-![P1Xel Editor - Export ](docs/screenshot-gbc.png)
 
 ## Features
 
@@ -22,13 +16,24 @@ Exported to GameBoy Color Engine:
 - Each biome palette bank contains 8 palettes with 4 colours each.
 - Per-tile palette assignment within the active biome palette bank.
 - Tile/sprite library with add, duplicate, delete, paging, and visible-slot selection.
-- Map editor with 4 independent map banks, background tile stamping, fill, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
+- Map editor with 4 independent map banks, background tile stamping, fill, `PATH9` auto-tiling, rectangular selection/copy/paste, sprite placement, palette overrides, flips, zoom, pan, and map resizing.
 - Game Boy Color-oriented export to `engine_export.p1xb` plus RGBDS include data; see `GBC.md`.
 - Copy/paste transfer for the selected 8×8 tile/sprite pixel indices via a temporary text file.
 - Four quick project slots available with `F1`–`F4`, useful for working on multiple files or keeping a sketch pad for experiments.
 - Persistent project storage in `art_data-f1.p1x` through `art_data-f4.p1x`.
 - Built-in default project data with a shared base tileset and imported biome palette sets.
 
+![P1Xel Editor - Tiles Editor](docs/tile-editor.png)
+
+![P1Xel Editor - Sprites Editor](docs/sprite-editor.png)
+
+![P1Xel Editor - Map Editor](docs/map-editor.png)
+
+![P1Xel Editor - PATH9 auto-tiling](docs/path9.png)
+
+Exported to Game Boy Color Engine:
+
+![P1Xel Editor - Game Boy Color Export](docs/screenshot-gbc.png)
 ## Project limits
 
 The current editor constants are defined in `src/engine/config.zig`:
@@ -89,7 +94,7 @@ Current default setup:
 | Bank | Purpose |
 | ---: | --- |
 | `1` | Grassland palette set. |
-| `2` | Desert palette set imported from `docs/desert_tileset.png`. |
+| `2` | Desert-style palette set. |
 | `3` | Extra grassland-style palette bank, available for another biome/variant. |
 | `4` | Extra desert-style palette bank, available for another biome/variant. |
 
@@ -353,7 +358,7 @@ Each project file stores:
 - Background tile IDs and per-cell attributes for each map bank.
 - Placed sprite instances and their attributes for each map bank.
 
-If a project slot file does not exist or cannot be loaded, the editor starts that slot from its built-in default project data. The current default tile bank contains the embedded grassland base tiles plus tiles imported from `docs/desert_tileset.png`.
+If a project slot file does not exist or cannot be loaded, the editor starts that slot from its built-in default project data.
 
 ### Pixel transfer temp file
 
@@ -393,22 +398,18 @@ The current project format supports four palette banks and four map banks. Older
 
 ## Source images and docs assets
 
-The repository includes example/reference art in `docs/`:
+The repository includes example/reference assets in `docs/`:
 
-- `docs/desert_tileset.png` — source image for the imported desert biome tiles/palette bank.
-- `docs/design.png`
-- `docs/screenshot-tiles.png`
-- `docs/screenshot-map.png`
+- `docs/logo.png` — README/logo artwork.
+- `docs/intro.png` — title screen screenshot.
+- `docs/tile-editor.png` — tile editor screenshot.
+- `docs/sprite-editor.png` — sprite editor screenshot.
+- `docs/map-editor.png` — map editor screenshot.
+- `docs/path9.png` — `PATH9` auto-tiling screenshot.
+- `docs/screenshot-gbc.png` — exported Game Boy Color project screenshot.
+- `docs/dawnbringer-32.hex` — DawnBringer 32 palette reference.
 
-These are useful as visual references and for testing palette/tile workflows. The built-in grassland data and imported desert data are stored as internal indexed tiles and extracted palettes in `src/editor/project.zig`.
-
-The default internal tile base is therefore a combined tileset:
-
-```text
-[ embedded grassland tiles ][ imported desert tiles ]
-```
-
-All four map banks reference this one shared tile base.
+These are useful as visual references for the editor UI, palette workflows, map editing, and Game Boy Color export.
 
 ## Building
 

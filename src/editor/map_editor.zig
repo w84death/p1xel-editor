@@ -104,6 +104,8 @@ pub const MapEditor = struct {
     clipboard_h: u16 = 0,
     clipboard_sprites: [project_mod.MAX_MAP_SPRITES]MapSprite = [_]MapSprite{.{}} ** project_mod.MAX_MAP_SPRITES,
     clipboard_sprite_count: u16 = 0,
+    pending_paste: bool = false,
+    suppress_canvas_until_mouse_up: bool = false,
     show_grid: bool = true,
     show_gbc_screen: bool = false,
 
@@ -266,10 +268,12 @@ pub const MapEditor = struct {
         if (!self.pending_clear_map) {
             self.pending_clear_map = true;
             self.pending_size = .none;
+            self.pending_paste = false;
             self.setInfo("Click clear again to confirm", UI.warn);
             return;
         }
         self.pending_clear_map = false;
+        self.pending_paste = false;
         self.selection = null;
         self.selection_drag_anchor = null;
         if (project.clearActiveMap()) {
@@ -283,7 +287,7 @@ pub const MapEditor = struct {
     fn drawSelectionControls(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, x: i32, y: i32) void {
         drawText(fui, renderer, "SELECTION", x, y, 2, UI.text);
         if (button(fui, renderer, mouse, x, y + 28, 86, 30, "COPY", self.selection != null)) self.copySelection(project);
-        if (button(fui, renderer, mouse, x + 102, y + 28, 86, 30, "PASTE", self.hasClipboard())) self.pasteSelection(project);
+        if (button(fui, renderer, mouse, x + 102, y + 28, 86, 30, "PASTE", self.hasClipboard())) self.armPasteSelection();
     }
 
     fn drawSelector(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype, mode: ProjectMode, x0: i32, y0: i32, slot: i32) void {
@@ -402,12 +406,29 @@ pub const MapEditor = struct {
     }
 
     fn handleCanvas(self: *MapEditor, project: *Project, mouse: Mouse) void {
-        if (!mouse.left_down) {
+        if (!mouse.left_down and !mouse.right_down) {
             self.random_last_cell = null;
             self.selection_drag_anchor = null;
+            self.suppress_canvas_until_mouse_up = false;
         }
+        if (self.suppress_canvas_until_mouse_up) return;
 
         const cell = self.canvasCell(project, mouse.x, mouse.y) orelse return;
+        if (self.pending_paste) {
+            if (mouse.just_right_pressed) {
+                self.pending_paste = false;
+                self.suppress_canvas_until_mouse_up = true;
+                self.setInfo("Paste cancelled", UI.muted);
+                return;
+            }
+            if (mouse.just_pressed) {
+                self.pasteSelectionAt(project, cell);
+                self.pending_paste = false;
+                self.suppress_canvas_until_mouse_up = true;
+                return;
+            }
+            return;
+        }
         if (self.tool == .bg_path9 and mouse.right_down) {
             self.erasePath9Brush(project, cell);
             return;
@@ -454,6 +475,7 @@ pub const MapEditor = struct {
         const map = project.activeMap();
         self.clipboard_w = rect.w;
         self.clipboard_h = rect.h;
+        self.pending_paste = false;
 
         var y: u16 = 0;
         while (y < rect.h) : (y += 1) {
@@ -482,15 +504,23 @@ pub const MapEditor = struct {
         self.setInfo("Map selection copied", UI.accent);
     }
 
-    fn pasteSelection(self: *MapEditor, project: *Project) void {
+    fn armPasteSelection(self: *MapEditor) void {
+        if (!self.hasClipboard()) {
+            self.pending_paste = false;
+            self.setInfo("Clipboard empty", UI.warn);
+            return;
+        }
+        self.pending_paste = true;
+        self.selection_drag_anchor = null;
+        self.setInfo("Click map to paste, RMB cancels", UI.accent);
+    }
+
+    fn pasteSelectionAt(self: *MapEditor, project: *Project, cell: [2]u16) void {
         if (!self.hasClipboard()) {
             self.setInfo("Clipboard empty", UI.warn);
             return;
         }
-        const dest = self.clampedSelection(project) orelse {
-            self.setInfo("Select paste target", UI.warn);
-            return;
-        };
+        const dest = self.pasteRectForCell(project, cell);
         const map = project.activeMap();
         var changed = false;
 
@@ -515,6 +545,18 @@ pub const MapEditor = struct {
 
         if (changed) self.invalidateCache();
         self.setInfo(if (changed) "Map selection pasted" else "Paste unchanged", if (changed) UI.accent else UI.muted);
+    }
+
+    fn pasteRectForCell(self: *const MapEditor, project: *const Project, cell: [2]u16) MapSelectionRect {
+        const map = project.activeMap();
+        const max_x: u16 = if (self.clipboard_w >= map.width) 0 else map.width - self.clipboard_w;
+        const max_y: u16 = if (self.clipboard_h >= map.height) 0 else map.height - self.clipboard_h;
+        return .{
+            .x = @min(cell[0], max_x),
+            .y = @min(cell[1], max_y),
+            .w = @min(self.clipboard_w, map.width),
+            .h = @min(self.clipboard_h, map.height),
+        };
     }
 
     fn hasClipboard(self: *const MapEditor) bool {
@@ -747,7 +789,9 @@ pub const MapEditor = struct {
         if (self.show_gbc_screen) self.drawGameBoyScreenOverlay(renderer, project, mouse, origin, cell_px);
         self.drawSelectionOverlay(renderer, project, origin, cell_px);
 
-        if (self.tool != .select) {
+        if (self.pending_paste) {
+            self.drawPastePreview(renderer, project, mouse, origin, cell_px);
+        } else if (self.tool != .select) {
             if (self.canvasCell(project, mouse.x, mouse.y)) |cell| {
                 const brush_origin = self.brushOrigin(cell);
                 const hx = origin[0] + brush_origin[0] * cell_px;
@@ -767,6 +811,19 @@ pub const MapEditor = struct {
         const h = @as(i32, rect.h) * cell_px;
         const clip = canvasContentClip();
         drawClippedRectLines(renderer, x, y, w, h, clip, UI.accent);
+        drawClippedRectLines(renderer, x + 1, y + 1, w - 2, h - 2, clip, UI.text);
+    }
+
+    fn drawPastePreview(self: *MapEditor, renderer: *Render, project: *const Project, mouse: Mouse, origin: [2]i32, cell_px: i32) void {
+        if (!self.hasClipboard()) return;
+        const cell = self.canvasCell(project, mouse.x, mouse.y) orelse return;
+        const rect = self.pasteRectForCell(project, cell);
+        const x = origin[0] + @as(i32, rect.x) * cell_px;
+        const y = origin[1] + @as(i32, rect.y) * cell_px;
+        const w = @as(i32, rect.w) * cell_px;
+        const h = @as(i32, rect.h) * cell_px;
+        const clip = canvasContentClip();
+        drawClippedRectLines(renderer, x, y, w, h, clip, UI.warn);
         drawClippedRectLines(renderer, x + 1, y + 1, w - 2, h - 2, clip, UI.text);
     }
 
@@ -881,6 +938,11 @@ pub const MapEditor = struct {
 
     fn drawSelectionHeader(self: *MapEditor, fui: anytype, renderer: *Render, project: *const Project, x: i32, y: i32) void {
         var size_buf: [32]u8 = undefined;
+        if (self.pending_paste and self.hasClipboard()) {
+            const label = std.fmt.bufPrint(&size_buf, "PASTE {d}x{d}", .{ self.clipboard_w, self.clipboard_h }) catch "PASTE ?x?";
+            drawText(fui, renderer, label, x, y, 1, UI.warn);
+            return;
+        }
         const label = if (self.clampedSelection(project)) |rect|
             std.fmt.bufPrint(&size_buf, "SEL {d}x{d}", .{ rect.w, rect.h }) catch "SEL ?x?"
         else

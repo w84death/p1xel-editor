@@ -432,8 +432,8 @@ fn drawSplashLogoSpriteGroup(renderer: *Render, project: *const Project, x: i32,
     const logo_hovered = hoverRect(mouse.x, mouse.y, x, y, SplashLogo.pixelWidth(), SplashLogo.pixelHeight());
     const idle_group_x = x + SplashLogo.sprite_group_offset_tiles_x * tile_px;
     const idle_group_y = y;
-    const group_x = if (logo_hovered) mouse.x - @divFloor(SplashLogo.spriteGroupPixelWidth(), 2) else idle_group_x;
-    const group_y = if (logo_hovered) mouse.y - @divFloor(SplashLogo.spriteGroupPixelHeight(), 2) else idle_group_y;
+    const group_x = if (logo_hovered) mouse.x else idle_group_x;
+    const group_y = if (logo_hovered) mouse.y - SplashLogo.spriteGroupPixelHeight() else idle_group_y;
     const phase = @as(f32, @floatFromInt(elapsed_ms)) / 420.0;
     const scale_f = @as(f32, @floatFromInt(scale));
     const dx: i32 = if (logo_hovered) 0 else @intFromFloat(@round(std.math.sin(phase) * scale_f * 0.6));

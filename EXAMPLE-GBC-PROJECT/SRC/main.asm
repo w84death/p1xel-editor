@@ -61,6 +61,8 @@ DEF PLAYER_ATTR                         EQU PLAYER_PALETTE
 DEF PLAYER_MOVE_STEPS                   EQU TILE_SIZE
 DEF PLAYER_MOVE_DELAY                   EQU 1
 DEF PLAYER_SLOW_MOVE_DELAY              EQU 3
+DEF SCREEN_SHAKE_FRAMES                 EQU 16
+DEF SCREEN_SHAKE_OFFSET                 EQU 2
 DEF TILE_FLAG_TRAVERSABLE               EQU 0
 DEF TILE_FLAG_SLOW                      EQU 1
 DEF MAX_ENEMIES                         EQU 8
@@ -93,6 +95,7 @@ SECTION "Header", ROM0[$100]
 SECTION "WRAM Data", WRAM0
 FrameCounter:                           ds 1
 FrameReady:                             ds 1
+ShakeTimer:                             ds 1
 PlayerAnimTimer:                        ds 1
 PlayerAnimFrame:                        ds 1
 PlayerFacing:                           ds 1
@@ -127,6 +130,10 @@ EnemyBaseTile:                          ds MAX_ENEMIES
 EnemyAttr:                              ds MAX_ENEMIES
 EnemyDir:                               ds MAX_ENEMIES
 EnemyMoveIndex:                         ds 1
+CollisionEnemyX:                        ds 1
+CollisionEnemyY:                        ds 1
+PushTryStart:                           ds 1
+PushTryCount:                           ds 1
 CollisionMap:                           ds 1024
 ; ==========================================================================|80|
 
@@ -159,6 +166,7 @@ Entry:
   xor a
   ld [FrameCounter], a
   ld [FrameReady], a
+  ld [ShakeTimer], a
   ld [PlayerAnimFrame], a
   ld [PlayerFacing], a
   ld a, PLAYER_ANIM_DELAY
@@ -221,6 +229,7 @@ MainLoop:
   call HandleDPad
   call MoveEnemies
   call AnimatePlayer
+  call CheckPlayerEnemyCollisions
   call AnimateEnemies
   jr MainLoop
 
@@ -384,6 +393,7 @@ UpdateCamera:
 .store_camera_y
   ld [CameraY], a
   ld [rSCY], a
+  call ApplyScreenShake
 
   .player_screen_x
   ld a, [PlayerWorldX]
@@ -412,6 +422,33 @@ UpdateCamera:
   .player_attr
   ld a, [PlayerSpriteAttr]
   ld [PLAYER_OAM_ADDR + 3], a
+  ret
+
+ApplyScreenShake:
+  ld hl, ShakeTimer
+  ld a, [hl]
+  and a
+  ret z
+
+  dec [hl]
+  ld a, [FrameCounter]
+  bit 0, a
+  jr z, .shake_y
+
+.shake_x
+  ld a, [CameraX]
+  add SCREEN_SHAKE_OFFSET
+  ld [rSCX], a
+  ld a, [CameraY]
+  ld [rSCY], a
+  ret
+
+.shake_y
+  ld a, [CameraX]
+  ld [rSCX], a
+  ld a, [CameraY]
+  add SCREEN_SHAKE_OFFSET
+  ld [rSCY], a
   ret
 
 HandleDPad:
@@ -635,6 +672,15 @@ SetPlayerIdleTile:
   ld [PlayerAnimFrame], a
   ld a, PLAYER_ANIM_DELAY
   ld [PlayerAnimTimer], a
+  ret
+
+StopPlayerMovement:
+  xor a
+  ld [PlayerMoveDX], a
+  ld [PlayerMoveDY], a
+  ld [PlayerMoveFrames], a
+  ld [PlayerMoveTimer], a
+  call SetPlayerIdleTile
   ret
 
 TargetRightWalkable:
@@ -1050,6 +1096,180 @@ StoreNextEnemyDirection:
   ld [hl], a
   ret
 
+CheckPlayerEnemyCollisions:
+  ld a, [EnemyCount]
+  and a
+  ret z
+
+  ld b, a
+  ld c, 0
+.loop
+  push bc
+  call PlayerTouchesEnemy
+  pop bc
+  jr c, .hit
+  inc c
+  dec b
+  jr nz, .loop
+  ret
+
+.hit
+  ld a, c
+  ld [EnemyMoveIndex], a
+  call HandlePlayerEnemyCollision
+  ret
+
+PlayerTouchesEnemy:
+  ld l, c
+  ld h, 0
+  ld de, EnemyWorldX
+  add hl, de
+  ld a, [hl]
+  ld [CollisionEnemyX], a
+  ld d, a
+
+  ld a, [PlayerWorldX]
+  cp d
+  jr nc, .player_right_or_same
+  ld b, a
+  ld a, d
+  sub b
+  cp TILE_SIZE
+  ret nc
+  jr .check_y
+
+.player_right_or_same
+  sub d
+  cp TILE_SIZE
+  ret nc
+
+.check_y
+  ld l, c
+  ld h, 0
+  ld de, EnemyWorldY
+  add hl, de
+  ld a, [hl]
+  ld [CollisionEnemyY], a
+  ld e, a
+
+  ld a, [PlayerWorldY]
+  cp e
+  jr nc, .player_down_or_same
+  ld b, a
+  ld a, e
+  sub b
+  cp TILE_SIZE
+  ret nc
+  scf
+  ret
+
+.player_down_or_same
+  sub e
+  cp TILE_SIZE
+  ret nc
+  scf
+  ret
+
+HandlePlayerEnemyCollision:
+  ld a, SCREEN_SHAKE_FRAMES
+  ld [ShakeTimer], a
+  call StopPlayerMovement
+  call PushPlayerFromEnemy
+  ret
+
+PushPlayerFromEnemy:
+  call RandomEnemyDirection
+  ld [PushTryStart], a
+  xor a
+  ld [PushTryCount], a
+
+.try
+  ld a, [PushTryStart]
+  ld b, a
+  ld a, [PushTryCount]
+  add b
+  and 3
+  call TryPushPlayerDirection
+  ret c
+
+  ld hl, PushTryCount
+  inc [hl]
+  ld a, [hl]
+  cp 4
+  jr c, .try
+  ret
+
+TryPushPlayerDirection:
+  cp ENEMY_DIR_LEFT
+  jr z, .left
+  cp ENEMY_DIR_UP
+  jr z, .up
+  cp ENEMY_DIR_DOWN
+  jr z, .down
+
+.right
+  ld a, [CollisionEnemyX]
+  cp WORLD_X_MAX - TILE_SIZE + 1
+  jr nc, .blocked
+  add TILE_SIZE + 7
+  and $F8
+  ld b, a
+  ld a, [CollisionEnemyY]
+  and $F8
+  ld c, a
+  jr TryPushPlayerTarget
+
+.left
+  ld a, [CollisionEnemyX]
+  cp TILE_SIZE
+  jr c, .blocked
+  sub TILE_SIZE
+  and $F8
+  ld b, a
+  ld a, [CollisionEnemyY]
+  and $F8
+  ld c, a
+  jr TryPushPlayerTarget
+
+.up
+  ld a, [CollisionEnemyY]
+  cp TILE_SIZE
+  jr c, .blocked
+  sub TILE_SIZE
+  and $F8
+  ld c, a
+  ld a, [CollisionEnemyX]
+  and $F8
+  ld b, a
+  jr TryPushPlayerTarget
+
+.down
+  ld a, [CollisionEnemyY]
+  cp WORLD_Y_MAX - TILE_SIZE + 1
+  jr nc, .blocked
+  add TILE_SIZE + 7
+  and $F8
+  ld c, a
+  ld a, [CollisionEnemyX]
+  and $F8
+  ld b, a
+  jr TryPushPlayerTarget
+
+.blocked
+  xor a
+  ret
+
+TryPushPlayerTarget:
+  call TargetWorldWalkable
+  ret nc
+  ld a, b
+  ld [PlayerWorldX], a
+  ld a, c
+  ld [PlayerWorldY], a
+  call StopPlayerMovement
+  scf
+  ret
+
 AnimateEnemies:
   ld a, [EnemyCount]
   and a
@@ -1129,9 +1349,30 @@ UpdateEnemySprites:
 
   ld l, c
   ld h, 0
+  ld de, EnemyDir
+  add hl, de
+  ld a, [hl]
+  and 3
+  cp ENEMY_DIR_LEFT
+  jr z, .load_left_attr
+
+  ld l, c
+  ld h, 0
   ld de, EnemyAttr
   add hl, de
   ld a, [hl]
+  and 7
+  jr .store_attr
+
+.load_left_attr
+  ld l, c
+  ld h, 0
+  ld de, EnemyAttr
+  add hl, de
+  ld a, [hl]
+  and 7
+  or OAMF_XFLIP
+.store_attr
   pop hl
   ld [hl], a
 

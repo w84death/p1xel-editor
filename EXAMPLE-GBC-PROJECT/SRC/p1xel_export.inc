@@ -12,8 +12,8 @@ DEF P1XB_TILEMAP_BYTES                  EQU 1024
 DEF P1XB_ATTRMAP_BYTES                  EQU 1024
 DEF P1XB_LOGICMAP_BYTES                 EQU 1024
 DEF P1XB_SPRITE_BYTES                   EQU 8
-DEF P1XB_GRASSLANDLEVEL_SPRITE_COUNT         EQU 0
-DEF P1XB_DESERTLEVEL_SPRITE_COUNT         EQU 0
+DEF P1XB_GRASSLANDLEVEL_SPRITE_COUNT         EQU 3
+DEF P1XB_DESERTLEVEL_SPRITE_COUNT         EQU 3
 
 DEF P1XB_SPRITE_PALETTES_OFFSET         EQU P1XB_HEADER_SIZE
 DEF P1XB_OBJ_TILES_OFFSET               EQU P1XB_SPRITE_PALETTES_OFFSET + P1XB_PALETTE_BYTES
@@ -68,12 +68,17 @@ GrasslandLevelLogicMap:
   INCBIN "engine_export.p1xb", P1XB_GRASSLAND_LOGICMAP_OFFSET, P1XB_LOGICMAP_BYTES
 GrasslandLevelLogicMapEnd:
 
+GrasslandLevelSprites:
+  INCBIN "engine_export.p1xb", P1XB_GRASSLAND_SPRITES_OFFSET, P1XB_GRASSLANDLEVEL_SPRITE_COUNT * P1XB_SPRITE_BYTES
+GrasslandLevelSpritesEnd:
+
 GrasslandLevelDescriptor:
   DW GrasslandLevelBgPalettes, GrasslandLevelBgPalettesEnd
   DW GrasslandLevelTiles, GrasslandLevelTilesEnd
   DW GrasslandLevelTileMap, GrasslandLevelTileMapEnd
   DW GrasslandLevelAttrMap, GrasslandLevelAttrMapEnd
   DW GrasslandLevelLogicMap, GrasslandLevelLogicMapEnd
+  DW GrasslandLevelSprites, GrasslandLevelSpritesEnd
 
 DesertLevelBgPalettes:
   INCBIN "engine_export.p1xb", P1XB_DESERT_PALETTES_OFFSET, P1XB_PALETTE_BYTES
@@ -95,10 +100,14 @@ DesertLevelLogicMap:
   INCBIN "engine_export.p1xb", P1XB_DESERT_LOGICMAP_OFFSET, P1XB_LOGICMAP_BYTES
 DesertLevelLogicMapEnd:
 
+DesertLevelSprites:
+  INCBIN "engine_export.p1xb", P1XB_DESERT_SPRITES_OFFSET, P1XB_DESERTLEVEL_SPRITE_COUNT * P1XB_SPRITE_BYTES
+DesertLevelSpritesEnd:
+
 DesertLevelDescriptor:
   DW DesertLevelBgPalettes, DesertLevelBgPalettesEnd
   DW DesertLevelTiles, DesertLevelTilesEnd
   DW DesertLevelTileMap, DesertLevelTileMapEnd
   DW DesertLevelAttrMap, DesertLevelAttrMapEnd
   DW DesertLevelLogicMap, DesertLevelLogicMapEnd
-
+  DW DesertLevelSprites, DesertLevelSpritesEnd

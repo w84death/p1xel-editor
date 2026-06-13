@@ -340,7 +340,8 @@ fn writeLevelInclude(writer: *TextWriter, comptime label: []const u8, comptime p
     try writer.print("{s}TileMap:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_TILEMAP_OFFSET, P1XB_TILEMAP_BYTES\n{s}TileMapEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}AttrMap:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_ATTRMAP_OFFSET, P1XB_ATTRMAP_BYTES\n{s}AttrMapEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}LogicMap:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_LOGICMAP_OFFSET, P1XB_LOGICMAP_BYTES\n{s}LogicMapEnd:\n\n", .{ label, prefix, label });
-    try writer.print("{s}Descriptor:\n  DW {s}BgPalettes, {s}BgPalettesEnd\n  DW {s}Tiles, {s}TilesEnd\n  DW {s}TileMap, {s}TileMapEnd\n  DW {s}AttrMap, {s}AttrMapEnd\n  DW {s}LogicMap, {s}LogicMapEnd\n\n", .{ label, label, label, label, label, label, label, label, label, label, label });
+    try writer.print("{s}Sprites:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_SPRITES_OFFSET, P1XB_{s}LEVEL_SPRITE_COUNT * P1XB_SPRITE_BYTES\n{s}SpritesEnd:\n\n", .{ label, prefix, prefix, label });
+    try writer.print("{s}Descriptor:\n  DW {s}BgPalettes, {s}BgPalettesEnd\n  DW {s}Tiles, {s}TilesEnd\n  DW {s}TileMap, {s}TileMapEnd\n  DW {s}AttrMap, {s}AttrMapEnd\n  DW {s}LogicMap, {s}LogicMapEnd\n  DW {s}Sprites, {s}SpritesEnd\n\n", .{ label, label, label, label, label, label, label, label, label, label, label, label, label });
 }
 
 fn upperLabel(label: []const u8) []const u8 {

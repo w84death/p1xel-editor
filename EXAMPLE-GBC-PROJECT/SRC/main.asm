@@ -63,6 +63,13 @@ DEF PLAYER_MOVE_DELAY                   EQU 1
 DEF PLAYER_SLOW_MOVE_DELAY              EQU 3
 DEF TILE_FLAG_TRAVERSABLE               EQU 0
 DEF TILE_FLAG_SLOW                      EQU 1
+DEF MAX_ENEMIES                         EQU 8
+DEF ENEMY_ANIM_DELAY                    EQU 16
+DEF ENEMY_OAM_ADDR                      EQU PLAYER_OAM_ADDR + 4
+DEF ENEMY_SNAKE_MARKER_TILE             EQU 3
+DEF ENEMY_SNAKE_TILE_1                  EQU 3
+DEF ENEMY_SCORPION_MARKER_TILE          EQU 5
+DEF ENEMY_SCORPION_TILE_1               EQU 5
 
 DEF TILES_BG_INDEX_START                EQU 128
 ; ==========================================================================|80|
@@ -99,6 +106,17 @@ PlayerMoveDY:                           ds 1
 PlayerMoveFrames:                       ds 1
 PlayerMoveDelay:                        ds 1
 PlayerMoveTimer:                        ds 1
+EnemyCount:                             ds 1
+EnemyAnimTimer:                         ds 1
+EnemyAnimFrame:                         ds 1
+EnemySpawnX:                            ds 1
+EnemySpawnY:                            ds 1
+EnemySpawnBaseTile:                     ds 1
+EnemySpawnAttr:                         ds 1
+EnemyWorldX:                            ds MAX_ENEMIES
+EnemyWorldY:                            ds MAX_ENEMIES
+EnemyBaseTile:                          ds MAX_ENEMIES
+EnemyAttr:                              ds MAX_ENEMIES
 CollisionMap:                           ds 1024
 ; ==========================================================================|80|
 
@@ -170,6 +188,7 @@ Entry:
   ld hl, GrasslandLevelDescriptor
   call LoadLevel
   call InitPlayer
+  call UpdateEnemySprites
 
   .init_lcd
   ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON | LCDCF_BG8000 | LCDCF_BG9800
@@ -187,7 +206,9 @@ MainLoop:
   call HandleLevelSwap
   call HandleDPad
   call AnimatePlayer
+  call AnimateEnemies
   call UpdateCamera
+  call UpdateEnemySprites
   jr MainLoop
 
 ; ==========================================================================|80|
@@ -711,6 +732,214 @@ InitPlayer:
   call UpdateCamera
   ret
 
+LoadLevelEnemies:
+  xor a
+  ld [EnemyCount], a
+  ld [EnemyAnimFrame], a
+  ld a, ENEMY_ANIM_DELAY
+  ld [EnemyAnimTimer], a
+
+  ld a, [LevelDataStart]
+  ld l, a
+  ld a, [LevelDataStart + 1]
+  ld h, a
+
+.loop
+  ld a, h
+  ld b, a
+  ld a, [LevelDataEnd + 1]
+  cp b
+  jr nz, .read_record
+  ld a, l
+  ld b, a
+  ld a, [LevelDataEnd]
+  cp b
+  ret z
+
+.read_record
+  ld a, [hli]                            ; x tile
+  add a
+  add a
+  add a
+  ld [EnemySpawnX], a
+  inc hl                                  ; x high byte
+
+  ld a, [hli]                            ; y tile
+  add a
+  add a
+  add a
+  ld [EnemySpawnY], a
+  inc hl                                  ; y high byte
+
+  ld a, [hli]                            ; sprite id low byte
+  ld b, a
+  inc hl                                  ; sprite id high byte
+  ld a, [hli]                            ; exported OAM attrs
+  ld [EnemySpawnAttr], a
+  inc hl                                  ; reserved byte
+
+  ld a, b
+  cp ENEMY_SNAKE_MARKER_TILE
+  jr z, .snake
+  cp ENEMY_SCORPION_MARKER_TILE
+  jr z, .scorpion
+  jr .loop
+
+.snake
+  ld a, ENEMY_SNAKE_TILE_1
+  jr .spawn
+
+.scorpion
+  ld a, ENEMY_SCORPION_TILE_1
+
+.spawn
+  ld [EnemySpawnBaseTile], a
+  push hl
+  call SpawnEnemy
+  pop hl
+  jr .loop
+
+SpawnEnemy:
+  ld a, [EnemyCount]
+  cp MAX_ENEMIES
+  ret nc
+  ld b, a
+
+  ld l, b
+  ld h, 0
+  ld de, EnemyWorldX
+  add hl, de
+  ld a, [EnemySpawnX]
+  ld [hl], a
+
+  ld l, b
+  ld h, 0
+  ld de, EnemyWorldY
+  add hl, de
+  ld a, [EnemySpawnY]
+  ld [hl], a
+
+  ld l, b
+  ld h, 0
+  ld de, EnemyBaseTile
+  add hl, de
+  ld a, [EnemySpawnBaseTile]
+  ld [hl], a
+
+  ld l, b
+  ld h, 0
+  ld de, EnemyAttr
+  add hl, de
+  ld a, [EnemySpawnAttr]
+  ld [hl], a
+
+  ld hl, EnemyCount
+  inc [hl]
+  ret
+
+AnimateEnemies:
+  ld a, [EnemyCount]
+  and a
+  ret z
+
+  ld hl, EnemyAnimTimer
+  dec [hl]
+  ret nz
+
+  ld a, ENEMY_ANIM_DELAY
+  ld [hl], a
+  ld a, [EnemyAnimFrame]
+  xor 1
+  ld [EnemyAnimFrame], a
+  ret
+
+UpdateEnemySprites:
+  call ClearEnemyOAM
+  ld a, [EnemyCount]
+  and a
+  ret z
+
+  ld b, a
+  ld c, 0
+
+.loop
+  ld a, c
+  add a
+  add a
+  ld l, a
+  ld h, 0
+  ld de, ENEMY_OAM_ADDR
+  add hl, de
+  push hl
+
+  ld l, c
+  ld h, 0
+  ld de, EnemyWorldY
+  add hl, de
+  ld a, [hl]
+  ld d, a
+  ld a, [CameraY]
+  ld e, a
+  ld a, d
+  sub e
+  add OAM_Y_OFFSET
+  pop hl
+  ld [hli], a
+  push hl
+
+  ld l, c
+  ld h, 0
+  ld de, EnemyWorldX
+  add hl, de
+  ld a, [hl]
+  ld d, a
+  ld a, [CameraX]
+  ld e, a
+  ld a, d
+  sub e
+  add OAM_X_OFFSET
+  pop hl
+  ld [hli], a
+  push hl
+
+  ld l, c
+  ld h, 0
+  ld de, EnemyBaseTile
+  add hl, de
+  ld a, [hl]
+  ld d, a
+  ld a, [EnemyAnimFrame]
+  add d
+  pop hl
+  ld [hli], a
+  push hl
+
+  ld l, c
+  ld h, 0
+  ld de, EnemyAttr
+  add hl, de
+  ld a, [hl]
+  pop hl
+  ld [hl], a
+
+  inc c
+  dec b
+  jr nz, .loop
+  ret
+
+ClearEnemyOAM:
+  ld hl, ENEMY_OAM_ADDR
+  ld b, MAX_ENEMIES
+.loop
+  xor a
+  ld [hli], a
+  inc hl
+  inc hl
+  inc hl
+  dec b
+  jr nz, .loop
+  ret
+
 LoadLevelHot:
   push hl
   call WaitVBlank
@@ -733,6 +962,7 @@ LoadLevel:
   ;   DW TileMap, TileMapEnd
   ;   DW AttrMap, AttrMapEnd
   ;   DW LogicMap, LogicMapEnd
+  ;   DW Sprites, SpritesEnd
   .load_palettes
     call ReadLevelDataRange
     push hl
@@ -771,6 +1001,12 @@ LoadLevel:
     push hl
     ld de, CollisionMap
     call LoadLevelBytes
+    pop hl
+
+  .load_sprites
+    call ReadLevelDataRange
+    push hl
+    call LoadLevelEnemies
     pop hl
 
     xor a

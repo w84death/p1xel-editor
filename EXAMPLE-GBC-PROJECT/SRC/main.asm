@@ -234,9 +234,9 @@ Entry:
 ; ======================================> MAIN LOOP <=======================|80|
 MainLoop:
   call WaitFrame
+  call UpdateBgPaletteCycles
   call UpdateCamera
   call UpdateEnemySprites
-  call UpdateBgPaletteCycles
   call HandleLevelSwap
   call HandleDPad
   call MoveEnemies

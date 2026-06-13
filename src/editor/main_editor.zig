@@ -177,7 +177,7 @@ pub const MainEditor = struct {
         drawPixelText(fui, renderer, "RMB: LIBRARY", x + 136, UI.preview_y + 176, 1, UI.muted);
 
         drawTileFlags(fui, renderer, project, mouse, x + 16, UI.preview_y + 200, self);
-        drawPixelTransferButtons(fui, renderer, project, mouse, x + 16, UI.preview_y + 262, self);
+        drawPixelTransferButtons(fui, renderer, project, mouse, x + 16, UI.preview_y + 292, self);
         drawStatusInfo(fui, renderer, self, x + 16, UI.content_y + UI.side_panel_h - 44);
     }
 
@@ -427,13 +427,36 @@ fn drawTileFlags(fui: anytype, renderer: *Render, project: *Project, mouse: Mous
     const title = std.fmt.bufPrint(&title_buf, "TILE FLAGS 0x{X}", .{project.selectedTileFlags()}) catch "TILE FLAGS";
     drawPixelText(fui, renderer, title, x, y, 2, UI.drawing_header);
 
-    const labels = [_][:0]const u8{ "0", "1", "2", "3", "4", "5", "6", "7" };
-    for (labels, 0..) |label, bit| {
-        const active = project.selectedTileFlagBit(@intCast(bit));
-        if (pillButton(fui, renderer, mouse, x + @as(i32, @intCast(bit)) * 30, y + 24, 26, 28, label, active)) {
-            project.setSelectedTileFlagBit(@intCast(bit), !active);
+    const named_flags = [_]struct { label: [:0]const u8, bit: u8, w: i32 }{
+        .{ .label = "WALK", .bit = 0, .w = 74 },
+        .{ .label = "SLOW", .bit = 1, .w = 74 },
+    };
+    var flag_x = x;
+    for (named_flags) |flag| {
+        const active = project.selectedTileFlagBit(flag.bit);
+        if (pillButton(fui, renderer, mouse, flag_x, y + 24, flag.w, 28, flag.label, active)) {
+            project.setSelectedTileFlagBit(flag.bit, !active);
             editor.setInfo("Tile flag toggled", UI.accent);
         }
+        flag_x += flag.w + 6;
+    }
+
+    const extra_flags = [_]struct { label: [:0]const u8, bit: u8 }{
+        .{ .label = "2", .bit = 2 },
+        .{ .label = "3", .bit = 3 },
+        .{ .label = "4", .bit = 4 },
+        .{ .label = "5", .bit = 5 },
+        .{ .label = "6", .bit = 6 },
+        .{ .label = "7", .bit = 7 },
+    };
+    flag_x = x;
+    for (extra_flags) |flag| {
+        const active = project.selectedTileFlagBit(flag.bit);
+        if (pillButton(fui, renderer, mouse, flag_x, y + 56, 26, 24, flag.label, active)) {
+            project.setSelectedTileFlagBit(flag.bit, !active);
+            editor.setInfo("Tile flag toggled", UI.accent);
+        }
+        flag_x += 30;
     }
 }
 

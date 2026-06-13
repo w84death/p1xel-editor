@@ -17,6 +17,7 @@ pub const MAX_MAP_SPRITES = types.MAX_MAP_SPRITES;
 
 pub const MapSize = types.MapSize;
 pub const TILE_FLAG_TRAVERSABLE = types.TILE_FLAG_TRAVERSABLE;
+pub const TILE_FLAG_SLOW = types.TILE_FLAG_SLOW;
 
 pub const MapTileAttr = types.MapTileAttr;
 pub const MapSprite = types.MapSprite;
@@ -325,8 +326,16 @@ pub const Project = struct {
         return (self.tileFlags(tile_id) & TILE_FLAG_TRAVERSABLE) != 0;
     }
 
+    pub fn isTileSlow(self: *const Project, tile_id: u16) bool {
+        return (self.tileFlags(tile_id) & TILE_FLAG_SLOW) != 0;
+    }
+
     pub fn setSelectedTileTraversable(self: *Project, traversable: bool) void {
         self.setSelectedTileFlagBit(0, traversable);
+    }
+
+    pub fn setSelectedTileSlow(self: *Project, slow: bool) void {
+        self.setSelectedTileFlagBit(1, slow);
     }
 
     pub fn setSelectedTileFlagBit(self: *Project, bit: u8, enabled: bool) void {

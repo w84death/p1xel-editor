@@ -52,11 +52,17 @@ DEF PLAYER_ANIM_DELAY                   EQU 4
 DEF TREE_FIRST_SLOT                     EQU 0
 DEF PLAYER_OAM_ADDR                     EQU _OAMRAM
 DEF PLAYER_BASE_OAM_ADDR                EQU PLAYER_OAM_ADDR
-DEF PLAYER_TILE                         EQU 0
+DEF PLAYER_IDLE_TILE                    EQU 0
+DEF PLAYER_WALK_TILE_1                  EQU 1
+DEF PLAYER_WALK_TILE_2                  EQU 2
+DEF PLAYER_TILE                         EQU PLAYER_IDLE_TILE
 DEF PLAYER_PALETTE                      EQU 0
 DEF PLAYER_ATTR                         EQU PLAYER_PALETTE
-DEF PLAYER_MOVE_FRAMES                  EQU 8
+DEF PLAYER_MOVE_STEPS                   EQU TILE_SIZE
+DEF PLAYER_MOVE_DELAY                   EQU 1
+DEF PLAYER_SLOW_MOVE_DELAY              EQU 3
 DEF TILE_FLAG_TRAVERSABLE               EQU 0
+DEF TILE_FLAG_SLOW                      EQU 1
 
 DEF TILES_BG_INDEX_START                EQU 128
 ; ==========================================================================|80|
@@ -91,6 +97,8 @@ PlayerWorldY:                           ds 1
 PlayerMoveDX:                           ds 1
 PlayerMoveDY:                           ds 1
 PlayerMoveFrames:                       ds 1
+PlayerMoveDelay:                        ds 1
+PlayerMoveTimer:                        ds 1
 CollisionMap:                           ds 1024
 ; ==========================================================================|80|
 
@@ -131,6 +139,9 @@ Entry:
   ld [PlayerMoveDX], a
   ld [PlayerMoveDY], a
   ld [PlayerMoveFrames], a
+  ld a, PLAYER_MOVE_DELAY
+  ld [PlayerMoveDelay], a
+  ld [PlayerMoveTimer], a
 
   .init_vram
   xor a
@@ -429,12 +440,12 @@ MoveRight:
   call ApplyPlayerFacingAttr
   call TargetRightWalkable
   ret nc
+  call SetPlayerMoveDelayForFlags
   ld a, 1
   ld [PlayerMoveDX], a
   xor a
   ld [PlayerMoveDY], a
-  ld a, PLAYER_MOVE_FRAMES
-  ld [PlayerMoveFrames], a
+  call BeginPlayerMove
   ret
 
 MoveLeft:
@@ -443,40 +454,48 @@ MoveLeft:
   call ApplyPlayerFacingAttr
   call TargetLeftWalkable
   ret nc
+  call SetPlayerMoveDelayForFlags
   ld a, $FF
   ld [PlayerMoveDX], a
   xor a
   ld [PlayerMoveDY], a
-  ld a, PLAYER_MOVE_FRAMES
-  ld [PlayerMoveFrames], a
+  call BeginPlayerMove
   ret
 
 MoveUp:
   call TargetUpWalkable
   ret nc
+  call SetPlayerMoveDelayForFlags
   xor a
   ld [PlayerMoveDX], a
   ld a, $FF
   ld [PlayerMoveDY], a
-  ld a, PLAYER_MOVE_FRAMES
-  ld [PlayerMoveFrames], a
+  call BeginPlayerMove
   ret
 
 MoveDown:
   call TargetDownWalkable
   ret nc
+  call SetPlayerMoveDelayForFlags
   xor a
   ld [PlayerMoveDX], a
   ld a, 1
   ld [PlayerMoveDY], a
-  ld a, PLAYER_MOVE_FRAMES
-  ld [PlayerMoveFrames], a
+  call BeginPlayerMove
   ret
 
 AnimatePlayer:
   ld a, [PlayerMoveFrames]
   and a
   ret z
+
+  call UpdatePlayerWalkAnimation
+  ld hl, PlayerMoveTimer
+  dec [hl]
+  ret nz
+
+  ld a, [PlayerMoveDelay]
+  ld [hl], a
 
   ld a, [PlayerMoveDX]
   bit 7, a
@@ -512,6 +531,65 @@ AnimatePlayer:
 .tick
   ld hl, PlayerMoveFrames
   dec [hl]
+  jr z, .finish_move
+  ret
+.finish_move
+  call SetPlayerIdleTile
+  ret
+
+BeginPlayerMove:
+  xor a
+  ld [PlayerAnimFrame], a
+  ld a, PLAYER_ANIM_DELAY
+  ld [PlayerAnimTimer], a
+  ld a, PLAYER_WALK_TILE_1
+  ld [PLAYER_OAM_ADDR + 2], a
+  ld a, [PlayerMoveDelay]
+  ld [PlayerMoveTimer], a
+  ld a, PLAYER_MOVE_STEPS
+  ld [PlayerMoveFrames], a
+  ret
+
+SetPlayerMoveDelayForFlags:
+  bit TILE_FLAG_SLOW, a
+  jr z, .normal
+  ld a, PLAYER_SLOW_MOVE_DELAY
+  jr .store
+.normal
+  ld a, PLAYER_MOVE_DELAY
+.store
+  ld [PlayerMoveDelay], a
+  ret
+
+UpdatePlayerWalkAnimation:
+  ld hl, PlayerAnimTimer
+  dec [hl]
+  ret nz
+
+  ld a, PLAYER_ANIM_DELAY
+  ld [hl], a
+  ld a, [PlayerAnimFrame]
+  xor 1
+  ld [PlayerAnimFrame], a
+  or a
+  jr z, .frame_1
+
+.frame_2
+  ld a, PLAYER_WALK_TILE_2
+  jr .store_tile
+.frame_1
+  ld a, PLAYER_WALK_TILE_1
+.store_tile
+  ld [PLAYER_OAM_ADDR + 2], a
+  ret
+
+SetPlayerIdleTile:
+  ld a, PLAYER_IDLE_TILE
+  ld [PLAYER_OAM_ADDR + 2], a
+  xor a
+  ld [PlayerAnimFrame], a
+  ld a, PLAYER_ANIM_DELAY
+  ld [PlayerAnimTimer], a
   ret
 
 TargetRightWalkable:
@@ -564,7 +642,8 @@ TargetDownWalkable:
 
 TargetWorldWalkable:
   ; B = target world pixel X, C = target world pixel Y.
-  ; Returns carry set when traversable, carry clear when blocked.
+  ; Returns carry set and A = terrain flags when traversable.
+  ; Returns carry clear when blocked.
   ld a, c
   srl a
   srl a
@@ -587,12 +666,13 @@ TargetWorldWalkable:
   ld de, CollisionMap
   add hl, de
 
-  bit TILE_FLAG_TRAVERSABLE, [hl]
+  ld a, [hl]
+  bit TILE_FLAG_TRAVERSABLE, a
   jr z, .blocked
   scf
   ret
 .blocked
-  or a
+  xor a
   ret
 
 ApplyPlayerFacingAttr:

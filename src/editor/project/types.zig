@@ -13,6 +13,7 @@ pub const MAX_MAP_SPRITES = 256;
 pub const MapSize = enum(u8) { size_32x32 = 0, size_64x16 = 1, size_128x16 = 2 };
 
 pub const TILE_FLAG_TRAVERSABLE: u8 = 1 << 0;
+pub const TILE_FLAG_SLOW: u8 = 1 << 1;
 
 pub const MapTileAttr = struct {
     palette: u8 = 0,

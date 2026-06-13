@@ -152,6 +152,21 @@ test "Project view changes refresh visuals without marking data dirty" {
     try expect(project.visualRevision() != initial_revision);
 }
 
+test "Project tile flags expose traversable and slow terrain bits" {
+    var project = Project.init();
+
+    try expect(project.isTileTraversable(project.selectedImageId()));
+    try expect(!project.isTileSlow(project.selectedImageId()));
+
+    project.setSelectedTileSlow(true);
+    try expect(project.isTileSlow(project.selectedImageId()));
+    try expectEqual(project_mod.TILE_FLAG_TRAVERSABLE | project_mod.TILE_FLAG_SLOW, project.selectedTileFlags());
+
+    project.setSelectedTileTraversable(false);
+    try expect(!project.isTileTraversable(project.selectedImageId()));
+    try expect(project.isTileSlow(project.selectedImageId()));
+}
+
 test "Project painting marks data dirty and changes selected image pixels" {
     var project = Project.init();
 

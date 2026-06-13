@@ -12,6 +12,7 @@ pub const MAX_MAP_SPRITES = model.MAX_MAP_SPRITES;
 
 pub const MapSize = model.MapSize;
 pub const TILE_FLAG_TRAVERSABLE = model.TILE_FLAG_TRAVERSABLE;
+pub const TILE_FLAG_SLOW = model.TILE_FLAG_SLOW;
 
 pub const MapTileAttr = model.MapTileAttr;
 pub const MapSprite = model.MapSprite;

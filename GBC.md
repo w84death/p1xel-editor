@@ -275,6 +275,7 @@ Each byte stores tile gameplay flags. Current flag layout:
 
 ```text
 bit 0 = traversable / walkable
+bit 1 = slow terrain
 ```
 
 This is intentionally engine-agnostic. A GBC engine can keep it in ROM and query it during movement/collision checks, or copy it to WRAM if maps are mutable.
@@ -282,8 +283,15 @@ This is intentionally engine-agnostic. A GBC engine can keep it in ROM and query
 Example:
 
 ```c
+#define TILE_FLAG_TRAVERSABLE 0x01
+#define TILE_FLAG_SLOW        0x02
+
 bool is_walkable(uint8_t logic_value) {
-    return (logic_value & 0x01) != 0;
+    return (logic_value & TILE_FLAG_TRAVERSABLE) != 0;
+}
+
+bool is_slow_terrain(uint8_t logic_value) {
+    return (logic_value & TILE_FLAG_SLOW) != 0;
 }
 ```
 

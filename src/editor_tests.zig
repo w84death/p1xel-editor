@@ -142,6 +142,25 @@ test "sprite delete and swap remap map references" {
     try expectEqual(@as(u16, 0), maps[0].sprites[1].sprite_id);
 }
 
+test "Project visible tile slots support independent banks" {
+    var project = Project.init();
+    const first = project.createTile().?;
+    const second = project.createTile().?;
+
+    project.setVisibleSlot(0, first);
+    try expectEqual(first, project.visibleSlot(0));
+
+    project.setVisibleSlotBank(1);
+    try expectEqual(@as(u8, 1), project.activeVisibleSlotBank());
+    try expectEqual(@as(u16, 0), project.visibleSlot(0));
+
+    project.setVisibleSlot(0, second);
+    try expectEqual(second, project.visibleSlot(0));
+
+    project.setVisibleSlotBank(0);
+    try expectEqual(first, project.visibleSlot(0));
+}
+
 test "Project view changes refresh visuals without marking data dirty" {
     var project = Project.init();
     const initial_revision = project.visualRevision();

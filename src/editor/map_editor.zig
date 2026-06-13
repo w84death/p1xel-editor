@@ -290,9 +290,8 @@ pub const MapEditor = struct {
     }
 
     fn drawSelector(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, main_editor: *MainEditor, mouse: Mouse, sm: anytype, mode: ProjectMode, x0: i32, y0: i32, slot: i32) void {
-        _ = fui;
         const scale = @divFloor(slot - 8, CONF.TILE_SIDE);
-        for (0..9) |i| {
+        for (0..Project.VISIBLE_SLOT_COUNT) |i| {
             const cx: i32 = @intCast(i % 3);
             const cy: i32 = @intCast(i / 3);
             const x = x0 + cx * (slot + 6);
@@ -326,6 +325,21 @@ pub const MapEditor = struct {
                     main_editor.suppress_canvas_paint_until_mouse_up = true;
                     sm.go_to(.tile_library);
                 }
+            }
+        }
+        if (mode == .tiles) self.drawSlotBankButtons(fui, renderer, project, mouse, mode, x0 + 3 * slot + 24, y0);
+    }
+
+    fn drawSlotBankButtons(self: *MapEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, mode: ProjectMode, x: i32, y0: i32) void {
+        const button_h: i32 = 26;
+        const gap: i32 = 4;
+        for (0..Project.VISIBLE_SLOT_BANK_COUNT) |bank| {
+            const y = y0 + @as(i32, @intCast(bank)) * (button_h + gap);
+            var label_buf: [2]u8 = undefined;
+            const label = std.fmt.bufPrint(&label_buf, "{d}", .{bank}) catch "?";
+            if (button(fui, renderer, mouse, x, y, 28, button_h, label, project.activeVisibleSlotBankMode(mode) == bank)) {
+                project.setVisibleSlotBankMode(mode, @intCast(bank));
+                self.setInfo("BG slot bank selected", UI.accent);
             }
         }
     }
@@ -754,7 +768,7 @@ pub const MapEditor = struct {
 
     fn isPath9Tile(self: *const MapEditor, project: *const Project, tile_id: u8) bool {
         _ = self;
-        for (0..9) |slot| {
+        for (0..Project.VISIBLE_SLOT_COUNT) |slot| {
             if (project.visibleSlotMode(.tiles, slot) == tile_id) return true;
         }
         return false;
@@ -790,7 +804,7 @@ pub const MapEditor = struct {
     }
 
     fn selectedTileRow(self: *const MapEditor, project: *const Project) usize {
-        for (0..9) |slot| {
+        for (0..Project.VISIBLE_SLOT_COUNT) |slot| {
             if (project.visibleSlotMode(.tiles, slot) == @as(u16, self.selected_tile)) return slot / 3;
         }
         return 0;

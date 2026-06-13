@@ -298,7 +298,7 @@ fn drawPixelText(fui: anytype, renderer: *Render, text: []const u8, x: i32, y: i
     editor_ui.drawText(fui, renderer, text, x, y, scale, color);
 }
 
-fn pillButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: [:0]const u8, active: bool) bool {
+fn pillButton(fui: anytype, renderer: *Render, mouse: Mouse, x: i32, y: i32, w: i32, h: i32, label: []const u8, active: bool) bool {
     return editor_ui.button(fui, renderer, mouse, x, y, w, h, label, active);
 }
 
@@ -369,9 +369,8 @@ fn drawCanvasOverlay(self: *MainEditor, fui: anytype, renderer: *Render, mouse: 
 }
 
 fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *Project, mouse: Mouse, sm: anytype, x0: i32, y0: i32, slot: i32) void {
-    _ = fui;
     const tile_scale = @divFloor(slot, CONF.TILE_SIDE);
-    for (0..9) |i| {
+    for (0..Project.VISIBLE_SLOT_COUNT) |i| {
         const cx: i32 = @intCast(i % 3);
         const cy: i32 = @intCast(i / 3);
         const x = x0 + cx * slot;
@@ -388,6 +387,19 @@ fn drawTileSlots(self: *MainEditor, fui: anytype, renderer: *Render, project: *P
                 self.library_return_state = .editor;
                 sm.go_to(.tile_library);
             }
+        }
+    }
+
+    const bank_x = x0 + 3 * slot + 12;
+    const button_h: i32 = 26;
+    const gap: i32 = 4;
+    for (0..Project.VISIBLE_SLOT_BANK_COUNT) |bank| {
+        const y = y0 + @as(i32, @intCast(bank)) * (button_h + gap);
+        var label_buf: [2]u8 = undefined;
+        const label = std.fmt.bufPrint(&label_buf, "{d}", .{bank}) catch "?";
+        if (pillButton(fui, renderer, mouse, bank_x, y, 28, button_h, label, project.activeVisibleSlotBank() == bank)) {
+            project.setVisibleSlotBank(@intCast(bank));
+            self.setInfo("Slot bank selected", UI.accent);
         }
     }
 }

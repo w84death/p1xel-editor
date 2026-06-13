@@ -26,6 +26,10 @@ pub const Map = types.Map;
 pub const Image = types.Image;
 pub const Tile = types.Tile;
 
+const SLOT_GRID_COUNT: usize = 9;
+const SLOT_BANK_COUNT: usize = 4;
+const LEGACY_IMAGE_BANK_STATE_BYTES = 2 + 2 + 1 + 1 + 1 + 1 + SLOT_GRID_COUNT * 2;
+
 const ImageBank = struct {
     images: [CONF.MAX_TILES]Image = [_]Image{.{}} ** CONF.MAX_TILES,
     count: u16 = 1,
@@ -34,32 +38,55 @@ const ImageBank = struct {
     selected_color: u8 = 1,
     left_color: u8 = 1,
     right_color: u8 = 0,
-    visible_slots: [9]u16 = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8 },
+    active_visible_slot_bank: u8 = 0,
+    visible_slot_banks: [SLOT_BANK_COUNT][SLOT_GRID_COUNT]u16 = defaultVisibleSlotBanks(),
 
     fn ensureSlotBounds(self: *ImageBank) void {
         if (self.count == 0) self.count = 1;
         if (self.count > CONF.MAX_TILES) self.count = CONF.MAX_TILES;
         if (self.selected >= self.count) self.selected = self.count - 1;
-        for (&self.visible_slots, 0..) |*slot, i| {
-            if (slot.* >= self.count) slot.* = @intCast(@min(i, @as(usize, self.count - 1)));
+        if (@as(usize, self.active_visible_slot_bank) >= SLOT_BANK_COUNT) self.active_visible_slot_bank = 0;
+        for (&self.visible_slot_banks) |*slots| {
+            for (slots, 0..) |*slot, i| {
+                if (slot.* >= self.count) slot.* = @intCast(@min(i, @as(usize, self.count - 1)));
+            }
         }
+    }
+
+    fn activeVisibleSlotBankIndex(self: *const ImageBank) usize {
+        return @min(@as(usize, self.active_visible_slot_bank), SLOT_BANK_COUNT - 1);
     }
 };
 
+fn defaultVisibleSlotBanks() [SLOT_BANK_COUNT][SLOT_GRID_COUNT]u16 {
+    const default_slots = [_]u16{ 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+    var banks: [SLOT_BANK_COUNT][SLOT_GRID_COUNT]u16 = undefined;
+    for (&banks) |*slots| slots.* = default_slots;
+    return banks;
+}
+
+fn clearVisibleSlotBanks() [SLOT_BANK_COUNT][SLOT_GRID_COUNT]u16 {
+    var banks: [SLOT_BANK_COUNT][SLOT_GRID_COUNT]u16 = undefined;
+    for (&banks) |*slots| slots.* = [_]u16{0} ** SLOT_GRID_COUNT;
+    return banks;
+}
+
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 9;
+    const VERSION: u8 = 10;
     const LEGACY_VERSION: u8 = 5;
     const OLDEST_SUPPORTED_VERSION: u8 = 4;
     pub const IMAGE_BANK_COUNT = 2;
     pub const PALETTE_BANK_COUNT = 4;
     pub const MAP_BANK_COUNT = 4;
+    pub const VISIBLE_SLOT_COUNT = SLOT_GRID_COUNT;
+    pub const VISIBLE_SLOT_BANK_COUNT = SLOT_BANK_COUNT;
     const PALETTE_COLOR_BYTES = 3;
     const PALETTE_BANK_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
     const PALETTE_SET_BYTES = PALETTE_BANK_COUNT * PALETTE_BANK_BYTES;
     const PALETTE_BYTES = IMAGE_BANK_COUNT * PALETTE_SET_BYTES;
     const IMAGE_BYTES = 1 + CONF.TILE_SIDE * CONF.TILE_SIDE;
-    const IMAGE_BANK_STATE_BYTES = 2 + 2 + 1 + 1 + 1 + 1 + 9 * 2;
+    const IMAGE_BANK_STATE_BYTES = 2 + 2 + 1 + 1 + 1 + 1 + 1 + SLOT_BANK_COUNT * SLOT_GRID_COUNT * 2;
     const HEADER_BYTES = 4 + 1 + 1 + 1;
     const MAP_HEADER_BYTES = 2 + 2 + 2;
     const MAP_SPRITE_BYTES = 2 + 2 + 2 + 1;
@@ -291,15 +318,30 @@ pub const Project = struct {
         return @min(self.image_banks[@intFromEnum(mode)].count, CONF.MAX_TILES);
     }
 
+    pub fn activeVisibleSlotBankMode(self: *const Project, mode: ProjectMode) u8 {
+        return self.image_banks[@intFromEnum(mode)].active_visible_slot_bank;
+    }
+
+    pub fn setVisibleSlotBankMode(self: *Project, mode: ProjectMode, bank_id: u8) void {
+        const bank = &self.image_banks[@intFromEnum(mode)];
+        const next: u8 = @intCast(@min(@as(usize, bank_id), SLOT_BANK_COUNT - 1));
+        if (bank.active_visible_slot_bank == next) return;
+        bank.active_visible_slot_bank = next;
+        self.markViewChanged();
+    }
+
     pub fn visibleSlotMode(self: *const Project, mode: ProjectMode, slot: usize) u16 {
-        return self.image_banks[@intFromEnum(mode)].visible_slots[slot];
+        if (slot >= SLOT_GRID_COUNT) return 0;
+        const bank = &self.image_banks[@intFromEnum(mode)];
+        return bank.visible_slot_banks[bank.activeVisibleSlotBankIndex()][slot];
     }
 
     pub fn setVisibleSlotMode(self: *Project, mode: ProjectMode, slot: usize, image_id: u16) void {
-        if (slot >= 9 or image_id >= self.imageCountMode(mode)) return;
+        if (slot >= SLOT_GRID_COUNT or image_id >= self.imageCountMode(mode)) return;
         const bank = &self.image_banks[@intFromEnum(mode)];
-        if (bank.visible_slots[slot] == image_id) return;
-        bank.visible_slots[slot] = image_id;
+        const bank_index = bank.activeVisibleSlotBankIndex();
+        if (bank.visible_slot_banks[bank_index][slot] == image_id) return;
+        bank.visible_slot_banks[bank_index][slot] = image_id;
         self.markDataChanged();
     }
 
@@ -350,16 +392,20 @@ pub const Project = struct {
         self.markDataChanged();
     }
 
+    pub fn activeVisibleSlotBank(self: *const Project) u8 {
+        return self.activeBankConst().active_visible_slot_bank;
+    }
+
+    pub fn setVisibleSlotBank(self: *Project, bank_id: u8) void {
+        self.setVisibleSlotBankMode(self.mode, bank_id);
+    }
+
     pub fn visibleSlot(self: *const Project, slot: usize) u16 {
-        return self.activeBankConst().visible_slots[slot];
+        return self.visibleSlotMode(self.mode, slot);
     }
 
     pub fn setVisibleSlot(self: *Project, slot: usize, image_id: u16) void {
-        if (slot >= 9 or image_id >= self.imageCount()) return;
-        const bank = self.activeBank();
-        if (bank.visible_slots[slot] == image_id) return;
-        bank.visible_slots[slot] = image_id;
-        self.markDataChanged();
+        self.setVisibleSlotMode(self.mode, slot, image_id);
     }
 
     pub fn nonEmptyTiles(self: *const Project) u16 {
@@ -468,8 +514,10 @@ pub const Project = struct {
         var i: usize = id;
         while (i + 1 < bank.count) : (i += 1) bank.images[i] = bank.images[i + 1];
         bank.count -= 1;
-        for (&bank.visible_slots) |*slot| {
-            if (slot.* == id) slot.* = 0 else if (slot.* > id) slot.* -= 1;
+        for (&bank.visible_slot_banks) |*slots| {
+            for (slots) |*slot| {
+                if (slot.* == id) slot.* = 0 else if (slot.* > id) slot.* -= 1;
+            }
         }
         if (mode == .tiles) {
             self.remapDeletedTileReferences(id);
@@ -501,8 +549,10 @@ pub const Project = struct {
         const tmp = bank.images[a];
         bank.images[a] = bank.images[b];
         bank.images[b] = tmp;
-        for (&bank.visible_slots) |*slot| {
-            if (slot.* == a) slot.* = b else if (slot.* == b) slot.* = a;
+        for (&bank.visible_slot_banks) |*slots| {
+            for (slots) |*slot| {
+                if (slot.* == a) slot.* = b else if (slot.* == b) slot.* = a;
+            }
         }
         if (mode == .tiles) {
             const flags_tmp = self.tile_flags[a];
@@ -736,7 +786,7 @@ pub const Project = struct {
             offset += 1;
             self.active_map_bank = @min(data[offset], MAP_BANK_COUNT - 1);
             offset += 1;
-            if (file_version >= VERSION) {
+            if (file_version >= 9) {
                 for (0..IMAGE_BANK_COUNT) |mode_index| {
                     for (0..PALETTE_BANK_COUNT) |bank| {
                         for (0..CONF.PALETTE_COUNT) |p| {
@@ -784,8 +834,9 @@ pub const Project = struct {
             offset += TILE_FLAGS_BYTES;
         }
 
+        const image_bank_state_bytes = if (file_version >= 10) IMAGE_BANK_STATE_BYTES else LEGACY_IMAGE_BANK_STATE_BYTES;
         for (0..IMAGE_BANK_COUNT) |bank_index| {
-            if (offset + IMAGE_BANK_STATE_BYTES > data.len) return error.InvalidProject;
+            if (offset + image_bank_state_bytes > data.len) return error.InvalidProject;
             var bank = &self.image_banks[bank_index];
             bank.count = storage.readU16(data[offset .. offset + 2]);
             offset += 2;
@@ -799,9 +850,23 @@ pub const Project = struct {
             offset += 1;
             bank.right_color = @min(data[offset], CONF.COLORS_PER_PALETTE - 1);
             offset += 1;
-            for (&bank.visible_slots) |*slot| {
-                slot.* = storage.readU16(data[offset .. offset + 2]);
-                offset += 2;
+            if (file_version >= 10) {
+                bank.active_visible_slot_bank = @intCast(@min(@as(usize, data[offset]), SLOT_BANK_COUNT - 1));
+                offset += 1;
+                for (&bank.visible_slot_banks) |*slots| {
+                    for (slots) |*slot| {
+                        slot.* = storage.readU16(data[offset .. offset + 2]);
+                        offset += 2;
+                    }
+                }
+            } else {
+                var legacy_slots: [SLOT_GRID_COUNT]u16 = undefined;
+                for (&legacy_slots) |*slot| {
+                    slot.* = storage.readU16(data[offset .. offset + 2]);
+                    offset += 2;
+                }
+                bank.active_visible_slot_bank = 0;
+                for (&bank.visible_slot_banks) |*slots| slots.* = legacy_slots;
             }
             if (bank.count == 0 or bank.count > CONF.MAX_TILES) return error.InvalidProject;
             const images_bytes = @as(usize, bank.count) * IMAGE_BYTES;
@@ -897,9 +962,13 @@ pub const Project = struct {
             offset += 1;
             state[offset] = bank.right_color;
             offset += 1;
-            for (bank.visible_slots) |slot| {
-                storage.writeU16(state[offset .. offset + 2], slot);
-                offset += 2;
+            state[offset] = @intCast(@min(@as(usize, bank.active_visible_slot_bank), SLOT_BANK_COUNT - 1));
+            offset += 1;
+            for (bank.visible_slot_banks) |slots| {
+                for (slots) |slot| {
+                    storage.writeU16(state[offset .. offset + 2], slot);
+                    offset += 2;
+                }
             }
             try file.writeStreamingAll(io, &state);
 
@@ -949,7 +1018,8 @@ pub const Project = struct {
         bank.selected_color = 1;
         bank.left_color = 1;
         bank.right_color = 0;
-        bank.visible_slots = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        bank.active_visible_slot_bank = 0;
+        bank.visible_slot_banks = clearVisibleSlotBanks();
 
         var sprite_bank = &self.image_banks[@intFromEnum(ProjectMode.sprites)];
         sprite_bank.images = [_]Image{.{}} ** CONF.MAX_TILES;
@@ -959,7 +1029,8 @@ pub const Project = struct {
         sprite_bank.selected_color = 1;
         sprite_bank.left_color = 1;
         sprite_bank.right_color = 0;
-        sprite_bank.visible_slots = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        sprite_bank.active_visible_slot_bank = 0;
+        sprite_bank.visible_slot_banks = clearVisibleSlotBanks();
 
         self.tile_flags = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES;
         self.mode = .tiles;

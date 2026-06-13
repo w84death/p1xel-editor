@@ -458,7 +458,7 @@ Requirements:
 - On Linux: X11 and ALSA development libraries available.
 - On Windows: GDI and WinMM are linked by the build script.
 - For `release-linux` / `release-windows`: `upx` in `PATH`.
-- For `release-appimage`: Linux `x86_64` host and `appimagetool` in `PATH`.
+- For `release-appimage`: Linux `x86_64` host and AppImageKit `appimagetool` in `PATH`, or pass its path with `-Dappimagetool=/path/to/appimagetool`. `appimage-cli-tool` is an install/update manager and cannot create AppImages.
 
 Build:
 
@@ -490,6 +490,16 @@ p1xel-editor-full-linux-x86_64-glibc-bundled.AppImage
 ```
 
 The AppImage step creates an AppDir, bundles the app executable, desktop/icon metadata, dynamic libraries reported by `ldd`, and the host glibc loader (`ld-linux-x86-64.so.2`). `AppRun` launches through the bundled loader with the bundled library path.
+
+If `appimagetool` is downloaded locally instead of installed globally, pass it explicitly:
+
+```sh
+wget -O appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+chmod +x appimagetool
+zig build release-appimage -Dappimagetool=./appimagetool
+```
+
+The build also searches for `appimagetool`, `appimagetool-x86_64.AppImage`, or `appimagetool.AppImage` in `PATH`, the project root, `.zig-cache/`, and `zig-out/bin/`.
 
 For best old-Linux compatibility, build the AppImage on the oldest glibc-based Linux distribution you want to support, or in a container matching that baseline. Bundling glibc from a newer host does not make the binary compatible with systems older than that bundled glibc.
 

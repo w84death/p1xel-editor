@@ -106,6 +106,7 @@ fn addAppImage(
 
     const appimage_name = b.fmt("{s}.AppImage", .{release_name});
     const appimagetool = b.addSystemCommand(&[_][]const u8{appimagetool_path});
+    appimagetool.stdio = .inherit;
     appimagetool.setEnvironmentVariable("ARCH", appimage_arch);
     appimagetool.addDirectoryArg(appdir_path);
     const appimage_file = appimagetool.addOutputFileArg(appimage_name);
@@ -226,7 +227,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const selected_edition = b.option(Edition, "edition", "Build edition: shareware or full") orelse .shareware;
-    const appimagetool_override = b.option([]const u8, "appimagetool", "Path to AppImageKit appimagetool executable");
 
     const exe = addAppExe(b, filename, target, optimize, selected_edition);
 
@@ -280,13 +280,13 @@ pub fn build(b: *std.Build) void {
     }
 
     if (host_target.result.os.tag == .linux and host_target.result.cpu.arch == .x86_64) {
-        const appimagetool_path: ?[]const u8 = b.findProgram(&.{"appimagetool"}, &.{}) catch null;
+        const appimagetool_path: ?[]const u8 = b.option([]const u8, "appimagetool", "Path to AppImageKit appimagetool executable") orelse (b.findProgram(&appimagetool_names, &appimagetool_search_paths) catch null);
         if (appimagetool_path) |tool_path| {
             inline for (release_editions) |edition| {
                 addAppImage(b, release_appimage_step, tool_path, host_target, edition);
             }
         } else {
-            release_appimage_step.dependOn(&b.addFail("release-appimage requires appimagetool in PATH").step);
+            release_appimage_step.dependOn(&b.addFail(appimageToolMissingMessage()).step);
         }
     } else {
         release_appimage_step.dependOn(&b.addFail("release-appimage requires a Linux x86_64 host").step);

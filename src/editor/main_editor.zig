@@ -415,6 +415,13 @@ fn drawPalettes(fui: anytype, renderer: *Render, project: *Project, mouse: Mouse
         if (project.selectedPalette() == p) drawPixelText(fui, renderer, ">", x0 - 34, y + 10, 1, UI.text);
         drawPixelText(fui, renderer, label, x0 - 18, y + 10, 1, UI.text);
         renderer.draw_rect(x0 - 2, y - 2, sw * CONF.COLORS_PER_PALETTE + 4, sh + 4, UI.palette_panel_alt);
+        if (project.mode == .tiles) {
+            const active = project.activeTilePaletteCycles(@intCast(p));
+            if (pillButton(fui, renderer, mouse, x0 + sw * CONF.COLORS_PER_PALETTE + 12, y + 1, 68, sh - 2, "CYCLE", active)) {
+                project.setActiveTilePaletteCycle(@intCast(p), !active);
+                editor.setInfo(if (active) "Palette cycle off" else "Palette cycle on", UI.accent);
+            }
+        }
         for (0..CONF.COLORS_PER_PALETTE) |color_slot| {
             const x = x0 + @as(i32, @intCast(color_slot)) * sw;
             renderer.draw_rect(x, y, sw, sh, if (project.isTransparentColor(@intCast(color_slot))) 0x303030 else project.color32(@intCast(p), @intCast(color_slot)));

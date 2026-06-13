@@ -161,6 +161,7 @@ pub fn main() !void {
 
     while (c.fenster_loop(&window) == 0) {
         const mouse = beginFrame(&renderer, &app.mouse_buttons, &window);
+        app.project.tickAnimation();
         handleEscape(&app.sm, &app.esc_lock, window.keys[27] != 0);
         handleProjectSlotKeys(&app, &window);
 

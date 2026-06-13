@@ -63,6 +63,10 @@ DEF PLAYER_MOVE_DELAY                   EQU 1
 DEF PLAYER_SLOW_MOVE_DELAY              EQU 3
 DEF SCREEN_SHAKE_FRAMES                 EQU 16
 DEF SCREEN_SHAKE_OFFSET                 EQU 2
+DEF BG_PALETTE_COUNT                    EQU 8
+DEF BG_COLORS_PER_PALETTE               EQU 4
+DEF BG_PALETTE_BYTES_PER_PALETTE        EQU 8
+DEF BG_PALETTE_CYCLE_DELAY              EQU 24
 DEF TILE_FLAG_TRAVERSABLE               EQU 0
 DEF TILE_FLAG_SLOW                      EQU 1
 DEF MAX_ENEMIES                         EQU 8
@@ -107,6 +111,13 @@ CurrentLevel:                           ds 1
 PrevButtons:                            ds 1
 LevelDataStart:                         ds 2
 LevelDataEnd:                           ds 2
+BgPaletteSource:                        ds 2
+BgPaletteCycleFlags:                    ds 1
+BgPaletteCycleTimer:                    ds 1
+BgPaletteCyclePhase:                    ds 1
+BgCyclePaletteIndex:                    ds 1
+BgCyclePaletteFlags:                    ds 1
+BgCycleColorIndex:                      ds 1
 PlayerTargetX:                          ds 1
 PlayerTargetY:                          ds 1
 PlayerWorldX:                           ds 1
@@ -225,6 +236,7 @@ MainLoop:
   call WaitFrame
   call UpdateCamera
   call UpdateEnemySprites
+  call UpdateBgPaletteCycles
   call HandleLevelSwap
   call HandleDPad
   call MoveEnemies
@@ -1414,6 +1426,7 @@ RestoreLCD:
 LoadLevel:
   ; HL = level descriptor:
   ;   DW BgPalettes, BgPalettesEnd
+  ;   DW PaletteCycleFlags, PaletteCycleFlagsEnd
   ;   DW Tiles, TilesEnd
   ;   DW TileMap, TileMapEnd
   ;   DW AttrMap, AttrMapEnd
@@ -1423,6 +1436,12 @@ LoadLevel:
     call ReadLevelDataRange
     push hl
     call LoadLevelBgPalettes
+    pop hl
+
+  .load_palette_cycle_flags
+    call ReadLevelDataRange
+    push hl
+    call LoadLevelPaletteCycleFlags
     pop hl
 
   .load_tiles
@@ -1482,13 +1501,115 @@ ReadLevelDataRange:
 
 LoadLevelBgPalettes:
   ld a, [LevelDataStart]
+  ld [BgPaletteSource], a
   ld l, a
   ld a, [LevelDataStart + 1]
+  ld [BgPaletteSource + 1], a
   ld h, a
   ld a, [LevelDataEnd]
   sub l
   ld b, a
   call LoadBgPalettesCGB
+  ret
+
+LoadLevelPaletteCycleFlags:
+  ld a, [LevelDataStart]
+  ld l, a
+  ld a, [LevelDataStart + 1]
+  ld h, a
+  ld a, [hl]
+  ld [BgPaletteCycleFlags], a
+  xor a
+  ld [BgPaletteCyclePhase], a
+  ld a, BG_PALETTE_CYCLE_DELAY
+  ld [BgPaletteCycleTimer], a
+  ret
+
+UpdateBgPaletteCycles:
+  ld a, [BgPaletteCycleFlags]
+  and a
+  ret z
+
+  ld hl, BgPaletteCycleTimer
+  dec [hl]
+  ret nz
+
+  ld a, BG_PALETTE_CYCLE_DELAY
+  ld [hl], a
+  ld a, [BgPaletteCyclePhase]
+  inc a
+  and 3
+  ld [BgPaletteCyclePhase], a
+  call ApplyBgPaletteCycles
+  ret
+
+ApplyBgPaletteCycles:
+  ld a, [BgPaletteCycleFlags]
+  ld [BgCyclePaletteFlags], a
+  xor a
+  ld [BgCyclePaletteIndex], a
+
+.palette_loop
+  ld a, [BgCyclePaletteFlags]
+  and 1
+  call nz, ApplyBgPaletteCycleCurrent
+
+  ld a, [BgCyclePaletteFlags]
+  srl a
+  ld [BgCyclePaletteFlags], a
+  ld hl, BgCyclePaletteIndex
+  inc [hl]
+  ld a, [hl]
+  cp BG_PALETTE_COUNT
+  jr c, .palette_loop
+  ret
+
+ApplyBgPaletteCycleCurrent:
+  ld a, [BgCyclePaletteIndex]
+  add a
+  add a
+  add a
+  or $80
+  ld [rBGPI], a
+
+  xor a
+  ld [BgCycleColorIndex], a
+
+.color_loop
+  ld a, [BgCycleColorIndex]
+  ld b, a
+  ld a, [BgPaletteCyclePhase]
+  ld c, a
+  ld a, b
+  sub c
+  and 3
+  add a
+  ld e, a
+
+  ld a, [BgCyclePaletteIndex]
+  add a
+  add a
+  add a
+  add e
+  ld e, a
+  ld d, 0
+
+  ld a, [BgPaletteSource]
+  ld l, a
+  ld a, [BgPaletteSource + 1]
+  ld h, a
+  add hl, de
+
+  ld a, [hli]
+  ld [rBGPD], a
+  ld a, [hl]
+  ld [rBGPD], a
+
+  ld hl, BgCycleColorIndex
+  inc [hl]
+  ld a, [hl]
+  cp BG_COLORS_PER_PALETTE
+  jr c, .color_loop
   ret
 
 LoadLevelBytes:

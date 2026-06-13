@@ -24,7 +24,8 @@ const BG_TILE_BASE: u8 = OBJ_TILE_SLOTS;
 const ENGINE_MAP_W: u16 = 32;
 const ENGINE_MAP_H: u16 = 32;
 const MAX_BG_TILES: u16 = 256 - @as(u16, BG_TILE_BASE);
-const EXPORT_VERSION: u8 = 1;
+const PALETTE_CYCLE_FLAGS_BYTES: usize = 1;
+const EXPORT_VERSION: u8 = 2;
 
 const ExportLevel = struct {
     label: []const u8,
@@ -161,6 +162,7 @@ fn writeLevel(writer: *BinaryWriter, project: *const Project, level: ExportLevel
     try writer.writeU16(sprite_count);
 
     try writePaletteWords(writer, project, .tiles, level.bank_id);
+    try writer.writeU8(project.tilePaletteCycleFlags(level.bank_id));
 
     var tile_id: u16 = 0;
     while (tile_id < tile_count) : (tile_id += 1) {
@@ -290,6 +292,7 @@ fn writeRgbdsInclude(project: *const Project, inc_path: []const u8) !void {
     try writer.writeAll("; It maps engine_export.p1xb into the labels expected by SRC/main.asm.\n\n");
     try writer.print("DEF P1XB_HEADER_SIZE                    EQU 16\n", .{});
     try writer.print("DEF P1XB_PALETTE_BYTES                  EQU {d}\n", .{CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * 2});
+    try writer.print("DEF P1XB_PALETTE_CYCLE_FLAGS_BYTES      EQU {d}\n", .{PALETTE_CYCLE_FLAGS_BYTES});
     try writer.print("DEF P1XB_OBJ_TILE_COUNT                 EQU {d}\n", .{BG_TILE_BASE});
     try writer.print("DEF P1XB_OBJ_TILE_BYTES                 EQU {d}\n", .{obj_tile_bytes});
     try writer.print("DEF P1XB_LEVEL_HEADER_BYTES             EQU 14\n", .{});
@@ -308,14 +311,16 @@ fn writeRgbdsInclude(project: *const Project, inc_path: []const u8) !void {
     try writer.writeAll("DEF P1XB_OBJ_TILES_OFFSET               EQU P1XB_SPRITE_PALETTES_OFFSET + P1XB_PALETTE_BYTES\n");
     try writer.writeAll("DEF P1XB_GRASSLAND_OFFSET               EQU P1XB_OBJ_TILES_OFFSET + P1XB_OBJ_TILE_BYTES\n");
     try writer.writeAll("DEF P1XB_GRASSLAND_PALETTES_OFFSET      EQU P1XB_GRASSLAND_OFFSET + P1XB_LEVEL_HEADER_BYTES\n");
-    try writer.writeAll("DEF P1XB_GRASSLAND_TILES_OFFSET         EQU P1XB_GRASSLAND_PALETTES_OFFSET + P1XB_PALETTE_BYTES\n");
+    try writer.writeAll("DEF P1XB_GRASSLAND_PALETTE_CYCLE_FLAGS_OFFSET EQU P1XB_GRASSLAND_PALETTES_OFFSET + P1XB_PALETTE_BYTES\n");
+    try writer.writeAll("DEF P1XB_GRASSLAND_TILES_OFFSET         EQU P1XB_GRASSLAND_PALETTE_CYCLE_FLAGS_OFFSET + P1XB_PALETTE_CYCLE_FLAGS_BYTES\n");
     try writer.writeAll("DEF P1XB_GRASSLAND_TILEMAP_OFFSET       EQU P1XB_GRASSLAND_TILES_OFFSET + P1XB_BG_TILE_BYTES\n");
     try writer.writeAll("DEF P1XB_GRASSLAND_ATTRMAP_OFFSET       EQU P1XB_GRASSLAND_TILEMAP_OFFSET + P1XB_TILEMAP_BYTES\n");
     try writer.writeAll("DEF P1XB_GRASSLAND_LOGICMAP_OFFSET      EQU P1XB_GRASSLAND_ATTRMAP_OFFSET + P1XB_ATTRMAP_BYTES\n");
     try writer.writeAll("DEF P1XB_GRASSLAND_SPRITES_OFFSET       EQU P1XB_GRASSLAND_LOGICMAP_OFFSET + P1XB_LOGICMAP_BYTES\n");
     try writer.writeAll("DEF P1XB_DESERT_OFFSET                  EQU P1XB_GRASSLAND_SPRITES_OFFSET + P1XB_GRASSLANDLEVEL_SPRITE_COUNT * P1XB_SPRITE_BYTES\n");
     try writer.writeAll("DEF P1XB_DESERT_PALETTES_OFFSET         EQU P1XB_DESERT_OFFSET + P1XB_LEVEL_HEADER_BYTES\n");
-    try writer.writeAll("DEF P1XB_DESERT_TILES_OFFSET            EQU P1XB_DESERT_PALETTES_OFFSET + P1XB_PALETTE_BYTES\n");
+    try writer.writeAll("DEF P1XB_DESERT_PALETTE_CYCLE_FLAGS_OFFSET EQU P1XB_DESERT_PALETTES_OFFSET + P1XB_PALETTE_BYTES\n");
+    try writer.writeAll("DEF P1XB_DESERT_TILES_OFFSET            EQU P1XB_DESERT_PALETTE_CYCLE_FLAGS_OFFSET + P1XB_PALETTE_CYCLE_FLAGS_BYTES\n");
     try writer.writeAll("DEF P1XB_DESERT_TILEMAP_OFFSET          EQU P1XB_DESERT_TILES_OFFSET + P1XB_BG_TILE_BYTES\n");
     try writer.writeAll("DEF P1XB_DESERT_ATTRMAP_OFFSET          EQU P1XB_DESERT_TILEMAP_OFFSET + P1XB_TILEMAP_BYTES\n");
     try writer.writeAll("DEF P1XB_DESERT_LOGICMAP_OFFSET         EQU P1XB_DESERT_ATTRMAP_OFFSET + P1XB_ATTRMAP_BYTES\n");
@@ -336,12 +341,13 @@ fn writeRgbdsInclude(project: *const Project, inc_path: []const u8) !void {
 
 fn writeLevelInclude(writer: *TextWriter, comptime label: []const u8, comptime prefix: []const u8) !void {
     try writer.print("{s}BgPalettes:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_PALETTES_OFFSET, P1XB_PALETTE_BYTES\n{s}BgPalettesEnd:\n\n", .{ label, prefix, label });
+    try writer.print("{s}PaletteCycleFlags:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_PALETTE_CYCLE_FLAGS_OFFSET, P1XB_PALETTE_CYCLE_FLAGS_BYTES\n{s}PaletteCycleFlagsEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}Tiles:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_TILES_OFFSET, P1XB_BG_TILE_BYTES\n{s}TilesEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}TileMap:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_TILEMAP_OFFSET, P1XB_TILEMAP_BYTES\n{s}TileMapEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}AttrMap:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_ATTRMAP_OFFSET, P1XB_ATTRMAP_BYTES\n{s}AttrMapEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}LogicMap:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_LOGICMAP_OFFSET, P1XB_LOGICMAP_BYTES\n{s}LogicMapEnd:\n\n", .{ label, prefix, label });
     try writer.print("{s}Sprites:\n  INCBIN \"engine_export.p1xb\", P1XB_{s}_SPRITES_OFFSET, P1XB_{s}LEVEL_SPRITE_COUNT * P1XB_SPRITE_BYTES\n{s}SpritesEnd:\n\n", .{ label, prefix, prefix, label });
-    try writer.print("{s}Descriptor:\n  DW {s}BgPalettes, {s}BgPalettesEnd\n  DW {s}Tiles, {s}TilesEnd\n  DW {s}TileMap, {s}TileMapEnd\n  DW {s}AttrMap, {s}AttrMapEnd\n  DW {s}LogicMap, {s}LogicMapEnd\n  DW {s}Sprites, {s}SpritesEnd\n\n", .{ label, label, label, label, label, label, label, label, label, label, label, label, label });
+    try writer.print("{s}Descriptor:\n  DW {s}BgPalettes, {s}BgPalettesEnd\n  DW {s}PaletteCycleFlags, {s}PaletteCycleFlagsEnd\n  DW {s}Tiles, {s}TilesEnd\n  DW {s}TileMap, {s}TileMapEnd\n  DW {s}AttrMap, {s}AttrMapEnd\n  DW {s}LogicMap, {s}LogicMapEnd\n  DW {s}Sprites, {s}SpritesEnd\n\n", .{ label, label, label, label, label, label, label, label, label, label, label, label, label, label, label });
 }
 
 fn upperLabel(label: []const u8) []const u8 {

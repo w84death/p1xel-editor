@@ -186,6 +186,24 @@ test "Project tile flags expose traversable and slow terrain bits" {
     try expect(project.isTileSlow(project.selectedImageId()));
 }
 
+test "Project tile palette cycle flags animate only tile palettes" {
+    var project = Project.init();
+    project.dirty = false;
+
+    project.setActiveTilePaletteCycle(2, true);
+    try expect(project.dirty);
+    try expect(project.activeTilePaletteCycles(2));
+    try expectEqual(@as(u8, 1 << 2), project.tilePaletteCycleFlags(project.activePaletteBank()));
+
+    const revision = project.visualRevision();
+    for (0..24) |_| project.tickAnimation();
+    try expect(project.visualRevision() != revision);
+
+    project.setMode(ProjectMode.sprites);
+    project.setActiveTilePaletteCycle(3, true);
+    try expect(!project.activeTilePaletteCycles(3));
+}
+
 test "Project painting marks data dirty and changes selected image pixels" {
     var project = Project.init();
 

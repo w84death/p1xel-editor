@@ -73,7 +73,7 @@ fn clearVisibleSlotBanks() [SLOT_BANK_COUNT][SLOT_GRID_COUNT]u16 {
 
 pub const Project = struct {
     const MAGIC = "P1X2";
-    const VERSION: u8 = 10;
+    const VERSION: u8 = 11;
     const LEGACY_VERSION: u8 = 5;
     const OLDEST_SUPPORTED_VERSION: u8 = 4;
     pub const IMAGE_BANK_COUNT = 2;
@@ -85,6 +85,10 @@ pub const Project = struct {
     const PALETTE_BANK_BYTES = CONF.PALETTE_COUNT * CONF.COLORS_PER_PALETTE * PALETTE_COLOR_BYTES;
     const PALETTE_SET_BYTES = PALETTE_BANK_COUNT * PALETTE_BANK_BYTES;
     const PALETTE_BYTES = IMAGE_BANK_COUNT * PALETTE_SET_BYTES;
+    const TILE_PALETTE_CYCLE_FLAGS_BYTES = PALETTE_BANK_COUNT;
+    const TILE_PALETTE_CYCLE_MASK: u8 = if (CONF.PALETTE_COUNT >= 8) 0xFF else (@as(u8, 1) << CONF.PALETTE_COUNT) - 1;
+    const PALETTE_CYCLE_PHASES = CONF.COLORS_PER_PALETTE;
+    const PALETTE_CYCLE_DELAY_FRAMES: u64 = 24;
     const IMAGE_BYTES = 1 + CONF.TILE_SIDE * CONF.TILE_SIDE;
     const IMAGE_BANK_STATE_BYTES = 2 + 2 + 1 + 1 + 1 + 1 + 1 + SLOT_BANK_COUNT * SLOT_GRID_COUNT * 2;
     const HEADER_BYTES = 4 + 1 + 1 + 1;
@@ -92,11 +96,13 @@ pub const Project = struct {
     const MAP_SPRITE_BYTES = 2 + 2 + 2 + 1;
     const MAP_BYTES = MAP_HEADER_BYTES + MAX_MAP_CELLS * 2 + MAX_MAP_SPRITES * MAP_SPRITE_BYTES;
     const TILE_FLAGS_BYTES = CONF.MAX_TILES;
-    const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + TILE_FLAGS_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
+    const MAX_FILE_BYTES = HEADER_BYTES + 2 + PALETTE_BYTES + TILE_FLAGS_BYTES + TILE_PALETTE_CYCLE_FLAGS_BYTES + IMAGE_BANK_COUNT * (IMAGE_BANK_STATE_BYTES + CONF.MAX_TILES * IMAGE_BYTES) + MAP_BANK_COUNT * MAP_BYTES;
     pub const FILE_SLOT_COUNT: u8 = 4;
     const LAST_FILE_SLOT_PATH = "art_data-last-slot.cfg";
 
     palette_banks: [IMAGE_BANK_COUNT][PALETTE_BANK_COUNT][CONF.PALETTE_COUNT][CONF.COLORS_PER_PALETTE]PaletteColor = defaults.paletteSets(IMAGE_BANK_COUNT, PALETTE_BANK_COUNT),
+    tile_palette_cycle_flags: [PALETTE_BANK_COUNT]u8 = [_]u8{0} ** PALETTE_BANK_COUNT,
+    palette_cycle_frame: u64 = 0,
     active_palette_bank: u8 = 0,
     image_banks: [IMAGE_BANK_COUNT]ImageBank = .{ ImageBank{}, ImageBank{} },
     tile_flags: [CONF.MAX_TILES]u8 = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES,
@@ -236,8 +242,36 @@ pub const Project = struct {
 
     pub fn color32Mode(self: *const Project, mode: ProjectMode, palette_id: u8, color_id: u8) u32 {
         const safe_palette = @min(palette_id, CONF.PALETTE_COUNT - 1);
-        const safe_color = @min(color_id, CONF.COLORS_PER_PALETTE - 1);
+        const safe_color = self.displayColorIndex(mode, @min(color_id, CONF.COLORS_PER_PALETTE - 1), safe_palette, self.activePaletteBankIndex());
         return rgbToU32(self.palette_banks[@intFromEnum(mode)][self.activePaletteBankIndex()][safe_palette][safe_color]);
+    }
+
+    pub fn tilePaletteCycleFlags(self: *const Project, bank_id: u8) u8 {
+        return self.tile_palette_cycle_flags[@min(bank_id, PALETTE_BANK_COUNT - 1)] & TILE_PALETTE_CYCLE_MASK;
+    }
+
+    pub fn activeTilePaletteCycles(self: *const Project, palette_id: u8) bool {
+        return self.tilePaletteCycles(self.active_palette_bank, palette_id);
+    }
+
+    pub fn tilePaletteCycles(self: *const Project, bank_id: u8, palette_id: u8) bool {
+        if (palette_id >= CONF.PALETTE_COUNT) return false;
+        return (self.tile_palette_cycle_flags[@min(bank_id, PALETTE_BANK_COUNT - 1)] & (@as(u8, 1) << @intCast(palette_id))) != 0;
+    }
+
+    pub fn setActiveTilePaletteCycle(self: *Project, palette_id: u8, enabled: bool) void {
+        if (self.mode != .tiles or palette_id >= CONF.PALETTE_COUNT) return;
+        const bank = self.activePaletteBankIndex();
+        const mask = @as(u8, 1) << @intCast(palette_id);
+        const old = self.tile_palette_cycle_flags[bank];
+        const next = if (enabled) old | mask else old & ~mask;
+        if (next == old) return;
+        self.tile_palette_cycle_flags[bank] = next;
+        self.markDataChanged();
+    }
+
+    pub fn tickAnimation(self: *Project) void {
+        self.palette_cycle_frame +%= 1;
     }
 
     pub fn currentColor32(self: *const Project, color_id: u8) u32 {
@@ -746,7 +780,9 @@ pub const Project = struct {
     }
 
     pub fn visualRevision(self: *const Project) u64 {
-        return self.visual_revision;
+        const base = self.visual_revision *% PALETTE_CYCLE_PHASES;
+        if (!self.anyTilePaletteCycles()) return base;
+        return base + self.paletteCyclePhase();
     }
 
     pub fn load(self: *Project) !void {
@@ -832,6 +868,14 @@ pub const Project = struct {
             if (offset + TILE_FLAGS_BYTES > data.len) return error.InvalidProject;
             @memcpy(self.tile_flags[0..], data[offset .. offset + TILE_FLAGS_BYTES]);
             offset += TILE_FLAGS_BYTES;
+        }
+
+        self.tile_palette_cycle_flags = [_]u8{0} ** PALETTE_BANK_COUNT;
+        if (file_version >= 11) {
+            if (offset + TILE_PALETTE_CYCLE_FLAGS_BYTES > data.len) return error.InvalidProject;
+            @memcpy(self.tile_palette_cycle_flags[0..], data[offset .. offset + TILE_PALETTE_CYCLE_FLAGS_BYTES]);
+            for (&self.tile_palette_cycle_flags) |*flags| flags.* &= TILE_PALETTE_CYCLE_MASK;
+            offset += TILE_PALETTE_CYCLE_FLAGS_BYTES;
         }
 
         const image_bank_state_bytes = if (file_version >= 10) IMAGE_BANK_STATE_BYTES else LEGACY_IMAGE_BANK_STATE_BYTES;
@@ -946,6 +990,7 @@ pub const Project = struct {
         }
 
         try file.writeStreamingAll(io, &self.tile_flags);
+        try file.writeStreamingAll(io, &self.tile_palette_cycle_flags);
 
         for (self.image_banks) |bank| {
             var state: [IMAGE_BANK_STATE_BYTES]u8 = undefined;
@@ -1033,6 +1078,8 @@ pub const Project = struct {
         sprite_bank.visible_slot_banks = clearVisibleSlotBanks();
 
         self.tile_flags = [_]u8{TILE_FLAG_TRAVERSABLE} ** CONF.MAX_TILES;
+        self.tile_palette_cycle_flags = [_]u8{0} ** PALETTE_BANK_COUNT;
+        self.palette_cycle_frame = 0;
         self.mode = .tiles;
         self.maps = [_]Map{.{}} ** MAP_BANK_COUNT;
         self.dirty = false;
@@ -1057,6 +1104,21 @@ pub const Project = struct {
 
     fn activePaletteBankIndex(self: *const Project) usize {
         return @min(self.active_palette_bank, PALETTE_BANK_COUNT - 1);
+    }
+
+    fn paletteCyclePhase(self: *const Project) u64 {
+        return (self.palette_cycle_frame / PALETTE_CYCLE_DELAY_FRAMES) % PALETTE_CYCLE_PHASES;
+    }
+
+    fn anyTilePaletteCycles(self: *const Project) bool {
+        for (self.tile_palette_cycle_flags) |flags| if (flags != 0) return true;
+        return false;
+    }
+
+    fn displayColorIndex(self: *const Project, mode: ProjectMode, color_id: u8, palette_id: u8, bank_index: usize) u8 {
+        if (mode != .tiles or !self.tilePaletteCycles(@intCast(bank_index), palette_id)) return color_id;
+        const phase: u8 = @intCast(self.paletteCyclePhase());
+        return @intCast((@as(usize, color_id) + CONF.COLORS_PER_PALETTE - @as(usize, phase)) % CONF.COLORS_PER_PALETTE);
     }
 
     fn activeMapBankIndex(self: *const Project) usize {

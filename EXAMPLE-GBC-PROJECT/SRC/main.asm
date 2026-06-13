@@ -65,7 +65,12 @@ DEF TILE_FLAG_TRAVERSABLE               EQU 0
 DEF TILE_FLAG_SLOW                      EQU 1
 DEF MAX_ENEMIES                         EQU 8
 DEF ENEMY_ANIM_DELAY                    EQU 16
+DEF ENEMY_MOVE_DELAY                    EQU 4
 DEF ENEMY_OAM_ADDR                      EQU PLAYER_OAM_ADDR + 4
+DEF ENEMY_DIR_RIGHT                     EQU 0
+DEF ENEMY_DIR_LEFT                      EQU 1
+DEF ENEMY_DIR_UP                        EQU 2
+DEF ENEMY_DIR_DOWN                      EQU 3
 DEF ENEMY_SNAKE_MARKER_TILE             EQU 3
 DEF ENEMY_SNAKE_TILE_1                  EQU 3
 DEF ENEMY_SCORPION_MARKER_TILE          EQU 5
@@ -91,6 +96,8 @@ FrameReady:                             ds 1
 PlayerAnimTimer:                        ds 1
 PlayerAnimFrame:                        ds 1
 PlayerFacing:                           ds 1
+PlayerSpriteTile:                       ds 1
+PlayerSpriteAttr:                       ds 1
 CameraX:                                ds 1
 CameraY:                                ds 1
 CurrentLevel:                           ds 1
@@ -109,6 +116,7 @@ PlayerMoveTimer:                        ds 1
 EnemyCount:                             ds 1
 EnemyAnimTimer:                         ds 1
 EnemyAnimFrame:                         ds 1
+EnemyMoveTimer:                         ds 1
 EnemySpawnX:                            ds 1
 EnemySpawnY:                            ds 1
 EnemySpawnBaseTile:                     ds 1
@@ -117,6 +125,8 @@ EnemyWorldX:                            ds MAX_ENEMIES
 EnemyWorldY:                            ds MAX_ENEMIES
 EnemyBaseTile:                          ds MAX_ENEMIES
 EnemyAttr:                              ds MAX_ENEMIES
+EnemyDir:                               ds MAX_ENEMIES
+EnemyMoveIndex:                         ds 1
 CollisionMap:                           ds 1024
 ; ==========================================================================|80|
 
@@ -160,6 +170,8 @@ Entry:
   ld a, PLAYER_MOVE_DELAY
   ld [PlayerMoveDelay], a
   ld [PlayerMoveTimer], a
+  ld a, ENEMY_MOVE_DELAY
+  ld [EnemyMoveTimer], a
 
   .init_vram
   xor a
@@ -203,12 +215,13 @@ Entry:
 ; ======================================> MAIN LOOP <=======================|80|
 MainLoop:
   call WaitFrame
-  call HandleLevelSwap
-  call HandleDPad
-  call AnimatePlayer
-  call AnimateEnemies
   call UpdateCamera
   call UpdateEnemySprites
+  call HandleLevelSwap
+  call HandleDPad
+  call MoveEnemies
+  call AnimatePlayer
+  call AnimateEnemies
   jr MainLoop
 
 ; ==========================================================================|80|
@@ -240,6 +253,9 @@ WaitFrame:
 
 VBlankISR:
   push af
+  ld a, [FrameCounter]
+  inc a
+  ld [FrameCounter], a
   ld a, 1
   ld [FrameReady], a
   pop af
@@ -388,6 +404,14 @@ UpdateCamera:
   sub c
   add OAM_Y_OFFSET
   ld [PLAYER_OAM_ADDR], a
+
+  .player_tile
+  ld a, [PlayerSpriteTile]
+  ld [PLAYER_OAM_ADDR + 2], a
+
+  .player_attr
+  ld a, [PlayerSpriteAttr]
+  ld [PLAYER_OAM_ADDR + 3], a
   ret
 
 HandleDPad:
@@ -564,7 +588,7 @@ BeginPlayerMove:
   ld a, PLAYER_ANIM_DELAY
   ld [PlayerAnimTimer], a
   ld a, PLAYER_WALK_TILE_1
-  ld [PLAYER_OAM_ADDR + 2], a
+  ld [PlayerSpriteTile], a
   ld a, [PlayerMoveDelay]
   ld [PlayerMoveTimer], a
   ld a, PLAYER_MOVE_STEPS
@@ -601,12 +625,12 @@ UpdatePlayerWalkAnimation:
 .frame_1
   ld a, PLAYER_WALK_TILE_1
 .store_tile
-  ld [PLAYER_OAM_ADDR + 2], a
+  ld [PlayerSpriteTile], a
   ret
 
 SetPlayerIdleTile:
   ld a, PLAYER_IDLE_TILE
-  ld [PLAYER_OAM_ADDR + 2], a
+  ld [PlayerSpriteTile], a
   xor a
   ld [PlayerAnimFrame], a
   ld a, PLAYER_ANIM_DELAY
@@ -697,19 +721,18 @@ TargetWorldWalkable:
   ret
 
 ApplyPlayerFacingAttr:
-  ld hl, PLAYER_OAM_ADDR + 3
   ld a, [PlayerFacing]
   or a
   jr z, .face_left
 
 .face_right
   ld a, PLAYER_ATTR | OAMF_XFLIP
-  ld [hl], a
+  ld [PlayerSpriteAttr], a
   ret
 
 .face_left
   ld a, PLAYER_ATTR
-  ld [hl], a
+  ld [PlayerSpriteAttr], a
   ret
 
 InitPlayer:
@@ -717,16 +740,10 @@ InitPlayer:
   ld [PlayerWorldX], a
   ld a, PLAYER_START_WORLD_Y
   ld [PlayerWorldY], a
-
-  ld hl, PLAYER_OAM_ADDR
-  ld a, SPRITE_Y_CENTER
-  ld [hli], a
-  ld a, SPRITE_X_CENTER
-  ld [hli], a
   ld a, PLAYER_TILE
-  ld [hli], a
+  ld [PlayerSpriteTile], a
   ld a, PLAYER_ATTR
-  ld [hli], a
+  ld [PlayerSpriteAttr], a
 
   call ApplyPlayerFacingAttr
   call UpdateCamera
@@ -738,6 +755,8 @@ LoadLevelEnemies:
   ld [EnemyAnimFrame], a
   ld a, ENEMY_ANIM_DELAY
   ld [EnemyAnimTimer], a
+  ld a, ENEMY_MOVE_DELAY
+  ld [EnemyMoveTimer], a
 
   ld a, [LevelDataStart]
   ld l, a
@@ -833,8 +852,202 @@ SpawnEnemy:
   ld a, [EnemySpawnAttr]
   ld [hl], a
 
+  ld a, b
+  ld [EnemyMoveIndex], a
+  call StoreInitialEnemyDirection
+
   ld hl, EnemyCount
   inc [hl]
+  ret
+
+MoveEnemies:
+  ld a, [EnemyCount]
+  and a
+  ret z
+
+  ld hl, EnemyMoveTimer
+  dec [hl]
+  ret nz
+  ld a, ENEMY_MOVE_DELAY
+  ld [hl], a
+
+  ld a, [EnemyCount]
+  ld b, a
+  ld c, 0
+.loop
+  push bc
+  call MoveEnemy
+  pop bc
+  inc c
+  dec b
+  jr nz, .loop
+  ret
+
+MoveEnemy:
+  ld a, c
+  ld [EnemyMoveIndex], a
+
+  ld l, c
+  ld h, 0
+  ld de, EnemyDir
+  add hl, de
+  ld a, [hl]
+  and 3
+  cp ENEMY_DIR_LEFT
+  jr z, .try_left
+  cp ENEMY_DIR_UP
+  jr z, .try_up
+  cp ENEMY_DIR_DOWN
+  jr z, .try_down
+
+.try_right
+  call LoadEnemyPosition
+  ld a, b
+  cp WORLD_X_MAX
+  jr nc, .blocked
+  add TILE_SIZE
+  ld b, a
+  call TargetWorldWalkable
+  jr nc, .blocked
+  call IncrementEnemyX
+  ret
+
+.try_left
+  call LoadEnemyPosition
+  ld a, b
+  and a
+  jr z, .blocked
+  dec a
+  ld b, a
+  call TargetWorldWalkable
+  jr nc, .blocked
+  call DecrementEnemyX
+  ret
+
+.try_up
+  call LoadEnemyPosition
+  ld a, c
+  and a
+  jr z, .blocked
+  dec a
+  ld c, a
+  call TargetWorldWalkable
+  jr nc, .blocked
+  call DecrementEnemyY
+  ret
+
+.try_down
+  call LoadEnemyPosition
+  ld a, c
+  cp WORLD_Y_MAX
+  jr nc, .blocked
+  add TILE_SIZE
+  ld c, a
+  call TargetWorldWalkable
+  jr nc, .blocked
+  call IncrementEnemyY
+  ret
+
+.blocked
+  call StoreNextEnemyDirection
+  ret
+
+LoadEnemyPosition:
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyWorldX
+  add hl, de
+  ld a, [hl]
+  ld b, a
+
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyWorldY
+  add hl, de
+  ld a, [hl]
+  ld c, a
+  ret
+
+IncrementEnemyX:
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyWorldX
+  add hl, de
+  inc [hl]
+  ret
+
+DecrementEnemyX:
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyWorldX
+  add hl, de
+  dec [hl]
+  ret
+
+IncrementEnemyY:
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyWorldY
+  add hl, de
+  inc [hl]
+  ret
+
+DecrementEnemyY:
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyWorldY
+  add hl, de
+  dec [hl]
+  ret
+
+RandomEnemyDirection:
+  ld a, [rDIV]
+  ld b, a
+  ld a, [FrameCounter]
+  xor b
+  ld b, a
+  ld a, [EnemyMoveIndex]
+  xor b
+  and 3
+  ret
+
+StoreInitialEnemyDirection:
+  call RandomEnemyDirection
+  ld b, a
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyDir
+  add hl, de
+  ld a, b
+  ld [hl], a
+  ret
+
+StoreNextEnemyDirection:
+  call RandomEnemyDirection
+  ld b, a
+  ld a, [EnemyMoveIndex]
+  ld l, a
+  ld h, 0
+  ld de, EnemyDir
+  add hl, de
+  ld a, [hl]
+  and 3
+  cp b
+  jr nz, .store
+  ld a, b
+  inc a
+  and 3
+  ld b, a
+.store
+  ld a, b
+  ld [hl], a
   ret
 
 AnimateEnemies:
@@ -947,6 +1160,8 @@ LoadLevelHot:
   ld [rLCDC], a
   pop hl
   call LoadLevel
+  call UpdateCamera
+  call UpdateEnemySprites
   call RestoreLCD
   ret
 
